@@ -14,7 +14,18 @@
   "overrides": [
     {
       "files": ["**/*.test.ts", "**/*.test.tsx"],
-      "env": { "vitest": true }
+      "env": {
+        "jest": true
+      },
+      "globals": {
+        "vi": "readonly",
+        "vitest": "readonly",
+        "describe": "readonly",
+        "it": "readonly",
+        "expect": "readonly",
+        "beforeEach": "readonly",
+        "afterEach": "readonly"
+      }
     }
   ]
 }
