@@ -1,0 +1,120 @@
+[project]
+name = "aria-backend"
+version = "0.1.0"
+description = "ARIA — AI-Driven Analytics Platform Backend"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [
+    { name = "B2Metric", email = "dev@b2metric.com" },
+]
+keywords = ["analytics", "ai", "fastapi", "vector-search"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = [
+    # ── Core Framework ──
+    "fastapi[standard]>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "pydantic>=2.10,<3",
+    "pydantic-settings>=2.7,<3",
+
+    # ── Database ──
+    "sqlalchemy[asyncio]>=2.0,<3",
+    "asyncpg>=0.30,<1",
+    "alembic>=1.14,<2",
+    "pgvector>=0.3,<1",
+
+    # ── Cache / Queue ──
+    "redis[hiredis]>=5.2,<6",
+    "arq>=0.26,<1",
+
+    # ── Vector DB ──
+    "qdrant-client>=1.13,<2",
+
+    # ── Object Storage ──
+    "minio>=7.2,<8",
+    "boto3>=1.36,<2",
+
+    # ── Auth ──
+    "python-jose[cryptography]>=3.3,<4",
+    "passlib[bcrypt]>=1.7,<2",
+    "httpx>=0.28,<1",
+
+    # ── Workflow ──
+    "prefect>=3.2,<4",
+
+    # ── Observability ──
+    "sentry-sdk[fastapi]>=2.20,<3",
+    "structlog>=24.4,<25",
+
+    # ── Utils ──
+    "python-dotenv>=1.0,<2",
+    "tenacity>=9.0,<10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<1",
+    "pytest-cov>=6.0,<7",
+    "httpx>=0.28,<1",
+    "ruff>=0.9,<1",
+    "mypy>=1.14,<2",
+    "pre-commit>=4.0,<5",
+    "faker>=35,<36",
+    "factory-boy>=3.3,<4",
+    "coverage[toml]>=7.6,<8",
+]
+
+# ── Tool Configs ───────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["alembic/"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # simplify
+    "C4",  # comprehensions
+]
+ignore = ["E501"]  # line-too-long handled by formatter
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = "-v --cov=backend/app --cov-report=term-missing --no-header"
+
+[tool.coverage.run]
+source = ["backend/app"]
+omit = ["backend/app/alembic/*", "backend/tests/*"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abstractmethod|override)",
+]

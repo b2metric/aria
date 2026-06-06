@@ -1,0 +1,173 @@
+version: "3.9"
+
+# ─── ARIA Development Environment ───────────────────────────────────────
+# Services: PostgreSQL, Redis, Keycloak, MinIO, Qdrant, Prefect
+# Usage:    docker compose -f docker-compose.dev.yml up -d
+
+services:
+  # ── PostgreSQL (primary app DB) ──────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: aria-postgres
+    environment:
+      POSTGRES_USER: aria
+      POSTGRES_PASSWORD: aria_dev
+      POSTGRES_DB: aria
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aria -d aria"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+
+  # ── Redis (cache / session store) ────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: aria-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - aria-net
+
+  # ── Keycloak (auth / SSO) ────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26
+    container_name: aria-keycloak
+    command: start-dev --http-port 8080
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak_dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - aria-net
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: aria-keycloak-db
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak_dev
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+
+  # ── MinIO (S3-compatible object storage) ─────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: aria-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - aria-net
+
+  # ── Qdrant (vector database) ─────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: aria-qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - aria-net
+
+  # ── Prefect (workflow orchestration) ─────────────────────────────────
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    container_name: aria-prefect-server
+    command: prefect server start --host 0.0.0.0 --port 4200
+    environment:
+      PREFECT_SERVER_API_HOST: "0.0.0.0"
+      PREFECT_SERVER_API_PORT: "4200"
+      PREFECT_API_DATABASE_CONNECTION_URL: "postgresql+asyncpg://prefect:prefect_dev@prefect-db:5432/prefect"
+    ports:
+      - "4200:4200"
+    depends_on:
+      prefect-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4200/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+
+  prefect-db:
+    image: postgres:16-alpine
+    container_name: aria-prefect-db
+    environment:
+      POSTGRES_USER: prefect
+      POSTGRES_PASSWORD: prefect_dev
+      POSTGRES_DB: prefect
+    volumes:
+      - prefect_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U prefect -d prefect"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+
+# ── Volumes ────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+  redis_data:
+  keycloak_db_data:
+  minio_data:
+  qdrant_data:
+  prefect_db_data:
+
+# ── Network ────────────────────────────────────────────────────────────
+networks:
+  aria-net:
+    name: aria-net
+    driver: bridge
