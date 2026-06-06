@@ -50,7 +50,7 @@ dependencies = [
 
     # ── Observability ──
     "sentry-sdk[fastapi]>=2.20,<3",
-    "structlog>=24.4,<25",
+    "structlog>=24.4,<27",
 
     # ── Utils ──
     "python-dotenv>=1.0,<2",
