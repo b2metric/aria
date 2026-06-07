@@ -19,11 +19,14 @@
 | LLM Proxy | LiteLLM | Multi-model routing, cost tracking |
 | CI/CD | GitHub Actions | lint → test → security → deploy |
 
-## Data Model (13 tables)
+## Data Model (12 tables)
 
 customers, teams, users, customer_db_configs, queries, query_history,
-artifacts, background_jobs, memory_entries, vault_knowhow,
-schema_relationships, token_quotas, token_usage_daily
+artifacts, background_jobs, memory_entries, schema_relationships,
+token_quotas, token_usage_daily
+
+> **Note:** vault_knowhow table REMOVED — schema metadata now lives in Obsidian
+> vault at `docs/vaults/{workspace_id}/tables/*.md` (MinIO sync optional).
 
 ## FK Cascade Decisions
 
