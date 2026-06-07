@@ -213,6 +213,47 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
 # ── SQL Execution ──────────────────────────────────────────────────────────
 
 
+def _transform_sql_for_dialect(sql: str, db_type: "DatabaseType") -> str:
+    """Transform SQL syntax for the target database dialect.
+    
+    Handles dialect-specific differences like:
+    - LIMIT N → FETCH FIRST N ROWS ONLY (Oracle)
+    - LIMIT N → TOP N (MSSQL - for simple cases)
+    
+    Args:
+        sql: Original SQL query
+        db_type: Target database type
+        
+    Returns:
+        Transformed SQL for the target dialect
+    """
+    from backend.app.db import DatabaseType
+    
+    if db_type == DatabaseType.ORACLE:
+        # Convert "LIMIT N" to "FETCH FIRST N ROWS ONLY"
+        import re
+        pattern = r'\bLIMIT\s+(\d+)\s*$'
+        match = re.search(pattern, sql, re.IGNORECASE | re.MULTILINE)
+        if match:
+            n = match.group(1)
+            sql = re.sub(pattern, f'FETCH FIRST {n} ROWS ONLY', sql, flags=re.IGNORECASE | re.MULTILINE)
+    
+    elif db_type == DatabaseType.MSSQL:
+        # For MSSQL, LIMIT must be replaced with TOP (simple cases only)
+        # Complex cases with ORDER BY need OFFSET/FETCH
+        import re
+        pattern = r'\bLIMIT\s+(\d+)\s*$'
+        match = re.search(pattern, sql, re.IGNORECASE | re.MULTILINE)
+        if match:
+            n = match.group(1)
+            # Remove LIMIT clause
+            sql = re.sub(pattern, '', sql, flags=re.IGNORECASE | re.MULTILINE)
+            # Add TOP after SELECT
+            sql = re.sub(r'^SELECT\b', f'SELECT TOP {n}', sql, count=1, flags=re.IGNORECASE)
+    
+    return sql
+
+
 async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> "DBConfig":
     """Fetch database config for the workspace from customer_db_configs.
     
@@ -279,7 +320,7 @@ async def _execute_sql(
     This function supports multiple database backends:
     - PostgreSQL
     - MySQL
-    - Oracle (thick mode with Instant Client)
+    - Oracle (thin mode by default)
     - MSSQL
     
     Args:
@@ -293,7 +334,7 @@ async def _execute_sql(
     Raises:
         ValueError: If no DB config found or unsupported DB type
     """
-    from backend.app.db import execute_query
+    from backend.app.db import execute_query, DatabaseType
     
     # If no workspace_id, try to execute against metadata DB (for schema queries)
     if not workspace_id:
@@ -311,6 +352,10 @@ async def _execute_sql(
     
     # Get customer's DB config and execute
     config = await _get_db_config(engine, workspace_id)
+    
+    # Transform SQL for target dialect (LIMIT → FETCH FIRST for Oracle)
+    transformed_sql = _transform_sql_for_dialect(sql, config.db_type)
+    
     logger.info(
         "Executing query on %s://%s:%d/%s",
         config.db_type.value,
@@ -320,7 +365,7 @@ async def _execute_sql(
     )
     
     try:
-        return await execute_query(sql, config)
+        return await execute_query(transformed_sql, config)
     except Exception:
         logger.exception(
             "SQL execution failed on %s: %s",

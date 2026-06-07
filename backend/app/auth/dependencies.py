@@ -68,7 +68,7 @@ async def get_current_user(
         if token == "dev-token":
             return UserContext(
                 sub="dev-user", user_id="dev-user", team_id="dev-team",
-                workspace_id="dev-workspace", role=Role.ADMIN,
+                workspace_id="stc-kuwait", role=Role.ADMIN,  # matches customers.slug
                 can_view_sql=True, can_manage_team=True,
                 can_manage_workspace=True, can_admin=True
             )

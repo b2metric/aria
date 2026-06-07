@@ -165,13 +165,16 @@ class MySQLExecutor(DatabaseExecutor):
 
 
 class OracleExecutor(DatabaseExecutor):
-    """Oracle executor using oracledb (thick mode)."""
+    """Oracle executor using oracledb (thin mode by default, thick if client available)."""
     
     def execute(self, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         import oracledb
         
-        # Initialize thick mode (idempotent)
-        _init_oracle_thick_mode()
+        # Try thick mode only if explicitly configured
+        from backend.app.core.config import get_settings
+        settings = get_settings()
+        if settings.oracle_client_lib_dir:
+            _init_oracle_thick_mode()
         
         # Build DSN
         dsn = f"{self.config.host}:{self.config.get_port()}/{self.config.database}"
