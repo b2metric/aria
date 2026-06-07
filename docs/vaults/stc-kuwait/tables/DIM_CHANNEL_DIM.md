@@ -1,5 +1,12 @@
 # DIM_CHANNEL_DIM
 
+## Description
+Sales and distribution channel dimension table.
+
+## Keywords
+channel, store, retail, online, distribution, sales, shop, outlet
+
+
 ## Columns
 
 - **AREA**: VARCHAR2(26) (NULL)

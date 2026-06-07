@@ -1,5 +1,12 @@
 # DIM_NATIONALITY
 
+## Description
+Nationality dimension table with country codes and nationality groups.
+
+## Keywords
+nationality, country, citizen, expat, demographic, region
+
+
 ## Columns
 
 - **NATIONALITY_DESCRIPTION**: VARCHAR2(255) (NULL)

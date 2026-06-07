@@ -40,12 +40,34 @@ logger = logging.getLogger(__name__)
 
 
 async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[dict]:
-    """Discover available tables from Obsidian vault (multi-tenant)."""
-    import os, glob
+    """Discover available tables from Obsidian vault (multi-tenant).
+    
+    Returns list of dicts with: name, keywords, description (for semantic matching).
+    """
+    import os, glob, re
     vault_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "vaults", workspace_id, "tables")
     try:
         files = glob.glob(os.path.join(vault_path, "*.md"))
-        return [{"name": os.path.splitext(os.path.basename(f))[0]} for f in sorted(files)]
+        tables = []
+        for f in sorted(files):
+            name = os.path.splitext(os.path.basename(f))[0]
+            keywords = ""
+            description = ""
+            try:
+                with open(f) as fp:
+                    content = fp.read()
+                # Extract keywords section
+                kw_match = re.search(r'## Keywords\s*\n([^\n#]+)', content, re.IGNORECASE)
+                if kw_match:
+                    keywords = kw_match.group(1).strip()
+                # Extract description section
+                desc_match = re.search(r'## Description\s*\n([^\n#]+)', content, re.IGNORECASE)
+                if desc_match:
+                    description = desc_match.group(1).strip()
+            except:
+                pass
+            tables.append({"name": name, "keywords": keywords, "description": description})
+        return tables
     except Exception as e:
         logger.warning("Could not discover tables from vault: %s", e)
         return []
@@ -104,39 +126,61 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
         for w in ["trend", "over time", "monthly", "daily", "weekly", "by date"]
     )
 
-    # Find matching tables based on question keywords
+    # Find matching tables based on question keywords + vault metadata
     best_table = tables[0]["name"]
     best_score = 0
+    
     for tbl in tables:
-        score = sum(1 for word in question_lower.split() if word in tbl["name"].lower())
+        score = 0
+        tbl_name_lower = tbl["name"].lower()
+        keywords_lower = tbl.get("keywords", "").lower()
+        description_lower = tbl.get("description", "").lower()
+        
+        # Search context = table name + keywords + description
+        search_context = f"{tbl_name_lower} {keywords_lower} {description_lower}"
+        
+        for word in question_lower.split():
+            if len(word) < 3:  # Skip short words
+                continue
+            # Exact match in table name (weight: 3)
+            if word in tbl_name_lower:
+                score += 3
+            # Match in keywords (weight: 5 - most important)
+            if word in keywords_lower:
+                score += 5
+            # Match in description (weight: 2)
+            if word in description_lower:
+                score += 2
+        
         if score > best_score:
             best_score = score
             best_table = tbl["name"]
+    
+    logger.debug("Table matching: question='%s' -> best_table='%s' (score=%d)", 
+                 question[:50], best_table, best_score)
 
     # Build the SELECT clause
     columns = await _get_table_columns(engine, best_table, workspace_id)
-    numeric_cols = [
-        c
-        for c in columns
-        if c["type"]
-        in ("integer", "numeric", "bigint", "double precision", "real", "float")
-    ]
-    text_cols = [
-        c
-        for c in columns
-        if c["type"] in ("character varying", "text", "varchar", "char")
-    ]
-    date_cols = [
-        c
-        for c in columns
-        if c["type"]
-        in (
-            "date",
-            "timestamp without time zone",
-            "timestamp with time zone",
-            "timestamptz",
-        )
-    ]
+    
+    # Oracle + PostgreSQL numeric types
+    numeric_types = (
+        "integer", "numeric", "bigint", "double precision", "real", "float",
+        "number", "int", "decimal", "binary_float", "binary_double"
+    )
+    # Oracle + PostgreSQL text types  
+    text_types = (
+        "character varying", "text", "varchar", "char", "varchar2", "nvarchar2", 
+        "clob", "nclob", "long"
+    )
+    # Oracle + PostgreSQL date types
+    date_types = (
+        "date", "timestamp without time zone", "timestamp with time zone",
+        "timestamptz", "timestamp", "datetime"
+    )
+    
+    numeric_cols = [c for c in columns if c["type"].lower() in numeric_types]
+    text_cols = [c for c in columns if c["type"].lower().split("(")[0] in text_types]
+    date_cols = [c for c in columns if c["type"].lower().split("(")[0] in date_types]
     all_cols = columns
 
     if wants_count:

@@ -1,5 +1,12 @@
 # ADJUST_MONTHLY_INSTALLATION
 
+## Description
+Monthly app installation metrics from Adjust mobile analytics.
+
+## Keywords
+app, install, mobile, download, acquisition, adjust, analytics
+
+
 ## Columns
 
 - **BS_TYPE**: VARCHAR2(100) (NULL)

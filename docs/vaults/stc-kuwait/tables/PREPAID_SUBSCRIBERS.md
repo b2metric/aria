@@ -1,5 +1,12 @@
 # PREPAID_SUBSCRIBERS
 
+## Description
+Master table for prepaid subscriber information including MSISDN, status, and plan details.
+
+## Keywords
+subscriber, customer, user, prepaid, msisdn, phone, mobile, activation, status, plan
+
+
 Prepaid subscriber master table containing core subscriber information.
 
 ## Columns

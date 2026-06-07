@@ -1,5 +1,12 @@
 # FCT_PREP_RECHARGE
 
+## Description
+Prepaid recharge/top-up fact table with all recharge transactions.
+
+## Keywords
+recharge, topup, top-up, payment, voucher, credit, balance, transaction
+
+
 ## Columns
 
 - **ACCESSMETHOD**: VARCHAR2(100) (NULL)

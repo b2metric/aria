@@ -1,5 +1,12 @@
 # FCT_PREP_USAGE
 
+## Description
+Prepaid usage fact table containing data consumption, voice minutes, and SMS usage records.
+
+## Keywords
+usage, consumption, data, voice, sms, minutes, megabytes, calls, messages
+
+
 ## Columns
 
 - **APPDATE**: DATE (NULL)

@@ -1,5 +1,12 @@
 # DIM_SUBS_META_SCD2
 
+## Description
+Subscriber metadata dimension table with slowly changing dimension type 2 history. Contains subscriber profile, plan, and demographic information.
+
+## Keywords
+subscriber, customer, profile, demographics, plan, nationality, region, segment
+
+
 ## Columns
 
 - **APPDATE**: DATE (NULL)
