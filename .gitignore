@@ -49,3 +49,4 @@ backend/alembic/versions/*.pyc
 
 # Prefect
 ~/.prefect/
+tmp/

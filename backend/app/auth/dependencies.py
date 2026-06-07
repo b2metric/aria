@@ -27,8 +27,10 @@ logger = logging.getLogger(__name__)
 
 def _extract_bearer_token(authorization: str | None = Header(None)) -> str:
     """Pull the raw JWT from the ``Authorization`` header."""
-    import os
-    is_dev = os.getenv("ENV", "development") == "development"
+    from backend.app.core.config import get_settings
+    settings = get_settings()
+    
+    is_dev = settings.is_development
     if is_dev and (not authorization or authorization.strip() == "Bearer" or authorization.strip() == "Bearer null"):
         return "dev-token"  # dev mode bypass
     if not authorization:

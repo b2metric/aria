@@ -74,20 +74,59 @@ async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[
 
 
 async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id: str) -> list[dict]:
-    """Discover columns from Obsidian vault markdown (multi-tenant)."""
+    """Discover columns from Obsidian vault markdown (multi-tenant).
+    
+    Parses the markdown table format:
+    | Column | Type | Nullable | PK | Description |
+    |--------|------|----------|----|-----------—|
+    | EXEC_DATE | DATE | ✓ |  | Description text |
+    
+    Also extracts column descriptions from the "## Column Descriptions" section
+    for semantic SQL generation.
+    """
     import os, re
     vault_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "vaults", workspace_id, "tables")
     md_file = os.path.join(vault_path, f"{table_name}.md")
     try:
         with open(md_file) as f:
             content = f.read()
+        
         cols = []
-        for match in re.finditer(r'\*\*(.+?)\*\*:\s*(.+?)\s*\(', content):
-            cols.append({"name": match.group(1), "type": match.group(2)})
-        return cols if cols else [{"name": "unknown", "type": "VARCHAR2"}]
+        
+        # Parse markdown table format: | Column | Type | Nullable | PK | Description |
+        # Handle leading whitespace and pipe delimiter
+        # Example: " | EXEC_DATE | DATE | ✓ |  | Description... |"
+        table_pattern = r'^\s*\|\s*([A-Z_][A-Z0-9_]*)\s*\|\s*([A-Z0-9_()]+)\s*\|'
+        for match in re.finditer(table_pattern, content, re.MULTILINE | re.IGNORECASE):
+            col_name = match.group(1).strip()
+            col_type = match.group(2).strip()
+            # Skip header/separator rows
+            if col_name.lower() in ('column', '---', '--------'):
+                continue
+            cols.append({"name": col_name, "type": col_type})
+        
+        # Also try to extract descriptions for better SQL generation context
+        # Format: - **COLUMN_NAME**: Description text
+        desc_map = {}
+        for match in re.finditer(r'-\s*\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*(.+?)(?:\n|$)', content, re.IGNORECASE):
+            desc_map[match.group(1).upper()] = match.group(2).strip()[:100]  # Truncate long descriptions
+        
+        # Enrich columns with descriptions
+        for col in cols:
+            col["description"] = desc_map.get(col["name"].upper(), "")
+        
+        if cols:
+            logger.debug("Parsed %d columns from vault %s", len(cols), table_name)
+            return cols
+        
+        # Fallback: try legacy format **COLUMN**: TYPE (...)
+        for match in re.finditer(r'\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*([A-Z0-9_]+)', content, re.IGNORECASE):
+            cols.append({"name": match.group(1), "type": match.group(2), "description": ""})
+        
+        return cols if cols else [{"name": "unknown", "type": "VARCHAR2", "description": ""}]
     except Exception as e:
         logger.warning("Could not read vault %s: %s", table_name, e)
-        return [{"name": "unknown", "type": "VARCHAR2"}]
+        return [{"name": "unknown", "type": "VARCHAR2", "description": ""}]
 
 
 async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -> tuple[str, str]:
@@ -114,9 +153,11 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
     # Rule-based SQL generation based on question keywords and schema
     question_lower = question.lower()
 
-    # Detect aggregations
-    wants_count = any(w in question_lower for w in ["count", "how many", "number of", "total"])
-    wants_sum = any(w in question_lower for w in ["sum", "total", "revenue", "amount"])
+    # Detect aggregations - with priority handling
+    # "total" alone = count, "total X amount/revenue" = sum
+    question_has_measure = any(w in question_lower for w in ["amount", "revenue", "sales", "sum", "value", "money", "balance", "topup"])
+    wants_sum = question_has_measure and any(w in question_lower for w in ["sum", "total", "revenue", "amount"])
+    wants_count = any(w in question_lower for w in ["count", "how many", "number of"]) or ("total" in question_lower and not question_has_measure)
     wants_avg = any(w in question_lower for w in ["average", "avg", "mean"])
     wants_group = any(w in question_lower for w in ["by", "per", "each", "group"])
     wants_top = any(w in question_lower for w in ["top", "highest", "most", "largest", "best"])
@@ -182,6 +223,31 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
     text_cols = [c for c in columns if c["type"].lower().split("(")[0] in text_types]
     date_cols = [c for c in columns if c["type"].lower().split("(")[0] in date_types]
     all_cols = columns
+    
+    # Smart column selection: match column names/descriptions to question keywords
+    def _find_best_column(cols: list[dict], question_words: list[str], default_idx: int = 0) -> dict:
+        """Find the column most relevant to the question."""
+        if not cols:
+            return {"name": "unknown", "type": "VARCHAR2", "description": ""}
+        best = cols[default_idx] if default_idx < len(cols) else cols[0]
+        best_score = 0
+        for col in cols:
+            score = 0
+            col_name_lower = col["name"].lower()
+            col_desc_lower = col.get("description", "").lower()
+            for word in question_words:
+                if len(word) < 3:
+                    continue
+                if word in col_name_lower:
+                    score += 3
+                if word in col_desc_lower:
+                    score += 2
+            if score > best_score:
+                best_score = score
+                best = col
+        return best
+    
+    question_words = question_lower.split()
 
     if wants_count:
         if wants_group and text_cols:
@@ -197,15 +263,43 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
         )
 
     if wants_sum and numeric_cols:
-        measure = numeric_cols[0]["name"]
-        if wants_group and text_cols:
-            group_col = text_cols[0]["name"]
-            return (
-                f"SELECT {group_col}, SUM({measure}) AS total_{measure}\n"
-                f"FROM {best_table}\n"
-                f"GROUP BY {group_col}\nORDER BY total_{measure} DESC\nLIMIT 50",
-                f"Summing {measure} grouped by {group_col} from {best_table}.",
-            )
+        # Find the best numeric column matching the question (amount, revenue, etc.)
+        measure_col = _find_best_column(numeric_cols, question_words)
+        measure = measure_col["name"]
+        
+        if wants_group:
+            # Determine grouping: by date (month/day/week) or by category
+            if date_cols and any(w in question_lower for w in ["month", "monthly", "by month"]):
+                date_col = _find_best_column(date_cols, question_words)["name"]
+                # Oracle: TRUNC(date, 'MM'), PostgreSQL: DATE_TRUNC('month', date)
+                return (
+                    f"SELECT TRUNC({date_col}, 'MM') AS month, SUM({measure}) AS total_{measure}\n"
+                    f"FROM {best_table}\n"
+                    f"GROUP BY TRUNC({date_col}, 'MM')\n"
+                    f"ORDER BY month\n"
+                    f"FETCH FIRST 100 ROWS ONLY",
+                    f"Monthly total of {measure} from {best_table}, grouped by {date_col}.",
+                )
+            elif date_cols and any(w in question_lower for w in ["day", "daily", "by day", "by date"]):
+                date_col = _find_best_column(date_cols, question_words)["name"]
+                return (
+                    f"SELECT TRUNC({date_col}) AS day, SUM({measure}) AS total_{measure}\n"
+                    f"FROM {best_table}\n"
+                    f"GROUP BY TRUNC({date_col})\n"
+                    f"ORDER BY day\n"
+                    f"FETCH FIRST 100 ROWS ONLY",
+                    f"Daily total of {measure} from {best_table}, grouped by {date_col}.",
+                )
+            elif text_cols:
+                group_col = _find_best_column(text_cols, question_words)["name"]
+                return (
+                    f"SELECT {group_col}, SUM({measure}) AS total_{measure}\n"
+                    f"FROM {best_table}\n"
+                    f"GROUP BY {group_col}\n"
+                    f"ORDER BY total_{measure} DESC\n"
+                    f"FETCH FIRST 50 ROWS ONLY",
+                    f"Summing {measure} grouped by {group_col} from {best_table}.",
+                )
         return (
             f"SELECT SUM({measure}) AS total_{measure} FROM {best_table}",
             f"Total sum of {measure} from {best_table}.",

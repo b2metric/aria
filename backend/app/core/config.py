@@ -14,9 +14,10 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file="backend/.env",  # Look for .env in backend/ folder
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # Ignore extra env vars not in the model
     )
 
     # ── App ──────────────────────────────────────────────────────────
@@ -24,48 +25,55 @@ class Settings(BaseSettings):
     log_level: str = "debug"
 
     # ── Database ─────────────────────────────────────────────────────
-    database_url: str = "postgresql+asyncpg://aria:aria_dev@localhost:5432/aria"
-    
+    database_url: str = "postgresql+asyncpg://aria:aria_dev@localhost:5433/aria"
+
     # ── Oracle Thick Mode ──────────────────────────────────────────────
     # Path to Oracle Instant Client lib dir (required for thick mode)
     # macOS: /opt/oracle/instantclient_23_3 or ~/instantclient_23_3
     # Linux: /opt/oracle/instantclient_23_3
     oracle_client_lib_dir: str | None = None
 
+    # ── Vault (Knowledge Base) ──────────────────────────────────────
+    # Base path for Obsidian vault files
+    vault_base_path: str = "docs/vaults"
+
     # ── Redis ────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"
-    schema_cache_ttl: int = 1800  # 30 minutes
 
-    # ── Keycloak ─────────────────────────────────────────────────────
+    # ── MinIO / Artifact Store ──────────────────────────────────────
+    minio_endpoint: str = "localhost:9000"
+    minio_access_key: str = "minioadmin"
+    minio_secret_key: str = "minioadmin"
+    minio_bucket: str = "aria-artifacts"
+    minio_secure: bool = False
+
+    # ── LLM / LiteLLM ───────────────────────────────────────────────
+    # LiteLLM proxy for multi-model routing
+    litellm_api_base: str = "http://localhost:4000"
+    litellm_api_key: str = ""
+    
+    # Default model for SQL generation
+    llm_model: str = "deepseek-chat"
+    llm_temperature: float = 0.1
+    llm_max_tokens: int = 4096
+
+    # ── Qdrant (Vector DB for Mem0) ─────────────────────────────────
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_api_key: str | None = None
+    qdrant_collection: str = "aria_memory"
+
+    # ── Keycloak / Auth ─────────────────────────────────────────────
     keycloak_url: str = "http://localhost:8080"
     keycloak_realm: str = "aria"
     keycloak_client_id: str = "aria-backend"
     keycloak_client_secret: str = ""
-    keycloak_verify_ssl: bool = False
 
-    # ── Auth / JWT ───────────────────────────────────────────────────
-    # When using Keycloak, these are NOT used for signing — instead
-    # the Keycloak JWKS endpoint provides the public key.  These fields
-    # exist as a fallback for local-only (non-Keycloak) testing.
-    jwt_secret_key: str = "change-me-in-production"
-    jwt_algorithm: str = "RS256"
-    jwt_leeway_seconds: int = 30
+    # ── Computed properties ─────────────────────────────────────────
 
-    # ── MinIO ────────────────────────────────────────────────────────
-    minio_endpoint: str = "localhost:9000"
-    minio_access_key: str = "minioadmin"
-    minio_secret_key: str = "minioadmin"
-    minio_bucket: str = "aria"
-
-    # ── Qdrant ───────────────────────────────────────────────────────
-    qdrant_url: str = "http://localhost:6333"
-
-    # ── Prefect ──────────────────────────────────────────────────────
-    prefect_api_url: str = "http://localhost:4200/api"
-
-    # ── Sentry ───────────────────────────────────────────────────────
-    sentry_dsn: str = ""
-    sentry_environment: str = "development"
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development mode."""
+        return self.app_env.lower() in ("development", "dev", "local")
 
     @property
     def keycloak_openid_config_url(self) -> str:
