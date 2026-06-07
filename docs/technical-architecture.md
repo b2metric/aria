@@ -56,11 +56,22 @@ Token: silent refresh, access 15min / refresh 8h, Keycloak OIDC + PKCE.
 
 ## Long-Term Memory
 
-- **Mem0**: extraction + embedding logic
+- **Mem0 2.x**: extraction + embedding logic + graph-based deduplication
 - **Qdrant**: vector storage + semantic search (NO pgvector)
 - **PostgreSQL**: structured metadata + CRUD + approval workflow
 - Dual write: user memory + team memory (same transaction)
 - Human-in-the-loop: team_lead approval, admin CRUD dashboard
+
+### Embedding Configuration (2026-06-07)
+
+| Setting | Value | Notes |
+|---------|-------|-------|
+| Provider | Gemini via LiteLLM | OpenAI quota exceeded, switched to gemini-embedding-001 |
+| Model | `gemini-embedding` | Alias in LiteLLM config |
+| Dimensions | **3072** | Must match in both `vector_store.embedding_model_dims` and `embedder.embedding_dims` |
+| Collection | `aria_memory` | Auto-created by Mem0 with correct dims |
+
+**Critical:** If embedding model changes, delete Qdrant collection and let Mem0 recreate it with correct dimensions.
 
 ## Row Governance
 
@@ -87,7 +98,29 @@ Admin can change `show_sql_to_roles` per customer.
 
 ## Response Pipeline
 
-[1] NL2SQL → [2] Chart → [3] Insight Generator → [4] Suggestions (data + user + team memory) → [5] Final Response
+> **Detaylı akış:** [pipeline-flow.md](./pipeline-flow.md)
+
+```
+┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  Memory  │───▶│  Vault   │───▶│   SQL    │───▶│  Chart   │───▶│ Insight  │
+│  Lookup  │    │ Matching │    │   Gen    │    │   Gen    │    │   Gen    │
+└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
+     │               │               │               │               │
+     ▼               ▼               ▼               ▼               ▼
+  Qdrant         Obsidian       Rule-based      Plotly JSON      LLM-based
+  semantic       vault .md      + LLM fallback  + MinIO HTML     analysis
+  search         keyword match
+```
+
+| Stage | Component | Data Source | Output |
+|-------|-----------|-------------|--------|
+| 1. Memory Lookup | Mem0 + Qdrant | User/team memories | MemoryContext |
+| 2. Vault Matching | SemanticMatcher | `docs/vaults/{workspace}/tables/*.md` | MatchedTables |
+| 3. SQL Generation | RuleBasedGen / LLMSQLGen | Vault schema + memory | SQL string |
+| 4. Query Execution | DatabaseExecutor | Customer DB (Oracle/PG/MySQL/MSSQL) | DataFrame |
+| 5. Chart Generation | ChartGenerator | Query result | Plotly spec |
+| 6. Insight Generation | InsightGenerator | Result + memory | Summary + suggestions |
+| 7. Memory Store | MemoryService | Successful query | Cached for future |
 
 ## Resolved Decisions
 
@@ -101,6 +134,7 @@ Admin can change `show_sql_to_roles` per customer.
 | 6 | pgvector | REMOVED (Qdrant handles embeddings) |
 | 7 | Token refresh | Silent refresh (A) |
 | 8 | Reverse proxy | Traefik 3 (nginx KULLANILMAZ) |
+| 9 | Embedding model | Gemini embedding-001 (3072 dims) via LiteLLM |
 
 ## Production Deploy Architecture
 

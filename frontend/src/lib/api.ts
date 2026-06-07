@@ -132,12 +132,14 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 export function streamQuery(
   question: string,
   conversationId?: string,
+  workspaceId: string = "stc-kuwait",
 ): { reader: ReadableStreamDefaultReader<Uint8Array>; abort: () => void } {
   const controller = new AbortController();
 
   const body = JSON.stringify({
     question,
     conversation_id: conversationId || null,
+    workspace_id: workspaceId,
   });
 
   const responsePromise = fetch(`${API_BASE}/api/query`, {

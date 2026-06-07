@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,37 +39,36 @@ class Settings(BaseSettings):
     vault_base_path: str = "docs/vaults"
 
     # ── Redis ────────────────────────────────────────────────────────
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://localhost:6380/0"
 
-    # ── MinIO / Artifact Store ──────────────────────────────────────
+    # ── MinIO ────────────────────────────────────────────────────────
     minio_endpoint: str = "localhost:9000"
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "aria-artifacts"
     minio_secure: bool = False
 
-    # ── LLM / LiteLLM ───────────────────────────────────────────────
-    # LiteLLM proxy for multi-model routing
-    litellm_api_base: str = "http://localhost:4000"
-    litellm_api_key: str = ""
-    
-    # Default model for SQL generation
-    llm_model: str = "deepseek-chat"
-    llm_temperature: float = 0.1
-    llm_max_tokens: int = 4096
-
-    # ── Qdrant (Vector DB for Mem0) ─────────────────────────────────
-    qdrant_url: str = "http://localhost:6333"
-    qdrant_api_key: str | None = None
-    qdrant_collection: str = "aria_memory"
-
-    # ── Keycloak / Auth ─────────────────────────────────────────────
+    # ── Keycloak ─────────────────────────────────────────────────────
     keycloak_url: str = "http://localhost:8080"
     keycloak_realm: str = "aria"
     keycloak_client_id: str = "aria-backend"
-    keycloak_client_secret: str = ""
 
-    # ── Computed properties ─────────────────────────────────────────
+    # ── LiteLLM ──────────────────────────────────────────────────────
+    litellm_api_base: str = "http://localhost:4000"
+    litellm_api_key: str | None = None  # Falls back to LITELLM_API_KEY env var
+    llm_model: str = "deepseek-chat"  # Default model for SQL generation
+    llm_temperature: float = 0.1  # Low temperature for deterministic SQL
+    llm_max_tokens: int = 2000  # Max tokens for SQL generation
+
+    # ── Qdrant (Memory/Vector Store) ─────────────────────────────────
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "aria_memory"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # If litellm_api_key not set from .env, try system env
+        if not self.litellm_api_key:
+            self.litellm_api_key = os.environ.get("LITELLM_API_KEY", "sk-1234")
 
     @property
     def is_development(self) -> bool:

@@ -19,22 +19,20 @@ import asyncio
 import json
 import logging
 import re
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from backend.app.core.config import get_settings
+from agents.artifact_store import ArtifactStore
+from agents.chart_builder import run_chart_pipeline_sync
 from backend.app.query import (
     Conversation,
     ConversationMessage,
     QueryRequest,
     QueryStatus,
 )
-from agents.artifact_store import ArtifactStore
-from agents.chart_builder import run_chart_pipeline_sync
-from agents.chart_types import ChartConfig, ChartType
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +42,8 @@ async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[
     
     Returns list of dicts with: name, keywords, description (for semantic matching).
     """
-    import os, glob, re
+    import glob
+    import os
     vault_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "vaults", workspace_id, "tables")
     try:
         files = glob.glob(os.path.join(vault_path, "*.md"))
@@ -53,20 +52,54 @@ async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[
             name = os.path.splitext(os.path.basename(f))[0]
             keywords = ""
             description = ""
+            domain = ""
+            topic = ""
+            order = 999
+            insights = []
             try:
                 with open(f) as fp:
                     content = fp.read()
+                
+                # Extract generic metadata from frontmatter or text
+                domain_match = re.search(r'(?:domain:\s*["\']?([^"\'\n]+)|## Domain\s*\n([^\n#]+))', content, re.IGNORECASE)
+                topic_match = re.search(r'(?:topic:\s*["\']?([^"\'\n]+)|## Topic\s*\n([^\n#]+))', content, re.IGNORECASE)
+                order_match = re.search(r'(?:order:\s*(\d+))', content, re.IGNORECASE)
+                
+                if domain_match:
+                    domain = (domain_match.group(1) or domain_match.group(2)).strip()
+                if topic_match:
+                    topic = (topic_match.group(1) or topic_match.group(2)).strip()
+                if order_match:
+                    order = int(order_match.group(1).strip())
+                    
+                # Extract insights as list
+                insights_match = re.search(r'(?:insights:\s*\n(.*?)---)', content, re.IGNORECASE | re.DOTALL)
+                if insights_match:
+                    lines = insights_match.group(1).strip().split('\n')
+                    insights = [line.strip().lstrip('-').strip() for line in lines if line.strip() and not line.strip().startswith('#')]
+                
                 # Extract keywords section
-                kw_match = re.search(r'## Keywords\s*\n([^\n#]+)', content, re.IGNORECASE)
+                kw_match = re.search(r'(?:keywords:\s*["\']?([^"\'\n]+)|## Keywords\s*\n([^\n#]+))', content, re.IGNORECASE)
                 if kw_match:
-                    keywords = kw_match.group(1).strip()
+                    keywords = (kw_match.group(1) or kw_match.group(2)).strip()
+                    
                 # Extract description section
-                desc_match = re.search(r'## Description\s*\n([^\n#]+)', content, re.IGNORECASE)
+                desc_match = re.search(r'(?:description:\s*["\']?([^"\'\n]+)|## Description\s*\n([^\n#]+))', content, re.IGNORECASE)
                 if desc_match:
-                    description = desc_match.group(1).strip()
-            except:
+                    description = (desc_match.group(1) or desc_match.group(2)).strip()
+                    
+            except Exception:
                 pass
-            tables.append({"name": name, "keywords": keywords, "description": description})
+            
+            tables.append({
+                "name": name, 
+                "keywords": keywords, 
+                "description": description,
+                "domain": domain,
+                "topic": topic,
+                "order": order,
+                "insights": insights
+            })
         return tables
     except Exception as e:
         logger.warning("Could not discover tables from vault: %s", e)
@@ -84,7 +117,7 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
     Also extracts column descriptions from the "## Column Descriptions" section
     for semantic SQL generation.
     """
-    import os, re
+    import os
     vault_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "vaults", workspace_id, "tables")
     md_file = os.path.join(vault_path, f"{table_name}.md")
     try:
@@ -142,13 +175,16 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
         )
 
     # Get columns for each table (up to 10 tables for performance)
+    # Get columns for each table (up to 10 tables for performance)
+    table_columns: dict[str, list[dict]] = {}
     schema_info: list[str] = []
     for tbl in tables[:10]:
         cols = await _get_table_columns(engine, tbl["name"], workspace_id)
+        table_columns[tbl["name"]] = cols
         col_str = ", ".join(f"{c['name']} ({c['type']})" for c in cols[:15])
         schema_info.append(f"  {tbl['name']}: {col_str}")
-
-    schema_text = "\n".join(schema_info)
+    
+    # Generic SQL intent detection
 
     # Rule-based SQL generation based on question keywords and schema
     question_lower = question.lower()
@@ -178,7 +214,6 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
         description_lower = tbl.get("description", "").lower()
         
         # Search context = table name + keywords + description
-        search_context = f"{tbl_name_lower} {keywords_lower} {description_lower}"
         
         for word in question_lower.split():
             if len(word) < 3:  # Skip short words
@@ -193,12 +228,37 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
             if word in description_lower:
                 score += 2
         
-        if score > best_score:
+        # Use order as a tie-breaker or priority mechanism if scores are identical or very close (e.g., within 2 points)
+        # Lower order number means higher priority.
+        tbl_order = tbl.get("order", 999)
+        if score > best_score or (score >= best_score - 2 and score > 0 and tbl_order < tables[0].get("order", 999)):
             best_score = score
             best_table = tbl["name"]
+            
+            # Update the top table properties for later comparison if needed
+            # We move the best_table to the front of the list virtually by tracking its order
+            if tbl_order < tables[0].get("order", 999):
+                 tables[0] = tbl
     
-    logger.debug("Table matching: question='%s' -> best_table='%s' (score=%d)", 
-                 question[:50], best_table, best_score)
+    # If score is too low, our simple lexical heuristic failed to find a confident match
+    # This means the question requires semantic understanding (e.g. synonyms, cross-language)
+    # Forward to LLM instead of guessing blindly.
+    if best_score < 15:
+        from backend.app.query.llm_sql import generate_sql_with_llm
+        logger.info("Low confidence in rule-based table selection (score=%d). Delegating to LLM.", best_score)
+        try:
+            return await generate_sql_with_llm(
+                question=question,
+                tables=tables,
+                table_columns=table_columns,
+                memory_context=memory_context,
+                db_type="oracle",
+            )
+        except Exception as e:
+            logger.warning("LLM SQL generation failed during fallback: %s", e)
+    
+    logger.info("Table matching: question='%s' -> best_table='%s' (score=%d)", 
+                question[:50], best_table, best_score)
 
     # Build the SELECT clause
     columns = await _get_table_columns(engine, best_table, workspace_id)
@@ -351,7 +411,7 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
 # ── SQL Execution ──────────────────────────────────────────────────────────
 
 
-def _transform_sql_for_dialect(sql: str, db_type: "DatabaseType") -> str:
+def _transform_sql_for_dialect(sql: str, db_type: DatabaseType) -> str:
     """Transform SQL syntax for the target database dialect.
     
     Handles dialect-specific differences like:
@@ -392,7 +452,7 @@ def _transform_sql_for_dialect(sql: str, db_type: "DatabaseType") -> str:
     return sql
 
 
-async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> "DBConfig":
+async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     """Fetch database config for the workspace from customer_db_configs.
     
     Args:
@@ -406,8 +466,8 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> "DBConfig":
         ValueError: If no DB config found for workspace
     """
     from sqlalchemy import text as sa_text
-    
-    from backend.app.db import DBConfig, DatabaseType
+
+    from backend.app.db import DatabaseType, DBConfig
     
     async with engine.connect() as conn:
         result = await conn.execute(
@@ -472,7 +532,7 @@ async def _execute_sql(
     Raises:
         ValueError: If no DB config found or unsupported DB type
     """
-    from backend.app.db import execute_query, DatabaseType
+    from backend.app.db import execute_query, DatabaseType, DBConfig
     
     # If no workspace_id, try to execute against metadata DB (for schema queries)
     if not workspace_id:
@@ -483,7 +543,7 @@ async def _execute_sql(
                 if not rows:
                     return []
                 columns = list(result.keys())
-                return [dict(zip(columns, row)) for row in rows]
+                return [dict(zip(columns, row, strict=False)) for row in rows]
         except Exception:
             logger.exception("SQL execution failed: %s", sql[:200])
             raise

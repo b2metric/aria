@@ -30,9 +30,6 @@ def _extract_bearer_token(authorization: str | None = Header(None)) -> str:
     from backend.app.core.config import get_settings
     settings = get_settings()
     
-    is_dev = settings.is_development
-    if is_dev and (not authorization or authorization.strip() == "Bearer" or authorization.strip() == "Bearer null"):
-        return "dev-token"  # dev mode bypass
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -67,13 +64,6 @@ async def get_current_user(
         403 if required claims (``workspace_id``, ``role``) are absent.
     """
     try:
-        if token == "dev-token":
-            return UserContext(
-                sub="dev-user", user_id="dev-user", team_id="dev-team",
-                workspace_id="stc-kuwait", role=Role.ADMIN,  # matches customers.slug
-                can_view_sql=True, can_manage_team=True,
-                can_manage_workspace=True, can_admin=True
-            )
         payload: TokenPayload = await decode_token(token)
     except TokenExpiredError:
         raise HTTPException(
