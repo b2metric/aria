@@ -1,0 +1,267 @@
+version: "3.9"
+
+# ─── ARIA Production Stack ───────────────────────────────────────────────────
+# Multi-arch (ARM64 + AMD64) with Oracle thick mode support
+# 
+# Build multi-arch images:
+#   docker buildx build --platform linux/amd64,linux/arm64 -t aria-backend:latest -f Dockerfile.prod --push .
+#
+# Deploy:
+#   docker compose -f docker-compose.prod.yml up -d
+
+services:
+  # ── Traefik Reverse Proxy ─────────────────────────────────────────────────
+  traefik:
+    image: traefik:3.4
+    container_name: aria-traefik
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+      # Rate limiting middleware
+      - "--entrypoints.websecure.http.middlewares=ratelimit@docker"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    labels:
+      # Dashboard
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.tls.certresolver=letsencrypt"
+      # Rate limit middleware
+      - "traefik.http.middlewares.ratelimit.ratelimit.average=100"
+      - "traefik.http.middlewares.ratelimit.ratelimit.burst=50"
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  # ── Backend API (Gunicorn + Uvicorn) ──────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${REGISTRY:-}aria-backend:${TAG:-latest}
+    container_name: aria-backend
+    environment:
+      APP_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgresql+asyncpg://aria:${DB_PASSWORD}@postgres:5432/aria
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      KEYCLOAK_URL: https://auth.${DOMAIN:-localhost}
+      KEYCLOAK_REALM: aria
+      KEYCLOAK_CLIENT_ID: aria-backend
+      LITELLM_API_BASE: ${LITELLM_API_BASE:-http://litellm:4000}
+      LITELLM_API_KEY: ${LITELLM_API_KEY}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      # Oracle thick mode (auto-configured in container)
+      ORACLE_CLIENT_LIB_DIR: /opt/oracle/instantclient
+      # Worker config
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
+      GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      # Health check endpoint bypass rate limit
+      - "traefik.http.routers.backend-health.rule=Host(`api.${DOMAIN:-localhost}`) && Path(`/health`)"
+      - "traefik.http.routers.backend-health.priority=100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - aria-net
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ── Frontend (Next.js) ────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: ${REGISTRY:-}aria-frontend:${TAG:-latest}
+    container_name: aria-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: https://api.${DOMAIN:-localhost}
+      NEXT_PUBLIC_KEYCLOAK_URL: https://auth.${DOMAIN:-localhost}
+      NEXT_PUBLIC_KEYCLOAK_REALM: aria
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: aria-web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+    depends_on:
+      - backend
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  # ── PostgreSQL ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: aria-postgres
+    environment:
+      POSTGRES_USER: aria
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: aria
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aria -d aria"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  # ── Redis ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: aria-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  # ── MinIO (Artifact Storage) ──────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: aria-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio_data:/data
+    labels:
+      - "traefik.enable=true"
+      # S3 API
+      - "traefik.http.routers.minio.rule=Host(`s3.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.minio.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio.loadbalancer.server.port=9000"
+      # Console
+      - "traefik.http.routers.minio-console.rule=Host(`minio.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.minio-console.tls.certresolver=letsencrypt"
+      - "traefik.http.services.minio-console.loadbalancer.server.port=9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  # ── Qdrant (Vector DB) ────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: aria-qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  # ── Keycloak (Auth) ───────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    container_name: aria-keycloak
+    command: start --hostname=auth.${DOMAIN:-localhost} --hostname-strict=false
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.keycloak.rule=Host(`auth.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.keycloak.tls.certresolver=letsencrypt"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: aria-keycloak-db
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - aria-net
+    restart: unless-stopped
+
+networks:
+  aria-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  qdrant_data:
+  keycloak_db_data:
+  traefik_letsencrypt:

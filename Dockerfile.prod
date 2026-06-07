@@ -1,5 +1,6 @@
-# ARIA Backend Dockerfile
+# ARIA Backend Dockerfile (Production)
 # Multi-stage build with Oracle Instant Client (ARM64 + AMD64)
+# Uses Gunicorn + Uvicorn workers for production
 
 # ── Builder Stage ─────────────────────────────────────────────────────
 FROM python:3.12-slim-bookworm AS builder
@@ -12,29 +13,25 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies (cache-friendly layer)
-RUN uv sync --frozen --no-dev --no-editable
+# Install dependencies including gunicorn
+RUN uv sync --frozen --no-dev --no-editable \
+    && uv pip install gunicorn
 
 # ── Oracle Instant Client Stage ───────────────────────────────────────
 FROM python:3.12-slim-bookworm AS oracle-client
 
 ARG TARGETARCH
 
-# Download Oracle Instant Client based on architecture
-# ARM64: aarch64, AMD64: x86_64
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl unzip ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /opt/oracle
 
-# Oracle Instant Client 23.6 (latest as of 2024)
-# Download URLs differ by architecture
+# Oracle Instant Client 23.6 - architecture-specific download
 RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        echo "Downloading Oracle Instant Client for ARM64..." && \
         curl -fSL "https://download.oracle.com/otn_software/linux/instantclient/2360000/instantclient-basic-linux.arm64-23.6.0.24.10.zip" \
             -o /tmp/instantclient.zip; \
     else \
-        echo "Downloading Oracle Instant Client for AMD64..." && \
         curl -fSL "https://download.oracle.com/otn_software/linux/instantclient/2360000/instantclient-basic-linux.x64-23.6.0.24.10.zip" \
             -o /tmp/instantclient.zip; \
     fi \
@@ -47,14 +44,15 @@ FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 
-# System deps including Oracle client runtime dependencies
+# System deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     curl \
     libaio1 \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Oracle Instant Client from oracle-client stage
+# Copy Oracle Instant Client
 COPY --from=oracle-client /opt/oracle/instantclient /opt/oracle/instantclient
 
 # Configure Oracle client library path
@@ -72,6 +70,9 @@ COPY backend/ ./backend/
 COPY agents/ ./agents/
 COPY alembic.ini ./
 
+# Copy gunicorn config
+COPY infra/gunicorn.conf.py ./gunicorn.conf.py
+
 # Set ownership
 RUN chown -R aria:aria /app
 USER aria
@@ -83,9 +84,17 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV ORACLE_CLIENT_LIB_DIR=/opt/oracle/instantclient
 ENV LD_LIBRARY_PATH=/opt/oracle/instantclient:$LD_LIBRARY_PATH
 
+# Production settings
+ENV APP_ENV=production
+ENV LOG_LEVEL=info
+
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "backend.app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Use tini as init system for proper signal handling
+ENTRYPOINT ["/usr/bin/tini", "--"]
+
+# Gunicorn with Uvicorn workers (4 workers by default, configurable)
+CMD ["gunicorn", "backend.app.main:app", "-c", "gunicorn.conf.py"]

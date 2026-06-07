@@ -248,6 +248,8 @@ def _init_oracle_thick_mode() -> None:
         # Try default locations
         import os
         default_paths = [
+            "/opt/oracle",  # macOS direct install
+            "/opt/oracle/instantclient",  # Docker container
             "/opt/oracle/instantclient_23_3",
             "/opt/oracle/instantclient_21_3", 
             os.path.expanduser("~/instantclient_23_3"),
