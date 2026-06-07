@@ -212,113 +212,121 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
 
 # ── SQL Execution ──────────────────────────────────────────────────────────
 
-# Track if Oracle thick mode has been initialized (one-time init)
-_oracle_thick_initialized = False
 
-
-def _init_oracle_thick_mode() -> None:
-    """Initialize Oracle thick mode (once per process).
+async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> "DBConfig":
+    """Fetch database config for the workspace from customer_db_configs.
     
-    Thick mode is required for advanced Oracle features like:
-    - LDAP/OID authentication
-    - Kerberos authentication  
-    - Oracle Net features (encryption, compression)
-    - Some data types (BFILE, REF CURSOR in certain contexts)
+    Args:
+        engine: Async SQLAlchemy engine (metadata DB)
+        workspace_id: Workspace/customer ID
+        
+    Returns:
+        DBConfig instance for the customer's database
+        
+    Raises:
+        ValueError: If no DB config found for workspace
     """
-    global _oracle_thick_initialized
-    if _oracle_thick_initialized:
-        return
-    
-    import oracledb
-    from backend.app.core.config import get_settings
-    
-    settings = get_settings()
-    lib_dir = settings.oracle_client_lib_dir
-    
-    if lib_dir:
-        try:
-            oracledb.init_oracle_client(lib_dir=lib_dir)
-            logger.info("Oracle thick mode initialized", lib_dir=lib_dir)
-        except oracledb.ProgrammingError as e:
-            if "already been called" in str(e):
-                pass  # Already initialized
-            else:
-                raise
-    else:
-        # Try default locations
-        import os
-        default_paths = [
-            "/opt/oracle",  # macOS direct install
-            "/opt/oracle/instantclient",  # Docker container
-            "/opt/oracle/instantclient_23_3",
-            "/opt/oracle/instantclient_21_3", 
-            os.path.expanduser("~/instantclient_23_3"),
-            os.path.expanduser("~/instantclient_21_3"),
-        ]
-        for path in default_paths:
-            if os.path.exists(path):
-                try:
-                    oracledb.init_oracle_client(lib_dir=path)
-                    logger.info("Oracle thick mode initialized", lib_dir=path)
-                    break
-                except oracledb.ProgrammingError as e:
-                    if "already been called" in str(e):
-                        break
-                    continue
-        else:
-            logger.warning("Oracle Instant Client not found, using thin mode")
-    
-    _oracle_thick_initialized = True
-
-
-async def _execute_sql_oracle(sql: str, engine: AsyncEngine) -> list[dict]:
-    """Execute SQL against Oracle using customer_db_configs."""
-    import oracledb
-    
-    # Initialize thick mode (idempotent)
-    _init_oracle_thick_mode()
     from sqlalchemy import text as sa_text
-    # Read Oracle connection from customer_db_configs
+    
+    from backend.app.db import DBConfig, DatabaseType
+    
     async with engine.connect() as conn:
         result = await conn.execute(
-            sa_text("SELECT host, port, database_name, username, encrypted_password FROM customer_db_configs WHERE db_type='oracle' LIMIT 1")
+            sa_text("""
+                SELECT db_type, host, port, database_name, username, encrypted_password
+                FROM customer_db_configs cdc
+                JOIN customers c ON cdc.customer_id = c.id
+                WHERE c.slug = :workspace_id
+                LIMIT 1
+            """),
+            {"workspace_id": workspace_id},
         )
         row = result.fetchone()
-        if not row:
-            raise ValueError("No Oracle DB config found")
-        host, port, db, user, pwd = row
-    dsn = f"{host}:{port}/{db}"
-    conn = oracledb.connect(user=user, password=pwd, dsn=dsn)
-    cur = conn.cursor()
-    cur.execute(sql)
-    columns = [d[0] for d in cur.description]
-    rows = [dict(zip(columns, r)) for r in cur.fetchall()]
-    cur.close()
-    conn.close()
-    return rows
+        
+    if not row:
+        raise ValueError(f"No DB config found for workspace: {workspace_id}")
+    
+    db_type_str, host, port, database, username, password = row
+    
+    # Map string to enum
+    db_type_map = {
+        "postgresql": DatabaseType.POSTGRESQL,
+        "mysql": DatabaseType.MYSQL,
+        "oracle": DatabaseType.ORACLE,
+        "mssql": DatabaseType.MSSQL,
+    }
+    db_type = db_type_map.get(db_type_str.lower())
+    if not db_type:
+        raise ValueError(f"Unsupported database type: {db_type_str}")
+    
+    return DBConfig(
+        db_type=db_type,
+        host=host,
+        port=port,
+        database=database,
+        username=username,
+        password=password,  # TODO: decrypt encrypted_password
+    )
 
 
-async def _execute_sql(sql: str, engine: AsyncEngine) -> list[dict]:
-    """Execute a generated SQL query and return the result rows.
-
+async def _execute_sql(
+    sql: str,
+    engine: AsyncEngine,
+    workspace_id: str | None = None,
+) -> list[dict]:
+    """Execute a generated SQL query against the customer's database.
+    
+    This function supports multiple database backends:
+    - PostgreSQL
+    - MySQL
+    - Oracle (thick mode with Instant Client)
+    - MSSQL
+    
     Args:
-        sql: The SQL query to execute.
-        engine: Async SQLAlchemy engine.
-
+        sql: The SQL query to execute
+        engine: Async SQLAlchemy engine (for fetching DB config)
+        workspace_id: Workspace/customer ID to look up DB config
+        
     Returns:
-        List of dicts, each representing a row.
+        List of dicts, each representing a row
+        
+    Raises:
+        ValueError: If no DB config found or unsupported DB type
     """
+    from backend.app.db import execute_query
+    
+    # If no workspace_id, try to execute against metadata DB (for schema queries)
+    if not workspace_id:
+        try:
+            async with engine.connect() as conn:
+                result = await conn.execute(text(sql))
+                rows = result.fetchall()
+                if not rows:
+                    return []
+                columns = list(result.keys())
+                return [dict(zip(columns, row)) for row in rows]
+        except Exception:
+            logger.exception("SQL execution failed: %s", sql[:200])
+            raise
+    
+    # Get customer's DB config and execute
+    config = await _get_db_config(engine, workspace_id)
+    logger.info(
+        "Executing query on %s://%s:%d/%s",
+        config.db_type.value,
+        config.host,
+        config.port,
+        config.database,
+    )
+    
     try:
-        async with engine.connect() as conn:
-            result = await conn.execute(text(sql))
-            rows = result.fetchall()
-            if not rows:
-                return []
-
-            columns = list(result.keys())
-            return [dict(zip(columns, row)) for row in rows]
-    except Exception as e:
-        logger.exception("SQL execution failed: %s", sql[:200])
+        return await execute_query(sql, config)
+    except Exception:
+        logger.exception(
+            "SQL execution failed on %s: %s",
+            config.db_type.value,
+            sql[:200],
+        )
         raise
 
 
@@ -536,7 +544,7 @@ async def process_query(
 
     rows: list[dict] = []
     try:
-        rows = await _execute_sql_oracle(sql, engine)  # Oracle via customer_db_configs
+        rows = await _execute_sql(sql, engine, workspace_id=workspace_id)
     except Exception as e:
         logger.exception("SQL execution failed")
         yield {
