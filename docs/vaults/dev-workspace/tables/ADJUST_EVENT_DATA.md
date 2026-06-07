@@ -1,0 +1,25 @@
+# ADJUST_EVENT_DATA
+
+## Columns
+
+- **ACTIVITY_KIND**: VARCHAR2(100) (NOT NULL)
+- **ADID**: VARCHAR2(100) (NULL)
+- **APP_VERSION**: VARCHAR2(100) (NULL)
+- **CAMPAIGN_NAME**: VARCHAR2(2048) (NULL)
+- **CREATED_AT**: NUMBER(20,0) (NULL)
+- **EVENT_DATE_IDX**: DATE (NULL)
+- **EVENT_NAME**: VARCHAR2(100) (NULL)
+- **LOAD_DATE**: DATE (NULL)
+- **NETWORK_NAME**: VARCHAR2(2048) (NULL)
+- **OS_NAME**: VARCHAR2(50) (NULL)
+- **OS_VERSION**: VARCHAR2(100) (NULL)
+- **TRACKER_NAME**: VARCHAR2(2048) (NULL)
+- **USER_ID**: VARCHAR2(100) (NOT NULL)
+
+## BI Queries
+
+<!-- Add custom BI queries here -->
+
+## Usage Notes
+
+<!-- Add usage notes here -->

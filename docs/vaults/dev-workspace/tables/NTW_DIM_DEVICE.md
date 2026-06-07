@@ -1,0 +1,27 @@
+# NTW_DIM_DEVICE
+
+## Columns
+
+- **ALL_DEVICE_TYPES**: VARCHAR2(100) (NULL)
+- **DEVICE_BRAND**: VARCHAR2(100) (NULL)
+- **DEVICE_COUNT**: NUMBER(5,0) (NULL)
+- **DEVICE_MODEL**: VARCHAR2(100) (NULL)
+- **DEVICE_OS**: VARCHAR2(20) (NULL)
+- **DEVICE_TECHNO**: VARCHAR2(30) (NULL)
+- **DEVICE_TYPE**: VARCHAR2(30) (NULL)
+- **HAS_2G**: NUMBER(1,0) (NULL)
+- **HAS_3G**: NUMBER(1,0) (NULL)
+- **HAS_4G**: NUMBER(1,0) (NULL)
+- **HAS_5G**: NUMBER(1,0) (NULL)
+- **LAST_DATE**: DATE (NULL)
+- **LOAD_DATE**: DATE (NULL)
+- **MAX_GENERATION**: VARCHAR2(4) (NULL)
+- **SUBNO**: VARCHAR2(15) (NOT NULL)
+
+## BI Queries
+
+<!-- Add custom BI queries here -->
+
+## Usage Notes
+
+<!-- Add usage notes here -->

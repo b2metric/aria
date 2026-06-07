@@ -1,0 +1,19 @@
+# DIM_LOYL_CATALOG
+
+## Columns
+
+- **ALLOWANCE_ACCESS_TYPE**: VARCHAR2(13) (NULL)
+- **ALLOWANCE_TYPE**: VARCHAR2(8) (NULL)
+- **CATEGORYID**: VARCHAR2(100) (NULL)
+- **PARTNER_GROUP**: VARCHAR2(100) (NULL)
+- **PARTNER_NAME**: VARCHAR2(4000) (NULL)
+- **PRODUCT_OFFER_NAME**: VARCHAR2(100) (NULL)
+- **PROD_OFFERING_ID**: VARCHAR2(100) (NULL)
+
+## BI Queries
+
+<!-- Add custom BI queries here -->
+
+## Usage Notes
+
+<!-- Add usage notes here -->

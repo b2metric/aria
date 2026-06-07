@@ -1,0 +1,196 @@
+{
+  "id": "aria",
+  "realm": "aria",
+  "displayName": "ARIA Analytics Platform",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+
+  "accessTokenLifespan": 3600,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": false,
+
+  "defaultSignatureAlgorithm": "RS256",
+
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "Full platform access" },
+      { "name": "team_lead", "description": "Team management, query creation" },
+      { "name": "analyst", "description": "Query creation, SQL visibility" },
+      { "name": "viewer", "description": "Read-only dashboard access" },
+      { "name": "default-roles-aria", "description": "Default role for new users" }
+    ]
+  },
+
+  "defaultRole": {
+    "name": "default-roles-aria",
+    "description": "Default role for new users",
+    "composite": true,
+    "composites": {
+      "realm": ["viewer"]
+    }
+  },
+
+  "clientScopes": [
+    {
+      "name": "aria-claims",
+      "description": "Custom ARIA JWT claims (workspace_id, user_id, team_id, role)",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "workspace_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "workspace_id",
+            "claim.name": "workspace_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "user_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "user_id",
+            "claim.name": "user_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "team_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "team_id",
+            "claim.name": "team_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "role",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "aria_role",
+            "claim.name": "role",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "defaultDefaultClientScopes": [
+    "web-origins",
+    "acr",
+    "roles",
+    "profile",
+    "aria-claims",
+    "email"
+  ],
+
+  "clients": [
+    {
+      "clientId": "aria-backend",
+      "name": "ARIA Backend API",
+      "description": "FastAPI backend — confidential client with service account",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "access.token.lifespan": "3600"
+      }
+    },
+    {
+      "clientId": "aria-web",
+      "name": "ARIA Web Frontend",
+      "description": "Next.js SPA — public client with PKCE",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "bearerOnly": false,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3000/auth/callback"
+      ],
+      "webOrigins": ["http://localhost:3000"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000"
+      }
+    },
+    {
+      "clientId": "aria-cli",
+      "name": "ARIA CLI / API Keys",
+      "description": "Machine-to-machine client credentials for API keys",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "serviceAccountsEnabled": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": [],
+      "attributes": {
+        "access.token.lifespan": "86400"
+      }
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@aria.local",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "ARIA",
+      "lastName": "Admin",
+      "attributes": {
+        "workspace_id": "default",
+        "user_id": "admin-001",
+        "team_id": "platform",
+        "aria_role": "admin"
+      },
+      "realmRoles": ["admin"],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": true
+        }
+      ]
+    }
+  ]
+}

@@ -7,14 +7,14 @@ version: "3.9"
 services:
   # ── PostgreSQL (primary app DB) ──────────────────────────────────────
   postgres:
-    image: pgvector/pgvector:pg16
+    image: postgres:16
     container_name: aria-postgres
     environment:
       POSTGRES_USER: aria
       POSTGRES_PASSWORD: aria_dev
       POSTGRES_DB: aria
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -29,8 +29,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: aria-redis
-    ports:
-      - "6379:6379"
+    ports: []  # internal-only, no host port
     volumes:
       - redis_data:/data
     healthcheck:
@@ -43,21 +42,29 @@ services:
 
   # ── Keycloak (auth / SSO) ────────────────────────────────────────────
   keycloak:
-    image: quay.io/keycloak/keycloak:26
+    image: quay.io/keycloak/keycloak:26.1
     container_name: aria-keycloak
-    command: start-dev --http-port 8080
+    command: start-dev --http-port 8080 --import-realm
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak_dev
     ports:
       - "8080:8080"
+    volumes:
+      - ./infra/keycloak/aria-realm.json:/opt/keycloak/data/import/aria-realm.json:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost:9000\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q UP"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
     networks:
       - aria-net
 
@@ -110,11 +117,6 @@ services:
       - qdrant_data:/qdrant/storage
     environment:
       QDRANT__SERVICE__GRPC_PORT: 6334
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
     networks:
       - aria-net
 

@@ -10,11 +10,5 @@
         "alphabetize": { "order": "asc" }
       }
     ]
-  },
-  "overrides": [
-    {
-      "files": ["**/*.test.ts", "**/*.test.tsx"],
-      "env": { "vitest": true }
-    }
-  ]
+  }
 }

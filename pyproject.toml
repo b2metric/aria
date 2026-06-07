@@ -40,6 +40,10 @@ dependencies = [
     "minio>=7.2,<8",
     "boto3>=1.36,<2",
 
+    # ── Charting ──
+    "plotly>=6.1,<7",
+    "pydantic-ai>=0.1,<1",
+
     # ── Auth ──
     "python-jose[cryptography]>=3.3,<4",
     "passlib[bcrypt]>=1.7,<2",
@@ -47,6 +51,9 @@ dependencies = [
 
     # ── Workflow ──
     "prefect>=3.2,<4",
+
+    # ── Streaming ──
+    "sse-starlette>=2.1,<3",
 
     # ── Observability ──
     "sentry-sdk[fastapi]>=2.20,<3",
@@ -72,6 +79,19 @@ dev = [
     "coverage[toml]>=7.6,<8",
     "pip-audit>=2.8,<3",
 ]
+chart-export = [
+    # Kaleido: static image export for Plotly charts (Linux only, no macOS ARM64 wheel)
+    "kaleido>=0.2,<1; sys_platform == 'linux'",
+]
+
+# ── Build System ────────────────────────────────────────────────────────
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "agents*"]
 
 # ── Tool Configs ───────────────────────────────────────────────────────
 [tool.ruff]
