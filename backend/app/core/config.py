@@ -25,6 +25,12 @@ class Settings(BaseSettings):
 
     # ── Database ─────────────────────────────────────────────────────
     database_url: str = "postgresql+asyncpg://aria:aria_dev@localhost:5432/aria"
+    
+    # ── Oracle Thick Mode ──────────────────────────────────────────────
+    # Path to Oracle Instant Client lib dir (required for thick mode)
+    # macOS: /opt/oracle/instantclient_23_3 or ~/instantclient_23_3
+    # Linux: /opt/oracle/instantclient_23_3
+    oracle_client_lib_dir: str | None = None
 
     # ── Redis ────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6379/0"

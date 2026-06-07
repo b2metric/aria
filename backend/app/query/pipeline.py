@@ -212,10 +212,69 @@ async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -
 
 # ── SQL Execution ──────────────────────────────────────────────────────────
 
+# Track if Oracle thick mode has been initialized (one-time init)
+_oracle_thick_initialized = False
+
+
+def _init_oracle_thick_mode() -> None:
+    """Initialize Oracle thick mode (once per process).
+    
+    Thick mode is required for advanced Oracle features like:
+    - LDAP/OID authentication
+    - Kerberos authentication  
+    - Oracle Net features (encryption, compression)
+    - Some data types (BFILE, REF CURSOR in certain contexts)
+    """
+    global _oracle_thick_initialized
+    if _oracle_thick_initialized:
+        return
+    
+    import oracledb
+    from backend.app.core.config import get_settings
+    
+    settings = get_settings()
+    lib_dir = settings.oracle_client_lib_dir
+    
+    if lib_dir:
+        try:
+            oracledb.init_oracle_client(lib_dir=lib_dir)
+            logger.info("Oracle thick mode initialized", lib_dir=lib_dir)
+        except oracledb.ProgrammingError as e:
+            if "already been called" in str(e):
+                pass  # Already initialized
+            else:
+                raise
+    else:
+        # Try default locations
+        import os
+        default_paths = [
+            "/opt/oracle/instantclient_23_3",
+            "/opt/oracle/instantclient_21_3", 
+            os.path.expanduser("~/instantclient_23_3"),
+            os.path.expanduser("~/instantclient_21_3"),
+        ]
+        for path in default_paths:
+            if os.path.exists(path):
+                try:
+                    oracledb.init_oracle_client(lib_dir=path)
+                    logger.info("Oracle thick mode initialized", lib_dir=path)
+                    break
+                except oracledb.ProgrammingError as e:
+                    if "already been called" in str(e):
+                        break
+                    continue
+        else:
+            logger.warning("Oracle Instant Client not found, using thin mode")
+    
+    _oracle_thick_initialized = True
+
 
 async def _execute_sql_oracle(sql: str, engine: AsyncEngine) -> list[dict]:
     """Execute SQL against Oracle using customer_db_configs."""
     import oracledb
+    
+    # Initialize thick mode (idempotent)
+    _init_oracle_thick_mode()
     from sqlalchemy import text as sa_text
     # Read Oracle connection from customer_db_configs
     async with engine.connect() as conn:
