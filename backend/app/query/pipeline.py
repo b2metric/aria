@@ -642,6 +642,27 @@ def _detect_requested_chart_type(question: str) -> str | None:
     return None
 
 
+_CHART_REQ_FILLER = {
+    "give", "me", "a", "an", "the", "show", "make", "it", "as", "to", "chart",
+    "charts", "graph", "plot", "please", "can", "you", "this", "that", "into",
+    "draw", "display", "with", "of", "in", "view", "instead", "turn", "convert",
+    "now", "pie", "bar", "line", "area", "scatter",
+}
+
+
+def _is_chart_type_only_request(question: str) -> bool:
+    """True if the question ONLY asks to change the chart type (no new data).
+
+    e.g. 'give me a pie chart', 'make it a bar', 'as line' -> True;
+    'revenue by region as pie' -> False (mentions data).
+    """
+    q = (question or "").lower()
+    for ch in ",.!?;:'\"()-/\n\t":
+        q = q.replace(ch, " ")
+    tokens = [t for t in q.split() if t and t not in _CHART_REQ_FILLER]
+    return len(tokens) == 0
+
+
 def _build_chart(
     rows: list[dict],
     question: str,
@@ -831,6 +852,64 @@ async def process_query(
     # Save user message
     user_msg = ConversationMessage(role="user", content=request.question)
     conversation = await append_message(redis, workspace_id, cid, user_msg)
+
+    # ── Fast path: pure chart-type change ("give me a pie chart") ──────────
+    # Reuse the previous result's data and just re-render with the requested type.
+    # No LLM, no SQL re-run -> it can never drift to a different/unrelated query.
+    _req_type = _detect_requested_chart_type(request.question)
+    _prev_assistant = next(
+        (m for m in reversed(conversation.messages[:-1]) if m.role == "assistant"),
+        None,
+    )
+    if (
+        _req_type
+        and _is_chart_type_only_request(request.question)
+        and _prev_assistant is not None
+        and _prev_assistant.chart_data
+    ):
+        reused_sql = _prev_assistant.sql or ""
+        cfg = dict(_prev_assistant.chart_spec or {})
+        cfg["type"] = _req_type
+        if reused_sql:
+            yield {
+                "event": "sql",
+                "data": json.dumps({
+                    "sql": reused_sql,
+                    "explanation": f"Re-rendered the previous result as a {_req_type} chart.",
+                }),
+            }
+        yield {
+            "event": "chart",
+            "data": json.dumps({
+                "chart_type": _req_type,
+                "chart_data": _prev_assistant.chart_data,
+                "chart_url": _prev_assistant.chart_url or "",
+                "csv_url": "",
+                "chart_config": cfg,
+                "row_count": len(_prev_assistant.chart_data),
+            }, default=str),
+        }
+        await append_message(
+            redis, workspace_id, cid,
+            ConversationMessage(
+                role="assistant",
+                content=f"Here is the previous result as a {_req_type} chart.",
+                sql=reused_sql,
+                chart_spec=cfg,
+                chart_data=_prev_assistant.chart_data,
+                chart_url=_prev_assistant.chart_url,
+            ),
+        )
+        yield {
+            "event": "status",
+            "data": json.dumps({
+                "status": QueryStatus.COMPLETE.value,
+                "message": "Chart updated",
+                "conversation_id": cid,
+            }),
+        }
+        yield {"event": "done", "data": json.dumps({"conversation_id": cid})}
+        return
 
     # Stage 1.5: MEMORY_LOOKUP
     memory_svc = MemoryService.get_instance()
