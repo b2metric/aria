@@ -134,7 +134,7 @@ describe("ChartArea", () => {
     expect(screen.getByText("Bar")).toBeInTheDocument();
     expect(screen.getByText("Line")).toBeInTheDocument();
     expect(screen.getByText("Area")).toBeInTheDocument();
-    expect(screen.getByText("Pie")).toBeInTheDocument();
+    expect(screen.queryByText("Pie")).not.toBeInTheDocument();
   });
 
   it("renders export buttons", () => {

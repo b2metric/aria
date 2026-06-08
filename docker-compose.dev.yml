@@ -46,18 +46,14 @@ services:
     container_name: aria-traefik
     command:
       - "--api.insecure=true"
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
-      - "--providers.docker.endpoint=unix:///var/run/docker.sock"
-      - "--providers.docker.network=aria-net"
-    environment:
-      - DOCKER_API_VERSION=1.41
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
     ports:
       - "80:80"
       - "8081:8080" # Dashboard
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./infra/traefik-dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
     networks:
       - aria-net
 
@@ -78,8 +74,6 @@ services:
       KC_HOSTNAME_PORT: "8080"
       KC_HTTP_RELATIVE_PATH: "/auth"
       KC_PROXY: "edge"
-    ports:
-      - "8080:8080" # Keep it exposed locally for now to not break existing apps
     volumes:
       - ./infra/keycloak/aria-realm.json:/opt/keycloak/data/import/aria-realm.json:ro
     depends_on:
@@ -107,6 +101,44 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - aria-net
+
+  # ── Backend (FastAPI - Live Reload) ──────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aria-backend
+    command: "uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - ./backend:/app/backend
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://aria:aria_dev@postgres:5432/aria
+      - REDIS_URL=redis://redis:6379/0
+      - KEYCLOAK_URL=http://keycloak:8080/auth
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - aria-net
+
+  # ── Frontend (Next.js - Hot Reload) ──────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: aria-frontend
+    command: "npm run dev"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NEXT_PUBLIC_API_URL=http://api.aria.local
+      - NEXTAUTH_URL=http://aria.local
+      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/aria
+      - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://auth.aria.local/auth/realms/aria
     networks:
       - aria-net
 

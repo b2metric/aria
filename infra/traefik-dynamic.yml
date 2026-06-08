@@ -1,0 +1,25 @@
+http:
+  routers:
+    frontend:
+      rule: "Host(`aria.local`)"
+      service: frontend-svc
+    backend:
+      rule: "Host(`api.aria.local`)"
+      service: backend-svc
+    keycloak:
+      rule: "Host(`auth.aria.local`)"
+      service: keycloak-svc
+
+  services:
+    frontend-svc:
+      loadBalancer:
+        servers:
+          - url: "http://aria-frontend:3003"
+    backend-svc:
+      loadBalancer:
+        servers:
+          - url: "http://aria-backend:8000"
+    keycloak-svc:
+      loadBalancer:
+        servers:
+          - url: "http://aria-keycloak:8080"

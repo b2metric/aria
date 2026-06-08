@@ -50,3 +50,5 @@ backend/alembic/versions/*.pyc
 # Prefect
 ~/.prefect/
 tmp/
+\n# Next.js clobber folders\n.next.clobbered-by-build/\nfrontend/.next.clobbered-by-build/
+\nfrontend/.next*

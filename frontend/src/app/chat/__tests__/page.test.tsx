@@ -93,13 +93,13 @@ describe("ChatPage", () => {
     expect(mockSignIn).toHaveBeenCalledWith("keycloak");
   });
 
-  it("renders 'ARIA' branding in sidebar when authenticated", async () => {
+  it("renders sidebar with History when authenticated", async () => {
     mockAuth("authenticated");
 
     render(<ChatPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("ARIA")).toBeInTheDocument();
+      expect(screen.getByText("History")).toBeInTheDocument();
     });
   });
 
