@@ -57,7 +57,7 @@ dependencies = [
     "prefect>=3.2,<4",
 
     # ── Streaming ──
-    "sse-starlette>=2.1,<3",
+    "sse-starlette>=2.1,<4",
 
     # ── Observability ──
     "sentry-sdk[fastapi]>=2.20,<3",
