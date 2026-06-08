@@ -405,12 +405,13 @@ function ChatPageContent() {
             ),
           );
         }
-        setIsStreaming(false);
+      } finally {
+        abortRef.current = undefined;
+        setIsStreaming(false); // <--- HER ZAMAN STREAMING'I KAPAT
       }
     },
-    [inputValue, isStreaming, conversationId, router],
+    [inputValue, isStreaming, conversationId, router, token],
   );
-
   const handleNewChat = useCallback(() => {
     abortRef.current?.();
     setMessages([]);
