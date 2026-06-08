@@ -14,6 +14,8 @@ gantt
     T5 GTM Strategy        :done, 2026-06-06, 1d
     section Phase 3
     T6 Build Execution     :done, 2026-06-06, 1d
+    section Phase 4
+    Sprint 7 Admin UI      :active, 2026-06-08, 3d
 ```
 
-Sprint 1: Scaffold + Auth (14 gun) basladi.
+Sprint 7: Admin UI (Memory, Tenant, Schema) + Tests + Responsive basladi.
