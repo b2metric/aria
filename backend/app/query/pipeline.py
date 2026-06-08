@@ -649,7 +649,8 @@ def _build_chart(
             "chart_html": _empty_chart_html("No data returned from query."),
             "chart_url": "",
             "csv_url": "",
-            "chart_config": {"type": "table"},
+            "chart_data": [],
+            "chart_config": {"type": "table", "title": "", "xKey": "", "yKeys": []},
             "errors": ["No data returned"],
         }
 
@@ -906,15 +907,18 @@ async def process_query(
         "event": "chart",
         "data": json.dumps(
             {
-                "chart_type": chart_result["chart_type"],
+                "chart_type": chart_result.get("chart_type", "table"),
                 # JSON data points for client-side recharts (was multi-MB chart_html).
-                "chart_data": chart_result["chart_data"],
+                "chart_data": chart_result.get("chart_data", []),
                 # MinIO link to the full Plotly artifact (lazy-loaded, not inlined).
-                "chart_url": chart_result["chart_url"],
-                "csv_url": chart_result["csv_url"],
-                "chart_config": chart_result["chart_config"],
+                "chart_url": chart_result.get("chart_url", ""),
+                "csv_url": chart_result.get("csv_url", ""),
+                "chart_config": chart_result.get("chart_config", {"type": "table"}),
                 "row_count": len(rows),
-            }
+            },
+            # Safety net: any value missed by _json_safe_rows degrades to str
+            # instead of crashing the SSE stream ("[Errno 32] Broken pipe").
+            default=str,
         ),
     }
 
@@ -940,10 +944,10 @@ async def process_query(
         role="assistant",
         content=explanation,
         sql=sql,
-        chart_spec=chart_result["chart_config"],
+        chart_spec=chart_result.get("chart_config", {"type": "table"}),
         # Persist JSON data + MinIO url, NOT the multi-MB inline HTML (Redis/history bloat).
-        chart_data=chart_result["chart_data"],
-        chart_url=chart_result["chart_url"],
+        chart_data=chart_result.get("chart_data", []),
+        chart_url=chart_result.get("chart_url", ""),
     )
     conversation = await append_message(redis, workspace_id, cid, assistant_msg)
 

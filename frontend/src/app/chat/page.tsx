@@ -5,7 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { streamQuery, fetchConversations, fetchConversation, deleteConversation } from "@/lib/api";
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
-import { useSession, signOut } from "next-auth/react";
+import { useSession, signOut, signIn } from "next-auth/react";
 
 // Emoji for a chart artifact chip/header.
 function chartEmoji(type?: string): string {
@@ -122,6 +122,14 @@ function ChatPageContent() {
     }
   }, [status, token, loadConversations]);
 
+  // Auth guard: if the session is missing/expired, redirect to Keycloak login
+  // instead of landing on /chat with no token ("No authentication token available").
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      signIn("keycloak");
+    }
+  }, [status]);
+
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -206,7 +214,10 @@ function ChatPageContent() {
 
       try {
         if (!token) {
-           throw new Error("No authentication token available. Please try logging in again.");
+           // Session expired/missing — send the user to login instead of erroring.
+           setIsStreaming(false);
+           signIn("keycloak");
+           return;
         }
         
         const { reader, abort } = streamQuery(q, conversationId || undefined, "stc-kuwait", token);
