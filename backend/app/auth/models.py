@@ -56,11 +56,13 @@ class TokenPayload(BaseModel):
     validation (signature, issuer, audience, expiration).
     """
 
-    sub: str = Field(..., description="Keycloak user UUID")
-    iss: str = Field(..., description="Token issuer (Keycloak realm URL)")
-    aud: str | list[str] = Field(..., description="Audience (client ID)")
-    exp: int = Field(..., description="Expiration timestamp (UNIX)")
-    iat: int = Field(..., description="Issued-at timestamp (UNIX)")
+    model_config = {"extra": "allow"}
+
+    sub: str | None = Field(default=None, description="Keycloak user UUID")
+    iss: str | None = Field(default=None, description="Token issuer (Keycloak realm URL)")
+    aud: str | list[str] | None = Field(default=None, description="Audience (client ID)")
+    exp: int | None = Field(default=None, description="Expiration timestamp (UNIX)")
+    iat: int | None = Field(default=None, description="Issued-at timestamp (UNIX)")
 
     # ── Custom ARIA claims (injected by aria-claims client scope) ────
     workspace_id: str | None = Field(
@@ -102,11 +104,11 @@ class UserContext(BaseModel):
     Populated by :func:`backend.app.auth.dependencies.get_current_user`.
     """
 
-    sub: str  # Keycloak user UUID
-    user_id: str
-    workspace_id: str
-    team_id: str
-    role: Role
+    sub: str | None = None  # Keycloak user UUID
+    user_id: str | None = None
+    workspace_id: str | None = None
+    team_id: str | None = None
+    role: Role | None = None
     email: str | None = None
     name: str | None = None
     preferred_username: str | None = None

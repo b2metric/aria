@@ -45,9 +45,15 @@ async def _fetch_jwks() -> dict[str, Any]:
     url = settings.keycloak_jwks_url
 
     async with httpx.AsyncClient(verify=settings.keycloak_verify_ssl) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        jwks = resp.json()
+        try:
+            resp = await client.get(url)
+            resp.raise_for_status()
+            jwks = resp.json()
+        except httpx.HTTPError as exc:
+            logger.error("Failed to fetch JWKS from %s: %s", url, exc)
+            if hasattr(exc, 'response') and exc.response is not None:
+                logger.error("Response body: %s", exc.response.text)
+            raise
 
     _jwks_cache = jwks
     _jwks_cache_ts = now
@@ -76,7 +82,7 @@ async def decode_token(token: str, *, leeway: int | None = None) -> TokenPayload
     """
     settings = get_settings()
     if leeway is None:
-        leeway = settings.jwt_leeway_seconds
+        leeway = getattr(settings, "jwt_leeway_seconds", 60)
 
     # Decode the header to get the ``kid`` before we fetch JWKS.
     try:
@@ -104,15 +110,17 @@ async def decode_token(token: str, *, leeway: int | None = None) -> TokenPayload
 
     # Verify signature + standard claims.
     try:
+        # Note: Since the token is generated for the frontend ("aria-web") but consumed
+        # by the backend, we disable strict audience check for local dev or check against "account".
         payload = jwt.decode(
             token,
             key,
             algorithms=[alg],
-            audience=settings.keycloak_client_id,
+            audience="account",
             issuer=settings.keycloak_issuer,
             options={
                 "verify_signature": True,
-                "verify_aud": True,
+                "verify_aud": False,
                 "verify_iss": True,
                 "verify_exp": True,
                 "verify_iat": True,

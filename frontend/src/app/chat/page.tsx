@@ -2,8 +2,22 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { streamQuery } from "@/lib/api";
-import type { ChatMessage, ChartSpec } from "@/lib/types";
+import { streamQuery, fetchConversations, fetchConversation, deleteConversation } from "@/lib/api";
+import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint } from "@/lib/types";
+import ChartArea from "@/components/ChartArea";
+import { useSession, signOut } from "next-auth/react";
+
+// Emoji for a chart artifact chip/header.
+function chartEmoji(type?: string): string {
+  switch (type) {
+    case "bar": return "📊";
+    case "line": return "📈";
+    case "area": return "📉";
+    case "pie": return "🥧";
+    case "scatter": return "🔵";
+    default: return "📋";
+  }
+}
 
 // ── SSE Parser ───────────────────────────────────────────────────────
 
@@ -68,23 +82,45 @@ export default function ChatPage() {
 // ── Chat Page Content ────────────────────────────────────────────────
 
 function ChatPageContent() {
+  const { data: session, status } = useSession();
+  const token = (session as any)?.accessToken;
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialQuery = searchParams.get("q") || "";
+  const initialCid = searchParams.get("cid") || null;
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
-  const [sqlPreview, setSqlPreview] = useState<string | null>(null);
-  const [currentChart, setCurrentChart] = useState<ChartSpec | null>(null);
-  const [chartHtml, setChartHtml] = useState<string | null>(null);
-  const [chartUrl, setChartUrl] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(initialCid);
+  // Claude-Desktop-style artifact panel: id of the message whose artifact is shown on the right.
+  const [activeArtifactMsgId, setActiveArtifactMsgId] = useState<string | null>(null);
+  const [conversations, setConversations] = useState<any[]>([]);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
+
+  // Load conversations list
+  const loadConversations = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await fetchConversations(token).catch(() => []);
+      if (Array.isArray(data)) {
+        setConversations(data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (status === "authenticated" && token) {
+        loadConversations();
+    }
+  }, [status, token, loadConversations]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -95,6 +131,42 @@ function ChatPageContent() {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Load specific conversation if cid changes
+  useEffect(() => {
+    if (conversationId && token) {
+      fetchConversation(conversationId, token)
+        .then((data) => {
+          // Convert API response schema (snake_case) to UI schema (camelCase)
+          if (data && Array.isArray(data.messages)) {
+            const formattedMessages = data.messages.map((m: any, i: number) => {
+              const rawSpec = m.chart_spec || m.chart_config || null;
+              const chartSpec = rawSpec
+                ? { ...rawSpec, data: m.chart_data || rawSpec.data || [], chart_url: m.chart_url || rawSpec.chart_url }
+                : null;
+              return {
+                role: m.role,
+                content: m.content || "",
+                sql: m.sql || null,
+                chartUrl: m.chart_url || null,
+                chartSpec,
+                id: m.id || `history-${m.role}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`,
+              };
+            });
+            setMessages(formattedMessages);
+            // Open the most recent message that has a chart artifact in the right panel.
+            const lastChartMsg = [...formattedMessages].reverse().find(
+              (m: any) => m.role === "assistant" && m.chartSpec,
+            );
+            setActiveArtifactMsgId(lastChartMsg ? lastChartMsg.id : null);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load conversation", err);
+          setError("Failed to load conversation history.");
+        });
+    }
+  }, [conversationId, token]);
 
   // Submit initial query from URL
   useEffect(() => {
@@ -131,13 +203,13 @@ function ChatPageContent() {
       };
 
       setMessages((prev) => [...prev, userMsg, assistantMsg]);
-      setSqlPreview(null);
-      setCurrentChart(null);
-      setChartHtml(null);
-      setChartUrl(null);
 
       try {
-        const { reader, abort } = streamQuery(q, conversationId || undefined);
+        if (!token) {
+           throw new Error("No authentication token available. Please try logging in again.");
+        }
+        
+        const { reader, abort } = streamQuery(q, conversationId || undefined, "stc-kuwait", token);
         abortRef.current = abort;
 
         const decoder = new TextDecoder();
@@ -180,14 +252,10 @@ function ChatPageContent() {
                   if (payload.conversation_id) {
                     setConversationId(payload.conversation_id);
                   }
-                  if (payload.sql) {
-                    setSqlPreview(payload.sql);
-                  }
                   break;
                 }
 
                 case "sql": {
-                  setSqlPreview(payload.sql);
                   setMessages((prev) =>
                     prev.map((m) =>
                       m.id === assistantMsg.id
@@ -199,37 +267,27 @@ function ChatPageContent() {
                 }
 
                 case "chart": {
-                  if (payload.chart_spec || payload.chart_config) {
-                    const spec = payload.chart_spec || payload.chart_config;
-                    setCurrentChart(spec);
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === assistantMsg.id
-                          ? { ...m, chartSpec: spec }
-                          : m,
-                      ),
-                    );
-                  }
-                  if (payload.chart_html) {
-                    setChartHtml(payload.chart_html);
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === assistantMsg.id
-                          ? { ...m, chartHtml: payload.chart_html }
-                          : m,
-                      ),
-                    );
-                  }
-                  if (payload.chart_url) {
-                    setChartUrl(payload.chart_url);
-                    setMessages((prev) =>
-                      prev.map((m) =>
-                        m.id === assistantMsg.id
-                          ? { ...m, chartUrl: payload.chart_url }
-                          : m,
-                      ),
-                    );
-                  }
+                  const cfg = payload.chart_config || payload.chart_spec || {};
+                  const spec: ChartSpec = {
+                    type: cfg.type || payload.chart_type || "bar",
+                    title: cfg.title,
+                    xKey: cfg.xKey,
+                    yKeys: cfg.yKeys,
+                    colors: cfg.colors,
+                    data: payload.chart_data || cfg.data || [],
+                    chart_url: payload.chart_url,
+                    csv_url: payload.csv_url,
+                    row_count: payload.row_count,
+                  };
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsg.id
+                        ? { ...m, chartSpec: spec, chartUrl: payload.chart_url }
+                        : m,
+                    ),
+                  );
+                  // Auto-open the artifact panel on first render of a new chart.
+                  setActiveArtifactMsgId(assistantMsg.id);
                   break;
                 }
 
@@ -302,33 +360,139 @@ function ChatPageContent() {
     abortRef.current?.();
     setMessages([]);
     setConversationId(null);
-    setSqlPreview(null);
-    setCurrentChart(null);
-    setChartHtml(null);
-    setChartUrl(null);
+    setActiveArtifactMsgId(null);
     setError(null);
     setInputValue("");
     inputRef.current?.focus();
   }, []);
 
+  const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      if (!token) return;
+      await deleteConversation(id, token);
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      if (conversationId === id) {
+        handleNewChat();
+      }
+    } catch (err) {
+      console.error("Failed to delete conversation", err);
+    }
+  }, [conversationId, handleNewChat, token]);
+
   return (
-    <div className="flex h-full">
+    <div className="flex h-full w-full bg-white text-gray-900">
+      {/* Sidebar */}
+      {isSidebarOpen && (
+        <div className="w-64 border-r border-gray-200 bg-gray-50 flex flex-col flex-shrink-0 transition-all">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+            <h1 className="font-bold text-gray-900 text-lg">ARIA</h1>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="text-gray-500 hover:text-gray-900"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          
+          <div className="p-4">
+            <button
+              onClick={handleNewChat}
+              className="w-full flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              New Chat
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+              Recent History
+            </h3>
+            {conversations.map((conv) => (
+              <div
+                key={conv.id}
+                className={`w-full text-left p-3 rounded-lg text-sm truncate transition-colors flex items-center justify-between group ${
+                  conversationId === conv.id
+                    ? "bg-blue-50 text-blue-700 font-medium"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+              >
+                <button
+                  onClick={() => {
+                    setConversationId(conv.id);
+                    router.push(`/chat?cid=${conv.id}`);
+                  }}
+                  className="flex-1 truncate text-left"
+                >
+                  {conv.title || "New Conversation"}
+                </button>
+                <button
+                  onClick={(e) => handleDeleteConversation(conv.id, e)}
+                  className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 rounded transition-all"
+                  title="Delete conversation"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M3 6h18"></path>
+                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                    <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {conversations.length === 0 && (
+              <p className="text-xs text-gray-400 text-center py-4">No history yet</p>
+            )}
+          </div>
+          
+          <div className="p-4 border-t border-gray-200">
+            {status === "authenticated" && (
+              <button
+                onClick={() => signOut({ callbackUrl: "/" })}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                  <polyline points="16 17 21 12 16 7"></polyline>
+                  <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+                Logout
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white">
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900">New Chat</h2>
-            <p className="text-xs text-gray-500">
-              Ask questions about your data in natural language
-            </p>
+        <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white shadow-sm z-10">
+          <div className="flex items-center gap-3">
+            {!isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="3" y1="12" x2="21" y2="12"></line>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+              </button>
+            )}
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                {conversations.find((c) => c.id === conversationId)?.title || "New Chat"}
+              </h2>
+              <p className="text-xs text-gray-500">Ask questions about your data in natural language</p>
+            </div>
           </div>
-          <button
-            onClick={handleNewChat}
-            className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            + New Chat
-          </button>
         </div>
 
         {/* Messages */}
@@ -397,6 +561,36 @@ function ChatPageContent() {
                 <div className="text-sm whitespace-pre-wrap leading-relaxed">
                   {msg.content || (msg.status === "streaming" ? "Thinking..." : "")}
                 </div>
+
+                {/* Inline SQL (collapsible) — visible to admin / SQL-permitted roles */}
+                {msg.sql && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700 select-none">
+                      🔍 View SQL
+                    </summary>
+                    <pre className="mt-1 text-xs bg-gray-900 text-green-400 p-3 rounded-lg overflow-auto font-mono leading-relaxed">
+                      {msg.sql}
+                    </pre>
+                  </details>
+                )}
+
+                {/* Artifact chip → opens the right panel */}
+                {msg.chartSpec && (
+                  <button
+                    onClick={() => setActiveArtifactMsgId(msg.id)}
+                    className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                      activeArtifactMsgId === msg.id
+                        ? "border-blue-300 bg-blue-50 text-blue-700"
+                        : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    <span>{chartEmoji(msg.chartSpec.type)}</span>
+                    <span className="capitalize">{msg.chartSpec.type} chart</span>
+                    {msg.chartSpec.title ? (
+                      <span className="text-gray-400 truncate max-w-[12rem]">— {msg.chartSpec.title}</span>
+                    ) : null}
+                  </button>
+                )}
 
                 {/* Error */}
                 {msg.error && (
@@ -478,69 +672,78 @@ function ChatPageContent() {
         </div>
       </div>
 
-      {/* SQL Preview panel */}
-      {sqlPreview && (
-        <div className="w-96 border-l border-gray-200 bg-gray-50 flex flex-col">
-          <div className="px-4 py-3 border-b border-gray-200 bg-white">
-            <h3 className="text-sm font-semibold text-gray-900">SQL Preview</h3>
-          </div>
-          <div className="flex-1 overflow-auto p-4">
-            <pre className="text-xs text-gray-700 bg-gray-900 text-green-400 p-4 rounded-xl overflow-auto font-mono leading-relaxed">
-              {sqlPreview}
-            </pre>
-          </div>
-          {currentChart && (
-            <div className="p-4 border-t border-gray-200 bg-white">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                Chart
-              </h4>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-lg">
-                  {currentChart.type === "bar"
-                    ? "📊"
-                    : currentChart.type === "line"
-                      ? "📈"
-                      : currentChart.type === "pie"
-                        ? "🥧"
-                        : currentChart.type === "scatter"
-                          ? "🔵"
-                          : "📉"}
-                </span>
-                <span className="text-sm font-medium text-gray-900 capitalize">
-                  {currentChart.type} chart
-                </span>
+      {/* Artifact panel (Claude-Desktop style) — opens on chip click / auto-opens on new chart */}
+      {(() => {
+        const activeMsg = messages.find((m) => m.id === activeArtifactMsgId);
+        const spec = activeMsg?.chartSpec;
+        if (!activeMsg || !spec) return null;
+        const rechartsTypes = ["bar", "line", "area", "pie"];
+        const canRecharts =
+          !!spec.data && spec.data.length > 0 && !!spec.xKey &&
+          (spec.yKeys?.length ?? 0) > 0 && rechartsTypes.includes(spec.type);
+        return (
+          <div className="w-[28rem] border-l border-gray-200 bg-gray-50 flex flex-col flex-shrink-0">
+            <div className="px-4 py-3 border-b border-gray-200 bg-white flex items-center justify-between">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-lg">{chartEmoji(spec.type)}</span>
+                <h3 className="text-sm font-semibold text-gray-900 truncate">
+                  {spec.title || "Artifact"}
+                </h3>
               </div>
-              {currentChart.title && (
-                <p className="text-xs text-gray-500 mt-1">{currentChart.title}</p>
-              )}
-
-              {/* Chart iframe */}
-              {chartHtml && (
-                <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden bg-white">
+              <button
+                onClick={() => setActiveArtifactMsgId(null)}
+                className="text-gray-400 hover:text-gray-700 flex-shrink-0"
+                title="Close"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto p-4">
+              {canRecharts ? (
+                <ChartArea
+                  data={spec.data as ChartDataPoint[]}
+                  config={{
+                    type: spec.type as ChartConfig["type"],
+                    xKey: spec.xKey as string,
+                    yKeys: spec.yKeys as string[],
+                    title: spec.title,
+                    colors: spec.colors,
+                  }}
+                  filters={{}}
+                  onFilterChange={() => {}}
+                />
+              ) : spec.chart_url ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
                   <iframe
-                    srcDoc={chartHtml}
+                    src={spec.chart_url}
                     className="w-full"
-                    style={{ height: "400px", border: "none" }}
+                    style={{ height: 440, border: "none" }}
                     title="Chart"
                     sandbox="allow-scripts allow-same-origin"
                   />
                 </div>
-              )}
-
-              {chartUrl && !chartHtml && (
-                <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden bg-white">
-                  <iframe
-                    src={chartUrl}
-                    className="w-full"
-                    style={{ height: "400px", border: "none" }}
-                    title="Chart"
-                  />
+              ) : (
+                <div className="text-sm text-gray-400 text-center py-8">
+                  No chart preview available.
                 </div>
               )}
+              {spec.csv_url && (
+                <a
+                  href={spec.csv_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-block text-xs text-blue-600 hover:underline"
+                >
+                  ⬇ Download CSV
+                </a>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        );
+      })()}
     </div>
   );
 }

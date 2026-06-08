@@ -1,3 +1,4 @@
+import { getSession } from "next-auth/react";
 import type { DashboardData } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -133,6 +134,7 @@ export function streamQuery(
   question: string,
   conversationId?: string,
   workspaceId: string = "stc-kuwait",
+  token: string = "",
 ): { reader: ReadableStreamDefaultReader<Uint8Array>; abort: () => void } {
   const controller = new AbortController();
 
@@ -146,11 +148,11 @@ export function streamQuery(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${getAuthToken()}`,
+      Authorization: `Bearer ${token}`,
     },
     body,
     signal: controller.signal,
-    credentials: "include",
+    credentials: "omit",
   });
 
   const stream = new ReadableStream({
@@ -201,14 +203,18 @@ function getAuthToken(): string {
 /**
  * Fetch conversation list from the backend.
  */
-export async function fetchConversations(): Promise<
+export async function fetchConversations(tokenOverride?: string): Promise<
   { id: string; title: string; message_count: number; created_at: string; updated_at: string }[]
 > {
-  const res = await fetch(`${API_BASE}/api/conversations`, {
+  const token = tokenOverride || getAuthToken();
+  const url = `${API_BASE}/api/conversations`;
+  console.log(`[fetchConversations] Fetching from: ${url} with token: ${token ? token.substring(0,10) + "..." : "EMPTY"}`);
+  
+  const res = await fetch(url, {
     headers: {
-      Authorization: `Bearer ${getAuthToken()}`,
+      Authorization: `Bearer ${token}`,
     },
-    credentials: "include",
+    credentials: "omit", // Using token in header, no need for cookies/credentials
   });
   if (!res.ok) throw new Error(`Failed to fetch conversations: ${res.status}`);
   return res.json();
@@ -217,12 +223,13 @@ export async function fetchConversations(): Promise<
 /**
  * Fetch a single conversation with full messages.
  */
-export async function fetchConversation(conversationId: string) {
+export async function fetchConversation(conversationId: string, tokenOverride?: string) {
+  const token = tokenOverride || getAuthToken();
   const res = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
     headers: {
-      Authorization: `Bearer ${getAuthToken()}`,
+      Authorization: `Bearer ${token}`,
     },
-    credentials: "include",
+    credentials: "omit",
   });
   if (!res.ok) throw new Error(`Failed to fetch conversation: ${res.status}`);
   return res.json();
@@ -231,13 +238,14 @@ export async function fetchConversation(conversationId: string) {
 /**
  * Delete a conversation.
  */
-export async function deleteConversation(conversationId: string): Promise<void> {
+export async function deleteConversation(conversationId: string, tokenOverride?: string): Promise<void> {
+  const token = tokenOverride || getAuthToken();
   const res = await fetch(`${API_BASE}/api/conversations/${conversationId}`, {
     method: "DELETE",
     headers: {
-      Authorization: `Bearer ${getAuthToken()}`,
+      Authorization: `Bearer ${token}`,
     },
-    credentials: "include",
+    credentials: "omit",
   });
   if (!res.ok) throw new Error(`Failed to delete conversation: ${res.status}`);
 }

@@ -4,7 +4,7 @@
   "private": true,
   "description": "ARIA — AI-Driven Analytics Platform Frontend",
   "scripts": {
-    "dev": "next dev --port 3000",
+    "dev": "next dev -p 3003",
     "build": "next build",
     "start": "next start",
     "lint": "ESLINT_USE_FLAT_CONFIG=false eslint . --ext .ts,.tsx",
@@ -14,9 +14,17 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@tailwindcss/postcss": "^4.3.0",
+    "@types/papaparse": "^5.5.2",
+    "html2canvas": "^1.4.1",
     "next": "^16.2.7",
+    "next-auth": "^4.24.14",
+    "papaparse": "^5.5.3",
+    "postcss": "^8.5.15",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "recharts": "^3.8.1",
+    "tailwindcss": "^4.3.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.6.0",

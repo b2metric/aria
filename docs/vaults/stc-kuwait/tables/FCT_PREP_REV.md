@@ -2,13 +2,56 @@
 table: FCT_PREP_REV
 database: oracle
 workspace: stc-kuwait
-keywords: [account, acquisition, activation, batch, billing, bundle, call, channel,
-  contract, country, customer, date, demographic, etl, financial, geography, income,
-  minutes, mobile, money, msisdn, nationality, offer, package, payment, phone number,
-  prepaid, product, provision, revenue, service, snapshot, subscriber, subscription,
-  tariff, temporal, time, touchpoint, usage, voice]
+keywords:
+- account
+- acquisition
+- activation
+- batch
+- billing
+- bundle
+- call
+- channel
+- contract
+- country
+- customer
+- date
+- demographic
+- etl
+- financial
+- geography
+- income
+- minutes
+- mobile
+- money
+- msisdn
+- nationality
+- offer
+- package
+- payment
+- phone number
+- prepaid
+- product
+- provision
+- revenue
+- service
+- snapshot
+- subscriber
+- subscription
+- tariff
+- temporal
+- time
+- touchpoint
+- usage
+- voice
 generated_at: 2026-06-07 11:22:23.802862+00:00
 enriched_at: '2026-06-07T11:22:24.334976+00:00'
+domain: telecom
+topic: revenue
+order: 1
+insights:
+- Compare postpaid vs prepaid revenue splits.
+- Identify which offer_id generates the highest average revenue.
+- Look for sharp revenue drops on specific execution dates.
 ---
 
 # FCT_PREP_REV

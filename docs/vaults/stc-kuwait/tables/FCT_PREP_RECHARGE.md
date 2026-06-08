@@ -2,12 +2,51 @@
 table: FCT_PREP_RECHARGE
 database: oracle
 workspace: stc-kuwait
-keywords: [account, acquisition, balance, bandwidth, batch, billing, channel, contract,
-  country, credit, customer, data, date, demographic, etl, financial, geography, income,
-  internet, mobile, money, msisdn, nationality, payment, phone number, prepaid, recharge,
-  revenue, snapshot, subscriber, temporal, time, topup, touchpoint, usage]
+keywords:
+- account
+- acquisition
+- balance
+- bandwidth
+- batch
+- billing
+- channel
+- contract
+- country
+- credit
+- customer
+- data
+- date
+- demographic
+- etl
+- financial
+- geography
+- income
+- internet
+- mobile
+- money
+- msisdn
+- nationality
+- payment
+- phone number
+- prepaid
+- recharge
+- revenue
+- snapshot
+- subscriber
+- temporal
+- time
+- topup
+- touchpoint
+- usage
 generated_at: 2026-06-07 11:22:23.802249+00:00
 enriched_at: '2026-06-07T11:22:24.333741+00:00'
+domain: telecom
+topic: recharge
+order: 2
+insights:
+- Analyze top-up behavior across different recharge channels.
+- Highlight trends in voucher vs electronic recharges.
+- Check if recharge amounts correlate with specific days of the week or month.
 ---
 
 # FCT_PREP_RECHARGE

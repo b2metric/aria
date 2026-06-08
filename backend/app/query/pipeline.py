@@ -33,6 +33,7 @@ from backend.app.query import (
     QueryRequest,
     QueryStatus,
 )
+from backend.app.db import DBConfig, DatabaseType
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,12 @@ async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[
     """
     import glob
     import os
-    vault_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "vaults", workspace_id, "tables")
+    import pathlib
+    
+    # Use absolute path based on project root
+    project_root = pathlib.Path(__file__).parent.parent.parent.parent
+    vault_path = os.path.join(project_root, "docs", "vaults", workspace_id, "tables")
+    
     try:
         files = glob.glob(os.path.join(vault_path, "*.md"))
         tables = []
@@ -118,7 +124,9 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
     for semantic SQL generation.
     """
     import os
-    vault_path = os.path.join(os.path.dirname(__file__), "..", "..", "..", "docs", "vaults", workspace_id, "tables")
+    import pathlib
+    project_root = pathlib.Path(__file__).parent.parent.parent.parent
+    vault_path = os.path.join(project_root, "docs", "vaults", workspace_id, "tables")
     md_file = os.path.join(vault_path, f"{table_name}.md")
     try:
         with open(md_file) as f:
@@ -162,7 +170,9 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
         return [{"name": "unknown", "type": "VARCHAR2", "description": ""}]
 
 
-async def _generate_sql(question: str, engine: AsyncEngine, workspace_id: str) -> tuple[str, str]:
+async def _generate_sql(
+    question: str, engine: AsyncEngine, workspace_id: str, memory_context=None
+) -> tuple[str, str]:
     """Generate SQL from a natural language question using Obsidian vault schema.
     
     Returns (sql, explanation).
@@ -465,6 +475,12 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     Raises:
         ValueError: If no DB config found for workspace
     """
+    import os
+    env = os.getenv("APP_ENV", "development")
+    
+    # Dev override: Ignore "default" workspace requests and force stc-kuwait
+    if env != "production" and workspace_id == "default":
+        workspace_id = "stc-kuwait"
     from sqlalchemy import text as sa_text
 
     from backend.app.db import DatabaseType, DBConfig
@@ -483,6 +499,18 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
         row = result.fetchone()
         
     if not row:
+        # Fallback to defaults or dummy connection for local dev if customer is not found
+        import os
+        env = os.getenv("APP_ENV", "development")
+        if env != "production":
+            return DBConfig(
+                db_type=DatabaseType.ORACLE,
+                host="localhost",
+                port=1521,
+                database="FREEPDB1",
+                username="stc",
+                password="stc123",
+            )
         raise ValueError(f"No DB config found for workspace: {workspace_id}")
     
     db_type_str, host, port, database, username, password = row
@@ -532,7 +560,7 @@ async def _execute_sql(
     Raises:
         ValueError: If no DB config found or unsupported DB type
     """
-    from backend.app.db import execute_query, DatabaseType, DBConfig
+    from backend.app.db import execute_query
     
     # If no workspace_id, try to execute against metadata DB (for schema queries)
     if not workspace_id:
@@ -645,15 +673,32 @@ def _build_chart(
         errors.append(f"MinIO upload failed: {exc}")
         # Even if MinIO fails, chart_html is still available inline
 
+    # Derive recharts keys + JSON data for client-side rendering (ChartArea).
+    # This replaces shipping multi-MB inline Plotly HTML to the browser.
+    cfg = pipeline_result.config
+    x_key = cfg.x.column or (columns[0] if columns else "")
+    y_keys = [cfg.y.column] if cfg.y.column else [
+        c for c in columns
+        if c != x_key and rows and isinstance(rows[0].get(c), (int, float))
+    ]
+    MAX_CHART_POINTS = 1000
+    chart_data = rows[:MAX_CHART_POINTS]
+
     return {
         "chart_type": chart_type,
+        # chart_html retained only for the MinIO upload above; NOT streamed inline.
         "chart_html": html_content,
         "chart_url": chart_url,
         "csv_url": csv_url,
+        "chart_data": chart_data,
         "chart_config": {
             "type": chart_type,
-            "title": pipeline_result.config.title or question[:60],
-            "confidence": pipeline_result.config.confidence,
+            "title": cfg.title or question[:60],
+            "xKey": x_key,
+            "yKeys": y_keys,
+            "confidence": cfg.confidence,
+            "total_rows": len(rows),
+            "truncated": len(rows) > MAX_CHART_POINTS,
         },
         "errors": errors,
     }
@@ -700,6 +745,7 @@ async def process_query(
     5. RENDERING_CHART — chart builder + Plotly render + MinIO upload
     6. COMPLETE — final response ready
     """
+    from backend.app.memory.service import MemoryService
     from backend.app.query.conversation import (
         append_message,
         get_conversation,
@@ -708,6 +754,12 @@ async def process_query(
 
     cid: str = request.conversation_id or ""
     conversation: Conversation | None = None
+    
+    # Dev override: Force workspace_id to stc-kuwait
+    import os
+    env = os.getenv("APP_ENV", "development")
+    if env != "production" and workspace_id == "default":
+        workspace_id = "stc-kuwait"
 
     # Stage 1: THINKING
     yield {
@@ -737,6 +789,19 @@ async def process_query(
     user_msg = ConversationMessage(role="user", content=request.question)
     conversation = await append_message(redis, workspace_id, cid, user_msg)
 
+    # Stage 1.5: MEMORY_LOOKUP
+    memory_svc = MemoryService.get_instance()
+    # Team ID is mock for now since user.team_id could be passed.
+    mem_context = memory_svc.lookup(
+        question=request.question,
+        user_id=user_id,
+        workspace_id=workspace_id,
+        team_id="default-team"
+    )
+    prompt_context = mem_context.to_prompt_context()
+    if prompt_context:
+        logger.info("Found memory context for user %s: %s bytes", user_id, len(prompt_context))
+    
     # Stage 2: GENERATING_SQL
     yield {
         "event": "status",
@@ -749,7 +814,7 @@ async def process_query(
     }
 
     try:
-        sql, explanation = await _generate_sql(request.question, engine, workspace_id)
+        sql, explanation = await _generate_sql(request.question, engine, workspace_id, memory_context=mem_context)
     except Exception as e:
         logger.exception("SQL generation failed")
         yield {
@@ -818,7 +883,9 @@ async def process_query(
         "data": json.dumps(
             {
                 "chart_type": chart_result["chart_type"],
-                "chart_html": chart_result["chart_html"],
+                # JSON data points for client-side recharts (was multi-MB chart_html).
+                "chart_data": chart_result["chart_data"],
+                # MinIO link to the full Plotly artifact (lazy-loaded, not inlined).
                 "chart_url": chart_result["chart_url"],
                 "csv_url": chart_result["csv_url"],
                 "chart_config": chart_result["chart_config"],
@@ -827,13 +894,31 @@ async def process_query(
         ),
     }
 
+    # Stage 5.5: STORE_MEMORY
+    # Sadece veri donduyse (success rate %100 ise) SQL cache'e veya pattern hafizasina at
+    if len(rows) > 0:
+        try:
+            # Arka planda await blocklamamak icin asenkron degil, hizlica yolluyoruz (veya async function cevrilmeli, service senkron oldugu icin direkt calisir)
+            memory_svc.store_query(
+                question=request.question,
+                sql=sql,
+                table="unknown", # We can extract best_table if needed, mock for now
+                user_id=user_id,
+                workspace_id=workspace_id,
+                row_count=len(rows)
+            )
+            logger.info("Successfully stored query context in Mem0 MemoryService")
+        except Exception as e:
+            logger.warning("Failed to store memory: %s", e)
+            
     # Stage 6: COMPLETE
     assistant_msg = ConversationMessage(
         role="assistant",
         content=explanation,
         sql=sql,
         chart_spec=chart_result["chart_config"],
-        chart_html=chart_result["chart_html"],
+        # Persist JSON data + MinIO url, NOT the multi-MB inline HTML (Redis/history bloat).
+        chart_data=chart_result["chart_data"],
         chart_url=chart_result["chart_url"],
     )
     conversation = await append_message(redis, workspace_id, cid, assistant_msg)

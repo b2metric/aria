@@ -15,6 +15,10 @@
 ## 1. Source of truth
 
 - Architecture authority: **`docs/technical-architecture.md`** (v2.0, decisions resolved).
+- **Frontend authority: `docs/frontend-architecture.md`** — read before touching
+  `frontend/`. Frontend work MUST be verified visually (render localhost:3000 +
+  `browser_screenshots`); edit with targeted patches, one writer per file. The chart
+  UI is `ChartArea` (recharts), NOT 5 MB Plotly HTML in an iframe.
 - Per-task design reviews: **`docs/reviews/*.md`**.
 - **Code vs business split:** this repo is CODE only. GTM / market research /
   product strategy live in the sibling `b2metric-aria-gtm` profile at

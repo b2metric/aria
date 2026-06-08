@@ -49,9 +49,11 @@ class Settings(BaseSettings):
     minio_secure: bool = False
 
     # ── Keycloak ─────────────────────────────────────────────────────
-    keycloak_url: str = "http://localhost:8080"
+    keycloak_url: str = "http://localhost:8080/auth"
     keycloak_realm: str = "aria"
     keycloak_client_id: str = "aria-backend"
+    keycloak_verify_ssl: bool = False
+    jwt_leeway_seconds: int = 60
 
     # ── LiteLLM ──────────────────────────────────────────────────────
     litellm_api_base: str = "http://localhost:4000"

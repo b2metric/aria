@@ -1,5 +1,6 @@
 "use client";
 
+import { useSession, signIn } from "next-auth/react";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -9,7 +10,7 @@ import type {
   SavedQuery,
   FilterState,
 } from "@/lib/types";
-import { getMockDashboardData } from "@/lib/api";
+import { getMockDashboardData, fetchConversations } from "@/lib/api";
 import StatCard from "@/components/StatCard";
 import QuerySearch from "@/components/QuerySearch";
 import ChartArea from "@/components/ChartArea";
@@ -18,14 +19,43 @@ import SavedQueries from "@/components/SavedQueries";
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [data, setData] = useState<DashboardData | null>(null);
   const [filters, setFilters] = useState<FilterState>({ dateRange: "1y" });
   const [activeTab, setActiveTab] = useState<"recent" | "saved">("recent");
 
   useEffect(() => {
-    const data = getMockDashboardData();
-    setData(data);
-  }, []);
+    // Session yuklenmediyse veya giris yapilmadiysa data getirmeyi bekle
+    if (status === "loading") return;
+    if (status === "unauthenticated") {
+      signIn("keycloak"); // Keycloak SSO'ya yonlendir
+      return;
+    }
+
+    async function loadData() {
+      // Load mock stat data but real conversations
+      const dashboard = getMockDashboardData();
+      try {
+        const realConversations = await fetchConversations();
+        // Conversation apiden donen tipler Conversation listesi olur. Mock verinin yapisina gore bagla.
+        if (Array.isArray(realConversations)) {
+            // Su anlik id, query ve timestamp kisimlarini mocklayarak donusturuyoruz.
+            dashboard.recentConversations = realConversations.map((c: any) => ({
+                id: c.id || c.conversation_id || Math.random().toString(),
+                query: c.question || c.title || "Unknown query",
+                timestamp: c.created_at || new Date().toISOString(),
+                tables: [],
+                status: c.status || "completed",
+            }));
+        }
+      } catch(e) {
+        console.warn("Could not fetch real conversations", e);
+      }
+      setData(dashboard);
+    }
+    
+    loadData();
+  }, [status]);
 
   const handleSearch = useCallback(
     (query: string) => {

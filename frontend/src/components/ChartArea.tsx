@@ -51,12 +51,13 @@ const COLORS = [
 // Recharts payload value type
 type PayloadValue = number | string;
 
-function CustomTooltip({ active, payload, label }: TooltipProps<PayloadValue, string>) {
+function CustomTooltip(props: any) {
+  const { active, payload, label } = props;
   if (!active || !payload || !payload.length) return null;
   return (
-    <div className="bg-white rounded-lg border border-gray-200 shadow-lg p-3 text-xs">
-      <p className="font-medium text-gray-800 mb-1">{label}</p>
-      {payload.map((entry, i: number) => (
+    <div className="bg-white border p-2 text-sm shadow rounded">
+      <p className="font-semibold mb-1">{label}</p>
+      {payload.map((entry: any, i: number) => (
         <div key={i} className="flex items-center gap-2">
           <span
             className="w-2.5 h-2.5 rounded-full"
@@ -95,7 +96,7 @@ export default function ChartArea({
         backgroundColor: "#ffffff",
         scale: 2,
       });
-      canvas.toBlob((blob) => {
+      canvas.toBlob((blob: any) => {
         if (blob) {
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
@@ -243,9 +244,10 @@ export default function ChartArea({
               cx="50%"
               cy="50%"
               outerRadius="80%"
-              label={({ name, percent }) =>
-                `${name} ${(percent * 100).toFixed(0)}%`
-              }
+            label={({ name, percent }) => {
+              if (percent === undefined) return name;
+              return `${name} ${(percent * 100).toFixed(0)}%`;
+            }}
               labelLine={false}
             >
               {pieData.map((_entry, i) => (
