@@ -636,6 +636,8 @@ def _detect_requested_chart_type(question: str) -> str | None:
     Returns one of bar/line/area/pie/scatter, or None if the user didn't ask.
     """
     q = (question or "").lower()
+    if "grid" in q or "table" in q or "tablo" in q:
+        return "table"
     for t in ("pie", "scatter", "area", "line", "bar"):
         if t in q:
             return t
@@ -646,7 +648,7 @@ _CHART_REQ_FILLER = {
     "give", "me", "a", "an", "the", "show", "make", "it", "as", "to", "chart",
     "charts", "graph", "plot", "please", "can", "you", "this", "that", "into",
     "draw", "display", "with", "of", "in", "view", "instead", "turn", "convert",
-    "now", "pie", "bar", "line", "area", "scatter",
+    "now", "pie", "bar", "line", "area", "scatter", "table", "tablo", "grid", "data",
 }
 
 

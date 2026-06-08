@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -75,15 +75,49 @@ function CustomTooltip(props: any) {
   );
 }
 
+const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+
+/** Filter rows to the selected date range, relative to the latest date present. */
+function filterByDateRange(
+  rows: ChartDataPoint[],
+  xKey: string | undefined,
+  range: FilterState["dateRange"],
+): ChartDataPoint[] {
+  if (!range || range === "all" || !xKey || rows.length === 0) return rows;
+  const days = RANGE_DAYS[range];
+  if (!days) return rows;
+  const ts = rows.map((r) => {
+    const v = r[xKey];
+    const t = typeof v === "number" ? v : Date.parse(String(v));
+    return Number.isNaN(t) ? null : t;
+  });
+  const valid = ts.filter((t): t is number => t !== null);
+  if (valid.length < rows.length * 0.5) return rows; // x-axis isn't dates — leave as-is
+  const cutoff = Math.max(...valid) - days * 86_400_000;
+  return rows.filter((_, i) => ts[i] !== null && (ts[i] as number) >= cutoff);
+}
+
 export default function ChartArea({
-  data,
+  data: rawData,
   config: initialConfig,
   filters,
   onFilterChange,
 }: ChartAreaProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useState<ChartConfig>(initialConfig);
+
+  // Apply the selected date-range filter; all downstream logic uses `data`.
+  const data = useMemo(
+    () => filterByDateRange(rawData, config.xKey, filters.dateRange),
+    [rawData, config.xKey, filters.dateRange],
+  );
+
   const [zoom, setZoom] = useState<ZoomState>({ startIndex: 0, endIndex: data.length });
+
+  // Reset zoom whenever the filtered row set changes.
+  useEffect(() => {
+    setZoom({ startIndex: 0, endIndex: data.length });
+  }, [data.length]);
 
   const zoomedData = data.slice(zoom.startIndex, zoom.endIndex);
   const colors = config.colors || COLORS;

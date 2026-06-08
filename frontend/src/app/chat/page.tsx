@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { streamQuery, fetchConversations, fetchConversation, deleteConversation } from "@/lib/api";
-import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint } from "@/lib/types";
+import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signOut, signIn } from "next-auth/react";
 
@@ -17,6 +17,44 @@ function chartEmoji(type?: string): string {
     case "scatter": return "🔵";
     default: return "📋";
   }
+}
+
+// Tabular ("data grid") view of the result rows.
+function DataGrid({ rows }: { rows: ChartDataPoint[] }) {
+  if (!rows || rows.length === 0) {
+    return <div className="text-sm text-gray-400 text-center py-8">No data.</div>;
+  }
+  const cols = Object.keys(rows[0]);
+  const shown = rows.slice(0, 200);
+  return (
+    <div className="overflow-auto border border-gray-200 rounded-lg bg-white">
+      <table className="w-full text-xs">
+        <thead className="bg-gray-50 sticky top-0">
+          <tr>
+            {cols.map((c) => (
+              <th key={c} className="text-left font-semibold text-gray-600 px-3 py-2 border-b border-gray-200 whitespace-nowrap">
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((r, i) => (
+            <tr key={i} className={i % 2 ? "bg-gray-50/50" : ""}>
+              {cols.map((c) => (
+                <td key={c} className="px-3 py-1.5 border-b border-gray-100 text-gray-800 whitespace-nowrap">
+                  {typeof r[c] === "number" ? (r[c] as number).toLocaleString() : String(r[c] ?? "")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length > shown.length && (
+        <div className="px-3 py-2 text-xs text-gray-400">Showing {shown.length} of {rows.length} rows</div>
+      )}
+    </div>
+  );
 }
 
 // ── SSE Parser ───────────────────────────────────────────────────────
@@ -95,6 +133,7 @@ function ChatPageContent() {
   const [conversationId, setConversationId] = useState<string | null>(initialCid);
   // Claude-Desktop-style artifact panel: id of the message whose artifact is shown on the right.
   const [activeArtifactMsgId, setActiveArtifactMsgId] = useState<string | null>(null);
+  const [panelFilters, setPanelFilters] = useState<FilterState>({});
   const [conversations, setConversations] = useState<any[]>([]);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +168,11 @@ function ChatPageContent() {
       signIn("keycloak");
     }
   }, [status]);
+
+  // Reset the artifact panel's date filter when switching between artifacts.
+  useEffect(() => {
+    setPanelFilters({});
+  }, [activeArtifactMsgId]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -609,7 +653,9 @@ function ChatPageContent() {
                     }`}
                   >
                     <span>{chartEmoji(msg.chartSpec.type)}</span>
-                    <span className="capitalize">{msg.chartSpec.type} chart</span>
+                    <span className="capitalize">
+                      {msg.chartSpec.type === "table" ? "Data grid" : `${msg.chartSpec.type} chart`}
+                    </span>
                     {msg.chartSpec.title ? (
                       <span className="text-gray-400 truncate max-w-[12rem]">— {msg.chartSpec.title}</span>
                     ) : null}
@@ -726,8 +772,11 @@ function ChatPageContent() {
               </button>
             </div>
             <div className="flex-1 overflow-auto p-4">
-              {canRecharts ? (
+              {spec.type === "table" ? (
+                <DataGrid rows={(spec.data ?? []) as ChartDataPoint[]} />
+              ) : canRecharts ? (
                 <ChartArea
+                  key={activeMsg.id}
                   data={spec.data as ChartDataPoint[]}
                   config={{
                     type: spec.type as ChartConfig["type"],
@@ -736,8 +785,8 @@ function ChatPageContent() {
                     title: spec.title,
                     colors: spec.colors,
                   }}
-                  filters={{}}
-                  onFilterChange={() => {}}
+                  filters={panelFilters}
+                  onFilterChange={setPanelFilters}
                 />
               ) : spec.chart_url ? (
                 <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
@@ -749,6 +798,8 @@ function ChatPageContent() {
                     sandbox="allow-scripts allow-same-origin"
                   />
                 </div>
+              ) : spec.data && spec.data.length > 0 ? (
+                <DataGrid rows={spec.data as ChartDataPoint[]} />
               ) : (
                 <div className="text-sm text-gray-400 text-center py-8">
                   No chart preview available.
