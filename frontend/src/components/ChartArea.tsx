@@ -75,52 +75,88 @@ function CustomTooltip(props: any) {
   );
 }
 
-const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90, "1y": 365 };
+export type DateOption = { days: number | null; label: string };
 
-/** Filter rows to the selected date range, relative to the latest date present. */
-function filterByDateRange(
-  rows: ChartDataPoint[],
-  xKey: string | undefined,
-  range: FilterState["dateRange"],
-): ChartDataPoint[] {
-  if (!range || range === "all" || !xKey || rows.length === 0) return rows;
-  const days = RANGE_DAYS[range];
-  if (!days) return rows;
-  const ts = rows.map((r) => {
+const DAY = 86_400_000;
+
+/** Parse each row's x value to a timestamp (or null if not a date). */
+function parseTimestamps(rows: ChartDataPoint[], xKey?: string): (number | null)[] {
+  if (!xKey) return rows.map(() => null);
+  return rows.map((r) => {
     const v = r[xKey];
     const t = typeof v === "number" ? v : Date.parse(String(v));
     return Number.isNaN(t) ? null : t;
   });
+}
+
+/** Build date-range buttons that MATCH the data's actual span/granularity.
+ *  Monthly-over-a-year data gets 3M/6M/1Y; daily data gets 7d/30d/90d.
+ *  Returns [] when the x-axis isn't dates — caller then hides the control. */
+function computeDateOptions(ts: (number | null)[]): DateOption[] {
   const valid = ts.filter((t): t is number => t !== null);
-  if (valid.length < rows.length * 0.5) return rows; // x-axis isn't dates — leave as-is
-  const cutoff = Math.max(...valid) - days * 86_400_000;
+  if (valid.length < ts.length * 0.5 || valid.length < 2) return [];
+  const spanDays = (Math.max(...valid) - Math.min(...valid)) / DAY;
+  let opts: DateOption[];
+  if (spanDays <= 100) {
+    opts = [{ days: 7, label: "7d" }, { days: 30, label: "30d" }, { days: 90, label: "90d" }];
+  } else if (spanDays <= 900) {
+    opts = [{ days: 90, label: "3M" }, { days: 180, label: "6M" }, { days: 365, label: "1Y" }];
+  } else {
+    opts = [{ days: 365, label: "1Y" }, { days: 1095, label: "3Y" }];
+  }
+  // keep only windows that actually exclude data, then always offer "All".
+  opts = opts.filter((o) => o.days! < spanDays * 0.9);
+  return [...opts, { days: null, label: "All" }];
+}
+
+function filterByDays(
+  rows: ChartDataPoint[],
+  ts: (number | null)[],
+  days: number | null,
+): ChartDataPoint[] {
+  if (days === null) return rows;
+  const valid = ts.filter((t): t is number => t !== null);
+  if (!valid.length) return rows;
+  const cutoff = Math.max(...valid) - days * DAY;
   return rows.filter((_, i) => ts[i] !== null && (ts[i] as number) >= cutoff);
 }
+
+/** Selectable color palettes (first = backend/default). */
+export const PALETTES: string[][] = [
+  ["#4a9eed", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"],
+  ["#6366f1", "#14b8a6", "#f43f5e", "#eab308", "#a855f7", "#0ea5e9", "#84cc16"],
+  ["#0f172a", "#334155", "#64748b", "#94a3b8", "#cbd5e1", "#475569", "#1e293b"],
+  ["#e11d48", "#fb923c", "#facc15", "#4ade80", "#2dd4bf", "#60a5fa", "#c084fc"],
+];
 
 export default function ChartArea({
   data: rawData,
   config: initialConfig,
-  filters,
-  onFilterChange,
 }: ChartAreaProps) {
   const chartRef = useRef<HTMLDivElement>(null);
   const [config, setConfig] = useState<ChartConfig>(initialConfig);
+  const [rangeDays, setRangeDays] = useState<number | null>(null);
+  const [paletteIdx, setPaletteIdx] = useState(0);
 
-  // Apply the selected date-range filter; all downstream logic uses `data`.
-  const data = useMemo(
-    () => filterByDateRange(rawData, config.xKey, filters.dateRange),
-    [rawData, config.xKey, filters.dateRange],
-  );
+  const ts = useMemo(() => parseTimestamps(rawData, config.xKey), [rawData, config.xKey]);
+  // Date-range buttons adapted to the data span (empty -> not a date axis -> hidden).
+  const dateOptions = useMemo(() => computeDateOptions(ts), [ts]);
+
+  // All downstream logic uses `data` (date-filtered view of rawData).
+  const data = useMemo(() => filterByDays(rawData, ts, rangeDays), [rawData, ts, rangeDays]);
 
   const [zoom, setZoom] = useState<ZoomState>({ startIndex: 0, endIndex: data.length });
-
-  // Reset zoom whenever the filtered row set changes.
   useEffect(() => {
     setZoom({ startIndex: 0, endIndex: data.length });
   }, [data.length]);
 
   const zoomedData = data.slice(zoom.startIndex, zoom.endIndex);
-  const colors = config.colors || COLORS;
+  const colors =
+    paletteIdx === 0
+      ? config.colors && config.colors.length
+        ? config.colors
+        : COLORS
+      : PALETTES[paletteIdx % PALETTES.length];
 
   const handleExportPNG = useCallback(async () => {
     if (!chartRef.current) return;
@@ -312,8 +348,10 @@ export default function ChartArea({
         <ChartControls
           config={config}
           onConfigChange={handleConfigChange}
-          filters={filters}
-          onFilterChange={onFilterChange}
+          dateOptions={dateOptions}
+          rangeDays={rangeDays}
+          onRangeChange={setRangeDays}
+          onCyclePalette={() => setPaletteIdx((i) => i + 1)}
           onExportPNG={handleExportPNG}
           onExportCSV={handleExportCSV}
           onZoomIn={handleZoomIn}

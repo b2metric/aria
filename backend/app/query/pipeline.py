@@ -649,7 +649,33 @@ _CHART_REQ_FILLER = {
     "charts", "graph", "plot", "please", "can", "you", "this", "that", "into",
     "draw", "display", "with", "of", "in", "view", "instead", "turn", "convert",
     "now", "pie", "bar", "line", "area", "scatter", "table", "tablo", "grid", "data",
+    "color", "colour", "colors", "colours", "palette", "renk", "renkler", "rengini",
+    "renkleri", "rengi", "renge", "paleti", "palet",
+    "change", "different", "new", "style", "değiştir", "degistir", "yap", "çevir", "cevir",
 }
+
+
+_STYLE_PALETTES = [
+    ["#4a9eed", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"],
+    ["#6366f1", "#14b8a6", "#f43f5e", "#eab308", "#a855f7", "#0ea5e9", "#84cc16"],
+    ["#0f172a", "#334155", "#64748b", "#94a3b8", "#cbd5e1", "#475569", "#1e293b"],
+    ["#e11d48", "#fb923c", "#facc15", "#4ade80", "#2dd4bf", "#60a5fa", "#c084fc"],
+]
+
+
+def _wants_color_change(question: str) -> bool:
+    """True if the user asked to recolor/restyle (no new data)."""
+    q = (question or "").lower()
+    return any(w in q for w in ("palette", "palet", "color", "colour", "renk"))
+
+
+def _next_palette(current) -> list:
+    """Return a palette different from the current one (cycles the presets)."""
+    try:
+        idx = _STYLE_PALETTES.index(list(current)) if current else -1
+    except ValueError:
+        idx = -1
+    return _STYLE_PALETTES[(idx + 1) % len(_STYLE_PALETTES)]
 
 
 def _is_chart_type_only_request(question: str) -> bool:
@@ -863,27 +889,33 @@ async def process_query(
         (m for m in reversed(conversation.messages[:-1]) if m.role == "assistant"),
         None,
     )
+    _wants_color = _wants_color_change(request.question)
     if (
-        _req_type
-        and _is_chart_type_only_request(request.question)
+        _is_chart_type_only_request(request.question)
+        and (_req_type or _wants_color)
         and _prev_assistant is not None
         and _prev_assistant.chart_data
     ):
         reused_sql = _prev_assistant.sql or ""
         cfg = dict(_prev_assistant.chart_spec or {})
-        cfg["type"] = _req_type
+        new_type = _req_type or cfg.get("type") or "bar"
+        cfg["type"] = new_type
+        if _wants_color:
+            cfg["colors"] = _next_palette(cfg.get("colors"))
+        note = (
+            "Re-rendered the previous result with a new color palette."
+            if _wants_color and not _req_type
+            else f"Re-rendered the previous result as a {new_type} chart."
+        )
         if reused_sql:
             yield {
                 "event": "sql",
-                "data": json.dumps({
-                    "sql": reused_sql,
-                    "explanation": f"Re-rendered the previous result as a {_req_type} chart.",
-                }),
+                "data": json.dumps({"sql": reused_sql, "explanation": note}),
             }
         yield {
             "event": "chart",
             "data": json.dumps({
-                "chart_type": _req_type,
+                "chart_type": new_type,
                 "chart_data": _prev_assistant.chart_data,
                 "chart_url": _prev_assistant.chart_url or "",
                 "csv_url": "",
@@ -895,7 +927,7 @@ async def process_query(
             redis, workspace_id, cid,
             ConversationMessage(
                 role="assistant",
-                content=f"Here is the previous result as a {_req_type} chart.",
+                content=note,
                 sql=reused_sql,
                 chart_spec=cfg,
                 chart_data=_prev_assistant.chart_data,
