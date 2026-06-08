@@ -35,7 +35,14 @@ RULES:
 5. Order results logically (by date ASC for time series, by metric DESC for rankings)
 6. Use table aliases for readability in JOINs
 7. NEVER use semicolons at the end
-8. Return ONLY the SQL, no markdown, no explanations"""
+8. Return ONLY the SQL, no markdown, no explanations
+9. Use ONLY tables and columns that appear in the provided schema. NEVER invent,
+   assume, or guess a table/column that is not explicitly listed — querying a
+   non-existent object fails with ORA-00942.
+10. For metrics/aggregations (revenue, amount, balance, counts, totals, trends),
+    the source MUST be a FACT table (name starting with 'fct_'). Use dimension
+    tables ('dim_*') ONLY to look up descriptive attributes via a JOIN, never as
+    the sole source of a numeric metric. (e.g. revenue -> fct_prep_rev, not dim_*.)"""
 
 
 def _build_schema_context(tables: list[dict], table_columns: dict[str, list[dict]]) -> str:

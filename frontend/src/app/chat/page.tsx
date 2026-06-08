@@ -465,7 +465,20 @@ function ChatPageContent() {
           <div className="p-4 border-t border-gray-200">
             {status === "authenticated" && (
               <button
-                onClick={() => signOut({ callbackUrl: "/" })}
+                onClick={async () => {
+                  // Federated logout: clear the next-auth session AND end the Keycloak
+                  // SSO session, otherwise the SSO cookie silently logs the user back in.
+                  const idToken = (session as any)?.idToken;
+                  await signOut({ redirect: false });
+                  const issuer =
+                    process.env.NEXT_PUBLIC_KEYCLOAK_ISSUER ||
+                    "http://localhost:8080/auth/realms/aria";
+                  const params = new URLSearchParams({
+                    post_logout_redirect_uri: window.location.origin,
+                  });
+                  if (idToken) params.set("id_token_hint", idToken);
+                  window.location.href = `${issuer}/protocol/openid-connect/logout?${params.toString()}`;
+                }}
                 className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
