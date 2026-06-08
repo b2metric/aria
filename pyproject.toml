@@ -85,7 +85,7 @@ dev = [
 ]
 chart-export = [
     # Kaleido: static image export for Plotly charts (Linux only, no macOS ARM64 wheel)
-    "kaleido>=0.2,<1; sys_platform == 'linux'",
+    "kaleido>=0.2,<2; sys_platform == 'linux'",
 ]
 
 # ── Build System ────────────────────────────────────────────────────────
