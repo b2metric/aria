@@ -697,10 +697,9 @@ async def update_vault_table(
 async def update_column_description(
     table_name: str,
     column_name: str,
-    description: str,
+    update: ColumnDescriptionUpdate,
     workspace_id: WorkspaceID,
     user: CurrentUser,
-    keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     """Update description for a single column.
     
@@ -711,10 +710,20 @@ async def update_column_description(
     
     enrichment = TableEnrichment(
         table_name=table_name,
+        description="",  # Mute missing parameter warnings
+        business_name=None,
+        keywords=[],
+        business_owner=None,
+        data_domain=None,
+        update_frequency=None,
         columns=[ColumnEnrichment(
             name=column_name,
-            description=description,
-            keywords=keywords,
+            description=update.description,
+            keywords=update.keywords or [],
+            business_name=None,
+            example_values=[],
+            is_sensitive=False,
+            notes=None,
         )],
     )
     
@@ -734,5 +743,5 @@ async def update_column_description(
         "status": "success",
         "table": table_name,
         "column": column_name,
-        "description": description,
+        "description": update.description,
     }

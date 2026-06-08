@@ -7,8 +7,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     globals: true,
-    setupFiles: [],
-    include: ["**/*.{test,spec}.{ts,tsx}"],
+    setupFiles: ["./vitest.setup.ts"],
+    include: ["src/**/*.{test,spec}.{ts,tsx}"],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov", "json-summary"],
@@ -18,6 +18,7 @@ export default defineConfig({
         ".next/**",
         "**/*.config.*",
         "**/*.d.ts",
+        "e2e/**",
       ],
     },
   },

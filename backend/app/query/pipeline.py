@@ -771,14 +771,65 @@ def _build_chart(
     x_key = cfg.x.column or (columns[0] if columns else "")
     y_keys = [cfg.y.column] if cfg.y.column else [
         c for c in columns
-        if c != x_key and rows and isinstance(rows[0].get(c), (int, float))
+        if c != x_key and rows and isinstance(rows[0].get(c), (int, float, str)) # str dahil (ör: "1,234.56" veya parse edilebilen stringler olabilir)
     ]
+    
+    # If the LLM chart_builder specifically set Y to a metric, ensure we respect it
+    if not cfg.y.column and y_keys:
+        # Check if the query asks for revenue, count, etc., and force the appropriate column
+        lower_q = question.lower()
+        if ("revenue" in lower_q or "sum" in lower_q or "total" in lower_q) and not any("revenue" in y.lower() for y in y_keys):
+             possible_ys = [c for c in columns if "revenue" in c.lower() or "total" in c.lower() or "amount" in c.lower()]
+             if possible_ys:
+                 y_keys = possible_ys
+        elif "count" in lower_q:
+             possible_ys = [c for c in columns if "count" in c.lower() or c.lower() == "count"]
+             if possible_ys:
+                 y_keys = possible_ys
+
+    # Force x_key and y_keys for known SQL structures (like the revenue by region grouping)
+    # If group by contains 'month' and 'region', x_key should probably be 'month' and 'region' is grouped.
+    # We set x_key dynamically based on typical time-series axes
+    if "month" in columns and "region" in columns:
+         x_key = "month"
+
     MAX_CHART_POINTS = 1000
     chart_data = _json_safe_rows(rows[:MAX_CHART_POINTS])
+    
+    # ── Multi-Series Pivot for Recharts ──────────────────────────────────────────
+    # If the result has exactly 3 columns and one is intended as a category (e.g. Month, Region, Revenue)
+    # we need to pivot it so Recharts can draw one bar/line per Region.
+    if len(columns) == 3 and cfg.x and cfg.y:
+        x_col = cfg.x.column
+        y_col = cfg.y.column
+        cat_cols = [c for c in columns if c not in (x_col, y_col)]
+        if len(cat_cols) == 1:
+            cat_col = cat_cols[0]
+            pivoted_dict = {}
+            unique_categories = set()
+            
+            for row in chart_data:
+                x_val = row.get(x_col)
+                cat_val = row.get(cat_col)
+                y_val = row.get(y_col)
+                
+                if x_val is not None:
+                    # Make sure X values are strings if they are dates, to match correctly
+                    x_str = str(x_val)
+                    if x_str not in pivoted_dict:
+                        pivoted_dict[x_str] = {x_col: x_val}
+                    
+                    if cat_val is not None:
+                        cat_str = str(cat_val)
+                        pivoted_dict[x_str][cat_str] = y_val
+                        unique_categories.add(cat_str)
+            
+            chart_data = list(pivoted_dict.values())
+            y_keys = sorted(list(unique_categories))
+            x_key = x_col
 
     return {
         "chart_type": chart_type,
-        # chart_html retained only for the MinIO upload above; NOT streamed inline.
         "chart_html": html_content,
         "chart_url": chart_url,
         "csv_url": csv_url,

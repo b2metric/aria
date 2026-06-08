@@ -1,68 +1,45 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { LayoutDashboard, MessageSquare, Database, Settings } from "lucide-react";
 
-const NAV_ITEMS = [
-  { icon: "◈", label: "Dashboard", href: "/" },
-  { icon: "💬", label: "Conversations", href: "/chat" },
-  { icon: "📊", label: "Saved Queries", href: "/saved" },
-  { icon: "🗄️", label: "Semantic Vault", href: "/vault" },
-  { icon: "⚙️", label: "Settings", href: "/settings" },
-];
-
-export default function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+export function Sidebar() {
   const pathname = usePathname();
 
+  const navItems = [
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Chat", href: "/chat", icon: MessageSquare },
+    { name: "Schema", href: "/schema", icon: Database },
+    { name: "Settings", href: "/settings", icon: Settings },
+  ];
+
   return (
-    <aside
-      className={`flex flex-col bg-gray-950 text-white transition-all duration-200 ${
-        collapsed ? "w-14" : "w-52"
-      }`}
-    >
-      {/* Brand */}
-      <div className="flex items-center gap-2 px-4 py-4 border-b border-gray-800">
-        <span className="text-xl font-bold tracking-tight">ARIA</span>
-        {!collapsed && (
-          <span className="text-xs text-gray-500 ml-auto">v0.1</span>
-        )}
+    <div className="w-16 md:w-64 bg-white border-r border-gray-200 flex flex-col transition-all h-screen">
+      <div className="h-16 flex items-center justify-center md:justify-start md:px-6 border-b border-gray-200">
+        <span className="text-xl font-bold text-blue-600 hidden md:block">ARIA</span>
+        <span className="text-xl font-bold text-blue-600 md:hidden">A</span>
       </div>
-
-      {/* Nav items */}
-      <nav className="flex-1 px-2 py-3 space-y-1">
-        {NAV_ITEMS.map((item) => {
-          const isActive =
-            item.href === "/"
-              ? pathname === "/"
-              : pathname.startsWith(item.href);
-
+      <nav className="flex-1 py-4 flex flex-col gap-2 px-2">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href;
           return (
             <Link
-              key={item.label}
+              key={item.name}
               href={item.href}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                 isActive
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-400 hover:bg-gray-800 hover:text-white"
+                  ? "bg-blue-50 text-blue-700 font-medium"
+                  : "text-gray-600 hover:bg-gray-100"
               }`}
+              title={item.name}
             >
-              <span className="text-base">{item.icon}</span>
-              {!collapsed && <span>{item.label}</span>}
+              <item.icon className="w-5 h-5 flex-shrink-0" />
+              <span className="hidden md:block text-sm">{item.name}</span>
             </Link>
           );
         })}
       </nav>
-
-      {/* Collapse toggle */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="p-3 text-gray-500 hover:text-white hover:bg-gray-800 transition-colors border-t border-gray-800"
-        aria-label="Toggle sidebar"
-      >
-        {collapsed ? "▶" : "◀"}
-      </button>
-    </aside>
+    </div>
   );
 }

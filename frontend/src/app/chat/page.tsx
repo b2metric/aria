@@ -135,7 +135,7 @@ function ChatPageContent() {
   const [activeArtifactMsgId, setActiveArtifactMsgId] = useState<string | null>(null);
   const [panelFilters, setPanelFilters] = useState<FilterState>({});
   const [conversations, setConversations] = useState<any[]>([]);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -436,14 +436,27 @@ function ChatPageContent() {
   }, [conversationId, handleNewChat, token]);
 
   return (
-    <div className="flex h-full w-full bg-white text-gray-900">
-      {/* Sidebar */}
-      {isSidebarOpen && (
-        <div className="w-64 border-r border-gray-200 bg-gray-50 flex flex-col flex-shrink-0 transition-all">
+    <div className="flex h-full w-full bg-white text-gray-900 relative">
+      {/* Mobile History Backdrop */}
+      {isHistoryOpen && (
+        <div 
+          className="md:hidden fixed inset-0 bg-gray-900/50 z-20"
+          onClick={() => setIsHistoryOpen(false)}
+        />
+      )}
+      
+      {/* History Sidebar - Desktop & Mobile */}
+      <div 
+        className={`
+          fixed md:relative top-0 bottom-0 left-0 z-30 w-72 md:w-64 bg-gray-50 border-r border-gray-200 flex flex-col transition-transform duration-300 ease-in-out
+          ${isHistoryOpen ? "translate-x-0" : "-translate-x-full md:hidden"}
+          ${isHistoryOpen ? "md:translate-x-0" : "md:hidden"}
+        `}
+      >
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-            <h1 className="font-bold text-gray-900 text-lg">ARIA</h1>
+            <h2 className="font-medium text-gray-700">History</h2>
             <button
-              onClick={() => setIsSidebarOpen(false)}
+              onClick={() => setIsHistoryOpen(false)}
               className="text-gray-500 hover:text-gray-900"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -534,17 +547,16 @@ function ChatPageContent() {
               </button>
             )}
           </div>
-        </div>
-      )}
+      </div>
 
       {/* Chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-white shadow-sm z-10">
           <div className="flex items-center gap-3">
-            {!isSidebarOpen && (
+            {!isHistoryOpen && (
               <button
-                onClick={() => setIsSidebarOpen(true)}
+                onClick={() => setIsHistoryOpen(true)}
                 className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

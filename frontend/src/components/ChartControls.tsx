@@ -38,23 +38,31 @@ export default function ChartControls({
   onZoomOut,
   onResetZoom,
 }: ChartControlsProps) {
+  // Multi-series verilerde Pie chart desteklenmez.
+  const hasMultipleSeries = config.yKeys && config.yKeys.length > 1;
+  
   return (
     <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl">
       {/* Chart type switcher */}
       <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 p-0.5">
-        {CHART_TYPES.map((ct) => (
-          <button
-            key={ct.value}
-            onClick={() => onConfigChange({ ...config, type: ct.value })}
-            className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-              config.type === ct.value
-                ? "bg-blue-600 text-white shadow-sm"
-                : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            {ct.label}
-          </button>
-        ))}
+        {CHART_TYPES.map((ct) => {
+          // Eğer veride birden fazla yKey varsa, Pie butonunu hiç gösterme.
+          if (ct.value === "pie" && hasMultipleSeries) return null;
+          
+          return (
+            <button
+              key={ct.value}
+              onClick={() => onConfigChange({ ...config, type: ct.value })}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                config.type === ct.value
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              {ct.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Date range filter — only shown when the x-axis is a usable date axis */}

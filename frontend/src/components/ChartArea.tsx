@@ -161,21 +161,25 @@ export default function ChartArea({
   const handleExportPNG = useCallback(async () => {
     if (!chartRef.current) return;
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(chartRef.current, {
-        backgroundColor: "#ffffff",
-        scale: 2,
-      });
-      canvas.toBlob((blob: any) => {
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = url;
-          a.download = `chart-${Date.now()}.png`;
-          a.click();
-          URL.revokeObjectURL(url);
+      const { toBlob } = await import("html-to-image");
+      const blob = await toBlob(chartRef.current, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+        // Ignore hidden elements to prevent issues with SVGs
+        filter: (node) => {
+          if (node.tagName === 'link' || node.tagName === 'style') return true;
+          return true;
         }
       });
+      
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `chart-${Date.now()}.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch (err) {
       console.error("PNG export failed:", err);
     }

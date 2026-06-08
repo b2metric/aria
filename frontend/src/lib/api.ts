@@ -249,3 +249,34 @@ export async function deleteConversation(conversationId: string, tokenOverride?:
   });
   if (!res.ok) throw new Error(`Failed to delete conversation: ${res.status}`);
 }
+
+export interface VaultTable {
+  name: string;
+  description?: string;
+  columns?: any[];
+  relationships?: any[];
+  metadata?: Record<string, any>;
+}
+
+export async function fetchVaultTables(workspaceId: string, tokenOverride?: string): Promise<VaultTable[]> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/workspaces/vault/tables?workspace_id=${workspaceId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    if (res.status === 404) return []; // No vault tables
+    throw new Error(`Failed to fetch vault tables: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function fetchVaultTableDetails(tableName: string, workspaceId: string, tokenOverride?: string): Promise<VaultTable> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/workspaces/vault/tables/${tableName}?workspace_id=${workspaceId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to fetch table details: ${res.status}`);
+  }
+  return res.json();
+}

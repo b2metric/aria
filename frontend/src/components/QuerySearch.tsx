@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type KeyboardEvent } from "react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface QuerySearchProps {
   onSearch: (query: string) => void;
@@ -24,18 +26,19 @@ export default function QuerySearch({ onSearch }: QuerySearchProps) {
   return (
     <div className="flex items-center gap-2 w-full">
       <div className="relative flex-1">
-        <input
+        <Input
           type="text"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask a question about your data..."
-          className="w-full pl-4 pr-12 py-3 text-sm bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent shadow-sm"
+          className="w-full pl-4 pr-12 py-6 text-sm rounded-xl"
         />
-        <button
+        <Button
+          size="icon"
           onClick={handleSubmit}
           disabled={!value.trim()}
-          className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-blue-600 text-white disabled:bg-gray-300 disabled:cursor-not-allowed hover:bg-blue-700 transition-colors"
+          className="absolute right-2 top-1/2 -translate-y-1/2 h-8 w-8 rounded-lg"
           aria-label="Submit query"
         >
           <svg
@@ -50,7 +53,7 @@ export default function QuerySearch({ onSearch }: QuerySearchProps) {
             <line x1="5" y1="12" x2="19" y2="12" />
             <polyline points="12 5 19 12 12 19" />
           </svg>
-        </button>
+        </Button>
       </div>
     </div>
   );
