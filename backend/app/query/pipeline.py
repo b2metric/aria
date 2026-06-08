@@ -604,6 +604,30 @@ async def _execute_sql(
 # ── Chart Building ─────────────────────────────────────────────────────────
 
 
+def _json_safe(value):
+    """Coerce a DB cell into a JSON-serialisable value.
+
+    Oracle/Postgres rows carry Decimal / datetime / date / bytes, which
+    json.dumps cannot encode — sending them raw over SSE breaks the stream
+    ("[Errno 32] Broken pipe"). Convert them here.
+    """
+    import datetime as _dt
+    from decimal import Decimal as _Decimal
+
+    if isinstance(value, _Decimal):
+        return float(value)
+    if isinstance(value, (_dt.datetime, _dt.date, _dt.time)):
+        return value.isoformat()
+    if isinstance(value, (bytes, bytearray)):
+        return value.decode("utf-8", "replace")
+    return value
+
+
+def _json_safe_rows(rows: list[dict]) -> list[dict]:
+    """Return rows with every cell coerced to a JSON-serialisable value."""
+    return [{k: _json_safe(v) for k, v in row.items()} for row in rows]
+
+
 def _build_chart(
     rows: list[dict],
     question: str,
@@ -682,7 +706,7 @@ def _build_chart(
         if c != x_key and rows and isinstance(rows[0].get(c), (int, float))
     ]
     MAX_CHART_POINTS = 1000
-    chart_data = rows[:MAX_CHART_POINTS]
+    chart_data = _json_safe_rows(rows[:MAX_CHART_POINTS])
 
     return {
         "chart_type": chart_type,
