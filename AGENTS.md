@@ -15,6 +15,10 @@
 ## 1. Source of truth
 
 - Architecture authority: **`docs/technical-architecture.md`** (v2.0, decisions resolved).
+- **Operational truth & gotchas: `docs/engineering-notes.md`** — read before debugging
+  wrong-SQL / blank-chart / 401 / broken-pipe. Covers the LiteLLM key requirement,
+  the restyle fast-path, the JSON chart payload, Keycloak `/auth`, the dummy-data
+  seeder, and how to run the app locally.
 - **Frontend authority: `docs/frontend-architecture.md`** — read before touching
   `frontend/`. Frontend work MUST be verified visually (render localhost:3000 +
   `browser_screenshots`); edit with targeted patches, one writer per file. The chart
