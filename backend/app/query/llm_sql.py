@@ -63,12 +63,36 @@ def _build_memory_context(memory: MemoryContext | None) -> str:
     return f"\nRelevant context from past queries:\n{memory.to_prompt_context()}"
 
 
+def _build_history_context(history: list[dict] | None) -> str:
+    """Render recent conversation turns (+ last SQL) so the LLM can do follow-ups.
+
+    history: list of {"question": str, "sql": str | None} ordered oldest→newest.
+    """
+    if not history:
+        return ""
+    lines = [
+        "Conversation so far (most recent last). If the user is asking to MODIFY the",
+        "previous result — change the grouping/filter/date range/chart type, 'also ...',",
+        "'instead ...', 'as a pie chart', etc. — START FROM the previous SQL and adjust",
+        "it. Stay on the SAME tables/columns unless the user clearly asks for new data.",
+    ]
+    for turn in history[-3:]:
+        q = (turn.get("question") or "").strip()
+        sql = (turn.get("sql") or "").strip()
+        if q:
+            lines.append(f"- User asked: {q}")
+        if sql:
+            lines.append(f"  SQL used: {sql}")
+    return "\n".join(lines) + "\n"
+
+
 async def generate_sql_with_llm(
     question: str,
     tables: list[dict],
     table_columns: dict[str, list[dict]],
     memory_context: MemoryContext | None = None,
     db_type: str = "oracle",
+    history: list[dict] | None = None,
 ) -> tuple[str, str]:
     """Generate SQL using LLM.
     
@@ -87,12 +111,13 @@ async def generate_sql_with_llm(
     # Build the prompt
     schema_ctx = _build_schema_context(tables, table_columns)
     memory_ctx = _build_memory_context(memory_context)
-    
+    history_ctx = _build_history_context(history)
+
     user_prompt = f"""Database type: {db_type.upper()}
 
 {schema_ctx}
 {memory_ctx}
-
+{history_ctx}
 User question: {question}
 
 Generate the SQL query:"""

@@ -171,7 +171,8 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
 
 
 async def _generate_sql(
-    question: str, engine: AsyncEngine, workspace_id: str, memory_context=None
+    question: str, engine: AsyncEngine, workspace_id: str, memory_context=None,
+    history: list[dict] | None = None,
 ) -> tuple[str, str]:
     """Generate SQL from a natural language question using Obsidian vault schema.
     
@@ -263,6 +264,7 @@ async def _generate_sql(
                 table_columns=table_columns,
                 memory_context=memory_context,
                 db_type="oracle",
+                history=history,
             )
         except Exception as e:
             logger.warning("LLM SQL generation failed during fallback: %s", e)
@@ -628,10 +630,23 @@ def _json_safe_rows(rows: list[dict]) -> list[dict]:
     return [{k: _json_safe(v) for k, v in row.items()} for row in rows]
 
 
+def _detect_requested_chart_type(question: str) -> str | None:
+    """Detect an explicit chart-type request in the question ('as a pie chart').
+
+    Returns one of bar/line/area/pie/scatter, or None if the user didn't ask.
+    """
+    q = (question or "").lower()
+    for t in ("pie", "scatter", "area", "line", "bar"):
+        if t in q:
+            return t
+    return None
+
+
 def _build_chart(
     rows: list[dict],
     question: str,
     conversation_id: str,
+    forced_type: str | None = None,
 ) -> dict:
     """Run the chart builder pipeline: heuristic → Plotly render → MinIO upload.
 
@@ -665,6 +680,9 @@ def _build_chart(
     )
 
     chart_type = pipeline_result.config.chart_type.value
+    # Honor an explicit user request ("give me a pie chart") over the heuristic pick.
+    if forced_type:
+        chart_type = forced_type
     html_content = pipeline_result.html_content or _empty_chart_html("Chart rendering failed.")
     csv_content = pipeline_result.csv_content or ""
     errors = pipeline_result.errors
@@ -838,8 +856,22 @@ async def process_query(
         ),
     }
 
+    # Build recent conversation history (prior user questions + the SQL used) so the
+    # LLM can handle follow-ups ("as a pie chart", "filter to last 30 days", "add region").
+    history: list[dict] = []
+    _prev_q: str | None = None
+    for _m in conversation.messages[:-1]:  # exclude the just-added current user message
+        if _m.role == "user":
+            _prev_q = _m.content
+        elif _m.role == "assistant":
+            history.append({"question": _prev_q or "", "sql": _m.sql})
+            _prev_q = None
+
     try:
-        sql, explanation = await _generate_sql(request.question, engine, workspace_id, memory_context=mem_context)
+        sql, explanation = await _generate_sql(
+            request.question, engine, workspace_id,
+            memory_context=mem_context, history=history,
+        )
     except Exception as e:
         logger.exception("SQL generation failed")
         yield {
@@ -901,6 +933,7 @@ async def process_query(
         rows=rows,
         question=request.question,
         conversation_id=cid,
+        forced_type=_detect_requested_chart_type(request.question),
     )
 
     yield {
