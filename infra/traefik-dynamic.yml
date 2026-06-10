@@ -1,13 +1,13 @@
 http:
   routers:
     frontend:
-      rule: "Host(`aria.local`)"
+      rule: "Host(`aria.localhost`)"
       service: frontend-svc
     backend:
-      rule: "Host(`api.aria.local`)"
+      rule: "Host(`api.aria.localhost`)"
       service: backend-svc
     keycloak:
-      rule: "Host(`auth.aria.local`)"
+      rule: "Host(`auth.aria.localhost`)"
       service: keycloak-svc
 
   # Traefik v3 proxies WebSocket (Next.js HMR) transparently when the browser

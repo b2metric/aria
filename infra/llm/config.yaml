@@ -1,0 +1,227 @@
+general_settings:
+  database_url: os.environ/DATABASE_URL
+  allow_client_side_credentials: true
+  store_prompts_in_spend_logs: true
+  master_key: os.environ/LITELLM_MASTER_KEY
+
+model_list:
+  # --- DeepSeek V4 (1M context) ---
+  - model_name: deepseek-v4-pro
+    litellm_params:
+      model: openai/deepseek-v4-pro
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+  - model_name: custom:litellm:deepseek-v4-pro
+    litellm_params:
+      model: openai/deepseek-v4-pro
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+
+  - model_name: deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+  - model_name: custom:litellm:deepseek-v4-flash
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+
+  # --- DeepSeek legacy aliases (deprecated; chat→v4-flash non-thinking, reasoner→v4-flash thinking) ---
+  - model_name: deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+  - model_name: custom:litellm:deepseek-chat
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+
+  # --- DeepSeek Pro alias (v4-pro) ---
+  - model_name: deepseek-pro
+    litellm_params:
+      model: openai/deepseek-v4-pro
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.000008
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+
+  - model_name: deepseek-reasoner
+    litellm_params:
+      model: deepseek/deepseek-reasoner
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+  - model_name: custom:litellm:deepseek-reasoner
+    litellm_params:
+      model: deepseek/deepseek-reasoner
+      api_key: os.environ/DEEPSEEK_API_KEY
+    model_info:
+      max_input_tokens: 1000000
+      max_output_tokens: 384000
+
+  # --- Anthropic ---
+  - model_name: claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: custom:litellm:claude-haiku
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: custom:litellm:claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-opus-chat
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: custom:litellm:claude-opus-chat
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: claude-opus-reasoner
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      thinking: {"type": "enabled", "budget_tokens": 16000}
+      max_tokens: 32000
+  - model_name: custom:litellm:claude-opus-reasoner
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      thinking: {"type": "enabled", "budget_tokens": 16000}
+      max_tokens: 32000
+
+  # backward-compat alias → chat
+  - model_name: claude-opus
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+  - model_name: custom:litellm:claude-opus
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  # --- Google Gemini ---
+  - model_name: gemini-chat
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: custom:litellm:gemini-chat
+    litellm_params:
+      model: gemini/gemini-3.1-flash-lite
+      api_key: os.environ/GEMINI_API_KEY
+
+  - model_name: gemini-reasoner
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+  - model_name: custom:litellm:gemini-reasoner
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+
+  # --- Z.AI / GLM ---
+  - model_name: glm-chat
+    litellm_params:
+      model: openai/glm-4-plus
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+  - model_name: custom:litellm:glm-chat
+    litellm_params:
+      model: openai/glm-4-plus
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+
+  - model_name: glm-reasoner
+    litellm_params:
+      model: openai/glm-z1-air
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+  - model_name: custom:litellm:glm-reasoner
+    litellm_params:
+      model: openai/glm-z1-air
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+
+  # backward-compat alias → chat
+  - model_name: glm-4
+    litellm_params:
+      model: openai/glm-4-plus
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+  - model_name: custom:litellm:glm-4
+    litellm_params:
+      model: openai/glm-4-plus
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+
+  # --- OpenAI Embeddings ---
+  - model_name: text-embedding-3-small
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+  - model_name: text-embedding-3-large
+    litellm_params:
+      model: openai/text-embedding-3-large
+      api_key: os.environ/OPENAI_API_KEY
+
+  # --- Gemini Embeddings (fallback) ---
+  - model_name: gemini-embedding
+    litellm_params:
+      model: gemini/gemini-embedding-001
+      api_key: os.environ/GEMINI_API_KEY
+
+litellm_settings:
+  drop_params: true
+  set_verbose: false
+  success_callback: ["langfuse"]
+  failure_callback: ["langfuse"]
+  # Cost/quota fallback chain: opus -> sonnet -> gemini-reasoner.
+  # Triggers on rate limits, timeouts, 5xx, and quota/credit-exhaustion errors,
+  # so when Anthropic credits or the subscription cap run out, calls transparently
+  # route to the next model instead of failing.
+  fallbacks:
+    - claude-opus: ["claude-sonnet", "gemini-reasoner"]
+    - claude-opus-chat: ["claude-sonnet", "gemini-reasoner"]
+    - claude-opus-reasoner: ["claude-sonnet", "gemini-reasoner"]
+    - claude-sonnet: ["gemini-reasoner"]
+    - claude-haiku: ["gemini-chat"]
+  # Also fall back when the input exceeds a model's context window.
+  context_window_fallbacks:
+    - claude-opus: ["gemini-reasoner"]
+    - claude-sonnet: ["gemini-reasoner"]
+
+# LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY are provided via .env
