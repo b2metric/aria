@@ -41,6 +41,13 @@ services:
       llm-postgres:
         condition: service_healthy
     networks: [aria-shared]
+    # Behind Traefik (additive — host port 4010 kept for direct debug).
+    # If Traefik uses the FILE provider, mirror this route there instead.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.aria-litellm.rule=Host(`llm.aria.localhost`)"
+      - "traefik.http.routers.aria-litellm.entrypoints=web"
+      - "traefik.http.services.aria-litellm.loadbalancer.server.port=4000"
 
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3
@@ -129,6 +136,12 @@ services:
       LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-}
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
     networks: [aria-shared]
+    # Behind Traefik (additive — host port 3300 kept for direct debug).
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.aria-langfuse.rule=Host(`langfuse.aria.localhost`)"
+      - "traefik.http.routers.aria-langfuse.entrypoints=web"
+      - "traefik.http.services.aria-langfuse.loadbalancer.server.port=3000"
 
   clickhouse:
     image: docker.io/clickhouse/clickhouse-server

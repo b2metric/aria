@@ -204,6 +204,153 @@ model_list:
       model: gemini/gemini-embedding-001
       api_key: os.environ/GEMINI_API_KEY
 
+  # ==========================================================================
+  # ENGINEERING-CORE ROLE ROUTING (engineering-core:model-routing)
+  # One model_name per engineering role -> a cloud primary + (when the local GPU
+  # is up) a local vLLM entry sharing the same model_name for load-balancing.
+  # Callers MUST tag requests metadata:{agent_role, author_family} so Langfuse/
+  # spend logs attribute COST PER ROLE. Every alias carries cost_per_token.
+  # ==========================================================================
+
+  # -- Architect / planner / brainstorming (reasoning; drift is expensive) --
+  - model_name: role-architect
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      thinking: {"type": "enabled", "budget_tokens": 16000}
+      max_tokens: 32000
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+    model_info: { tier: reasoning }
+
+  # -- Lead dev / writing-plans (mid) --
+  - model_name: role-lead-dev
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000003
+      output_cost_per_token: 0.000015
+    model_info: { tier: mid }
+
+  # -- Backend codegen (cheap-fast, high volume; local-first when GPU up) --
+  - model_name: role-backend-codegen
+    litellm_params:
+      model: openai/deepseek-v4-pro
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000174
+      output_cost_per_token: 0.00000348
+    model_info: { tier: cheap-fast, max_input_tokens: 1000000 }
+  - model_name: role-backend-codegen        # local-first (active when LOCAL_LLM_BASE set)
+    litellm_params:
+      model: openai/local-thinking
+      api_base: os.environ/LOCAL_LLM_BASE
+      api_key: os.environ/LOCAL_LLM_KEY
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info: { tier: cheap-fast, weight: 2 }
+
+  # -- Frontend (mid + VISION; only role that needs to read screenshots) --
+  - model_name: role-frontend-vision
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+    model_info: { tier: vision }
+
+  # -- Systematic debugger / root-cause (reasoning) --
+  - model_name: role-debugger
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      thinking: {"type": "enabled", "budget_tokens": 16000}
+      max_tokens: 32000
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+    model_info: { tier: reasoning }
+
+  # -- Code reviewer (reasoning; route via review-of-<author-family> for diversity) --
+  - model_name: role-reviewer
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+    model_info: { tier: reasoning }
+
+  # -- QA / smoke / verification gate (cheap-fast, mechanical) --
+  - model_name: role-qa-gate
+    litellm_params:
+      model: anthropic/claude-haiku-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000001
+      output_cost_per_token: 0.000005
+    model_info: { tier: cheap-fast }
+
+  # -- Bulk worker (cheapest; renames, boilerplate, log summarization) --
+  - model_name: role-bulk-worker
+    litellm_params:
+      model: openai/deepseek-v4-flash
+      api_base: https://api.deepseek.com/v1
+      api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000014
+      output_cost_per_token: 0.00000028
+    model_info: { tier: cheapest }
+
+  # -- Reviewer-diversity aliases: reviewer MUST be a DIFFERENT family than author.
+  #    Orchestrator passes the author family -> picks review-of-<family>; the
+  #    fallback chain (below) contains ONLY foreign families. --
+  - model_name: review-of-claude            # author=Claude -> review with Gemini/DeepSeek
+    litellm_params:
+      model: gemini/gemini-3.1-pro-preview
+      api_key: os.environ/GEMINI_API_KEY
+      input_cost_per_token: 0.000002
+      output_cost_per_token: 0.00001
+  - model_name: review-of-deepseek          # author=DeepSeek -> review with Claude
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+  - model_name: review-of-gemini            # author=Gemini -> review with Claude
+    litellm_params:
+      model: anthropic/claude-opus-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      input_cost_per_token: 0.000005
+      output_cost_per_token: 0.000025
+  - model_name: review-of-qwen-local        # local author=Qwen -> review with GLM/Claude
+    litellm_params:
+      model: openai/glm-z1-air
+      api_base: https://open.bigmodel.cn/api/paas/v4
+      api_key: os.environ/GLM_API_KEY
+
+  # ==========================================================================
+  # LOCAL vLLM (hybrid; ACTIVE when LOCAL_LLM_BASE points at the RTX 6000 vLLM
+  # endpoint behind Traefik). One large MoE is resident at a time — thinking and
+  # vision ALTERNATE (see infra/llm/RUNBOOK-local-serving.md). cost = 0 (on-prem).
+  # ==========================================================================
+  - model_name: local-thinking              # GLM-4.5-Air AWQ-4 / Qwen3-Coder-Next FP8
+    litellm_params:
+      model: openai/local-thinking
+      api_base: os.environ/LOCAL_LLM_BASE
+      api_key: os.environ/LOCAL_LLM_KEY
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+    model_info: { max_input_tokens: 131072 }
+  - model_name: local-vision                # Qwen3-VL-30B/32B (frontend screenshot verify)
+    litellm_params:
+      model: openai/local-vision
+      api_base: os.environ/LOCAL_LLM_BASE
+      api_key: os.environ/LOCAL_LLM_KEY
+      input_cost_per_token: 0
+      output_cost_per_token: 0
+  - model_name: local-embed                 # Qwen3-Embedding / BGE-class
+    litellm_params:
+      model: openai/local-embed
+      api_base: os.environ/LOCAL_LLM_BASE
+      api_key: os.environ/LOCAL_LLM_KEY
+
 litellm_settings:
   drop_params: true
   set_verbose: false
@@ -213,15 +360,44 @@ litellm_settings:
   # Triggers on rate limits, timeouts, 5xx, and quota/credit-exhaustion errors,
   # so when Anthropic credits or the subscription cap run out, calls transparently
   # route to the next model instead of failing.
+  # Park a stalled/cold local vLLM endpoint instead of blocking the fleet, and
+  # let context_window_fallbacks fire before a doomed over-long call.
+  num_retries: 2
+  request_timeout: 600
+  allowed_fails: 2
+  cooldown_time: 60
+  enable_pre_call_checks: true
   fallbacks:
+    # existing cloud chains (kept)
     - claude-opus: ["claude-sonnet", "gemini-reasoner"]
     - claude-opus-chat: ["claude-sonnet", "gemini-reasoner"]
     - claude-opus-reasoner: ["claude-sonnet", "gemini-reasoner"]
     - claude-sonnet: ["gemini-reasoner"]
     - claude-haiku: ["gemini-chat"]
+    # engineering-core role chains (cross local<->cloud: credit-exhaustion or a
+    # stalled local endpoint routes onward transparently)
+    - role-architect: ["claude-opus-reasoner", "gemini-reasoner", "glm-reasoner"]
+    - role-lead-dev: ["claude-sonnet", "gemini-reasoner"]
+    - role-backend-codegen: ["deepseek-pro", "deepseek-v4-flash", "glm-chat"]
+    - role-frontend-vision: ["gemini-reasoner", "gemini-chat"]
+    - role-debugger: ["claude-opus-reasoner", "deepseek-reasoner", "gemini-reasoner"]
+    - role-reviewer: ["gemini-reasoner", "deepseek-pro"]
+    - role-qa-gate: ["claude-haiku", "gemini-chat", "deepseek-v4-flash"]
+    - role-bulk-worker: ["deepseek-v4-flash", "gemini-chat", "claude-haiku"]
+    # reviewer diversity: each chain contains ONLY families != the author
+    - review-of-claude: ["gemini-reasoner", "deepseek-pro"]
+    - review-of-deepseek: ["claude-opus-reasoner", "gemini-reasoner"]
+    - review-of-gemini: ["claude-opus-reasoner", "deepseek-pro"]
+    - review-of-qwen-local: ["glm-reasoner", "claude-opus-reasoner"]
+    # local -> cloud safety net (when LOCAL_LLM_BASE is down/unset)
+    - local-thinking: ["deepseek-pro", "claude-sonnet"]
+    - local-vision: ["gemini-reasoner", "claude-sonnet"]
   # Also fall back when the input exceeds a model's context window.
   context_window_fallbacks:
     - claude-opus: ["gemini-reasoner"]
     - claude-sonnet: ["gemini-reasoner"]
+    - role-backend-codegen: ["deepseek-pro"]   # DeepSeek 1M ctx absorbs overflow
+    - role-architect: ["gemini-reasoner"]
+    - local-thinking: ["deepseek-pro"]
 
 # LANGFUSE_HOST / LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY are provided via .env
