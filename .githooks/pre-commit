@@ -1,0 +1,37 @@
+#!/bin/bash
+# Repo-path / scratch guard (engineering-core:ground-truth-anchor, code-enforced).
+# Blocks the failure-class artifacts: scratch files at repo root, accidental huge
+# blobs (the 5 MB Plotly trap), nested repos, and deletion of the ground-truth docs.
+set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+staged() { git diff --cached --name-only --diff-filter=AM; }
+fail=0
+
+# 1) scratch files anywhere (the backup_old.tsx / diff.txt / test_fetch.py thrash residue)
+while IFS= read -r f; do
+  case "$(basename "$f")" in
+    backup_old*|*_backup.*|*.bak|diff.txt|scratch.*|tmp.*|test_fetch.py|*.orig)
+      echo "BLOCKED: scratch file staged: $f (engineering-core forbids scratch artifacts)"; fail=1;;
+  esac
+done < <(staged)
+
+# 2) oversized files (>2MB) — catches inline mega-HTML / committed build blobs
+while IFS= read -r f; do
+  [ -f "$ROOT/$f" ] || continue
+  sz=$(wc -c < "$ROOT/$f" 2>/dev/null || echo 0)
+  if [ "$sz" -gt 2097152 ]; then echo "BLOCKED: $f is ${sz} bytes (>2MB). Don't commit large blobs."; fail=1; fi
+done < <(staged)
+
+# 3) nested git repo inside the workspace (sibling/parallel-repo trap)
+while IFS= read -r d; do
+  [ "$d" = "$ROOT/.git" ] && continue
+  echo "BLOCKED: nested .git found at $d — no parallel/sibling repos inside the project."; fail=1
+done < <(find "$ROOT" -name .git -type d -not -path "$ROOT/.git" 2>/dev/null)
+
+# 4) ground-truth docs must not be deleted
+while IFS= read -r f; do
+  case "$f" in AGENTS.md|LOCKED-DECISIONS.md) echo "BLOCKED: $f is being deleted — it is the ground-truth anchor.";  fail=1;; esac
+done < <(git diff --cached --name-only --diff-filter=D)
+
+[ "$fail" -eq 1 ] && { echo "--- pre-commit guard failed (engineering-core) ---"; exit 1; }
+exit 0

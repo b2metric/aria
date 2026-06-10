@@ -12,3 +12,6 @@ Specialize to the infra/CI declared in `docs/technical-architecture.md`.
 - Long-lived servers run in background with a readiness check, never foreground-blocking.
 - Run the test suite and report real pass/fail; never claim green without output.
 - Security review: secrets in env only, no hardcoded tokens, least privilege.
+
+## Engineering-core
+Follows **engineering-core:smoke-gate** — CI 'Smoke: boot' job + `smoke/check.sh` (health + JWKS /auth assertion + login round-trip) gate completion.

@@ -7,6 +7,11 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# The placeholder key LiteLLM ships with. If the real key is missing the backend
+# used to silently fall back to this and every LLM call 401'd -> garbage SQL.
+# It is now treated as a FATAL misconfiguration at startup (see validate_runtime).
+DUMMY_LITELLM_KEY = "sk-1234"
+
 
 class Settings(BaseSettings):
     """ARIA application configuration.
@@ -68,9 +73,27 @@ class Settings(BaseSettings):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        # If litellm_api_key not set from .env, try system env
+        # If litellm_api_key not set from .env, try system env. The dummy fallback
+        # is kept so import never crashes, but validate_runtime() rejects it loudly.
         if not self.litellm_api_key:
-            self.litellm_api_key = os.environ.get("LITELLM_API_KEY", "sk-1234")
+            self.litellm_api_key = os.environ.get("LITELLM_API_KEY", DUMMY_LITELLM_KEY)
+
+    def validate_runtime(self) -> list[str]:
+        """Return a list of FATAL misconfigurations (empty = healthy).
+
+        Catches the failure classes that previously shipped silently:
+        a dummy/empty LiteLLM key -> every LLM call 401s -> garbage SQL.
+        Called at startup (see main.py lifespan) so the app fails loudly instead
+        of running degraded. Skippable via ARIA_SKIP_STARTUP_CHECKS=1 (tests/CI).
+        """
+        problems: list[str] = []
+        if not self.litellm_api_key or self.litellm_api_key == DUMMY_LITELLM_KEY:
+            problems.append(
+                f"LITELLM_API_KEY is missing or the dummy '{DUMMY_LITELLM_KEY}'. "
+                "LLM calls would 401 and silently degrade to garbage SQL. "
+                "Set a valid proxy key in backend/.env or the LITELLM_API_KEY env var."
+            )
+        return problems
 
     @property
     def is_development(self) -> bool:

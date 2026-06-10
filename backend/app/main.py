@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
+import os
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -17,10 +20,54 @@ from backend.app.auth.rbac import require_role, require_sql_access
 
 # ── Lifespan ─────────────────────────────────────────────────────────────
 
+logger = logging.getLogger("aria.startup")
+
+
+def _truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in ("1", "true", "yes", "on")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Startup and shutdown hooks."""
+    """Startup validation — fail loudly instead of running degraded.
+
+    Catches the "system up but login broken" / "garbage SQL" classes:
+    a dummy/missing LiteLLM key, or an unreachable/misconfigured Keycloak JWKS
+    endpoint (the ``/auth`` path trap). Probes the EXACT JWKS URL the auth layer
+    uses. Skip for tests/offline with ``ARIA_SKIP_STARTUP_CHECKS=1``.
+    """
+    from backend.app.core.config import get_settings
+
+    if not _truthy(os.environ.get("ARIA_SKIP_STARTUP_CHECKS")):
+        settings = get_settings()
+        problems = settings.validate_runtime()
+        try:
+            async with httpx.AsyncClient(
+                verify=settings.keycloak_verify_ssl, timeout=5.0
+            ) as client:
+                resp = await client.get(settings.keycloak_jwks_url)
+            if resp.status_code != 200:
+                problems.append(
+                    f"Keycloak JWKS {settings.keycloak_jwks_url} returned "
+                    f"{resp.status_code} (expected 200). Logins will fail "
+                    "(check the /auth path / realm)."
+                )
+        except Exception as exc:  # noqa: BLE001 — startup gate must report any failure
+            problems.append(
+                f"Keycloak JWKS {settings.keycloak_jwks_url} unreachable: {exc!r}. "
+                "Logins will fail."
+            )
+        if problems:
+            for p in problems:
+                logger.critical("STARTUP CHECK FAILED: %s", p)
+            raise RuntimeError(
+                "ARIA startup checks failed (set ARIA_SKIP_STARTUP_CHECKS=1 to "
+                "bypass for offline work):\n  - " + "\n  - ".join(problems)
+            )
+        logger.info(
+            "Startup checks passed: LiteLLM key valid; Keycloak JWKS reachable at %s",
+            settings.keycloak_jwks_url,
+        )
     yield
 
 

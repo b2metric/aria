@@ -149,6 +149,47 @@ jobs:
           path: frontend/playwright-report/
           retention-days: 7
 
+  smoke-boot:
+    # engineering-core:smoke-gate (boot half). Proves the app actually BOOTS — catches
+    # the "system down" class. The FULL boot+login round-trip (Keycloak JWKS + real
+    # login) runs via `bash smoke/check.sh` locally / in staging where Keycloak is up;
+    # to run it here, add a Keycloak service + realm import and drop ARIA_SKIP_STARTUP_CHECKS.
+    name: "Smoke: boot"
+    runs-on: ubuntu-latest
+    needs: [lint-backend]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: aria
+          POSTGRES_PASSWORD: aria_test
+          POSTGRES_DB: aria_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+      - name: Boot backend and assert /health
+        env:
+          DATABASE_URL: postgresql+asyncpg://aria:aria_test@localhost:5432/aria_test
+          REDIS_URL: redis://localhost:6379/0
+          ARIA_SKIP_STARTUP_CHECKS: "1"   # Keycloak/LiteLLM absent in this minimal job
+          SMOKE_BACKEND_URL: http://localhost:8000
+        run: |
+          uv run uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 &
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/health || true)
+            [ "$code" = "200" ] && { echo "backend booted (/health 200)"; exit 0; }
+            sleep 2
+          done
+          echo "::error::backend did not boot (/health never returned 200) — SMOKE FAILED"; exit 1
+
   security:
     name: "Security Audit"
     runs-on: ubuntu-latest

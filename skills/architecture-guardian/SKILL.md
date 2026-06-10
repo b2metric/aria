@@ -16,3 +16,6 @@ Specialize this agent to ARIA — Conversational BI's stack from `docs/technical
 ## Anti-drift rules
 - Working dir is fixed (`/Users/tunasonmez/projects/b2metric-aria`); never scaffold a parallel repo.
 - Prefer small, verifiable diffs over large rewrites.
+
+## Engineering-core
+Follows **engineering-core:ground-truth-anchor** — read LOCKED-DECISIONS.md every session / after every compaction; block sibling-repo scaffolds (.githooks/pre-commit enforces this).

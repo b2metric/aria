@@ -34,3 +34,6 @@ component tree, chart rendering, and auth. Do not re-invent the UI.
 - Server state vs client state separated; keep the base-UI/API layer swappable.
 - Accessible by default (semantic HTML, keyboard, contrast). No `console.log` in committed code.
 - Keep sessions scoped; don't run a 200-message marathon on one bug.
+
+## Engineering-core
+This IS **engineering-core:frontend-visual-verification** — navigate→screenshot→console→network before done; SafeIframe rejects srcDoc >1MB at runtime; charts from JSON (recharts), not inline Plotly HTML.
