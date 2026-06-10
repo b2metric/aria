@@ -52,3 +52,6 @@ backend/alembic/versions/*.pyc
 tmp/
 \n# Next.js clobber folders\n.next.clobbered-by-build/\nfrontend/.next.clobbered-by-build/
 \nfrontend/.next*
+
+# LLM stack secrets (copied from hermes-llm-infra)
+infra/llm/.env
