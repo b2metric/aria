@@ -28,7 +28,6 @@ export default function DashboardPage() {
     // Session yuklenmediyse veya giris yapilmadiysa data getirmeyi bekle
     if (status === "loading") return;
     if (status === "unauthenticated") {
-      signIn("keycloak"); // Keycloak SSO'ya yonlendir
       return;
     }
 
@@ -77,6 +76,21 @@ export default function DashboardPage() {
     },
     [handleSearch],
   );
+
+  if (status === "unauthenticated") {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
+        <h1 className="text-3xl font-bold text-gray-900">Welcome to ARIA</h1>
+        <p className="text-gray-500">Please sign in to access your dashboard.</p>
+        <button
+          onClick={() => signIn("keycloak")}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+        >
+          Login with Keycloak
+        </button>
+      </div>
+    );
+  }
 
   if (!data) {
     return (

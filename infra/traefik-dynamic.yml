@@ -10,6 +10,8 @@ http:
       rule: "Host(`auth.aria.local`)"
       service: keycloak-svc
 
+  # Traefik v3 proxies WebSocket (Next.js HMR) transparently when the browser
+  # initiates the upgrade — no header injection needed.
   services:
     frontend-svc:
       loadBalancer:

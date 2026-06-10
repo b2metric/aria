@@ -40,6 +40,32 @@ Detection: `_detect_requested_chart_type`, `_is_chart_type_only_request`, `_want
   (`post_logout_redirect_uri` = `http://localhost:3003` must be registered on the `aria-web` client.)
 - `/chat` redirects unauthenticated users to `signIn("keycloak")`.
 
+## Dockerized stack (Traefik) — `docker-compose.dev.yml` + `infra/traefik-dynamic.yml`
+The full stack can run behind Traefik on port 80 with hostnames in `/etc/hosts`
+(`127.0.0.1 aria.local api.aria.local auth.aria.local`). Routing:
+`aria.local`→frontend:3003, `api.aria.local`→backend:8000, `auth.aria.local`→keycloak:8080.
+
+**The one rule that makes OIDC work: every actor must use the SAME external issuer URL.**
+- Traefik has **in-cluster network aliases** (`aria.local`, `api.aria.local`, `auth.aria.local`
+  on `aria-net`) so containers resolve those hostnames to Traefik — i.e. the browser AND the
+  backend AND next-auth all talk to `http://auth.aria.local/auth`. No split-horizon.
+- Keycloak: `KC_HOSTNAME: "http://auth.aria.local/auth"` (full URL **including `/auth`** — KC26
+  builds the issuer from the hostname and does NOT prepend `KC_HTTP_RELATIVE_PATH`),
+  `KC_HOSTNAME_STRICT: "false"`, `KC_HTTP_ENABLED: "true"`, `KC_PROXY_HEADERS: "xforwarded"`.
+  Resulting issuer: `http://auth.aria.local/auth/realms/aria`.
+- Must all equal that issuer: frontend `KEYCLOAK_ISSUER` + `NEXT_PUBLIC_KEYCLOAK_ISSUER`,
+  backend `KEYCLOAK_URL=http://auth.aria.local/auth`, and the token `iss` claim.
+- `aria-web` client `redirectUris` in `infra/keycloak/aria-realm.json` must include
+  `http://aria.local/*` (and the next-auth callback `http://aria.local/api/auth/callback/keycloak`).
+  **Realm changes only apply on re-import** → wipe the volume: `docker volume rm
+  b2metric-aria_keycloak_db_data` then `up -d` (dev-only data; no real users).
+- **Frontend dev MUST bind `0.0.0.0`** (`command: npm run dev -- -H 0.0.0.0`). Default
+  localhost-only bind = Traefik 502. (This was the "broke the UI while dockerizing" bug.)
+- Keycloak healthcheck path is **`/auth/health/ready`** on mgmt port 9000 (the relative path
+  moves it too); querying `/health/ready` falsely reports `unhealthy`.
+- Do NOT re-add a Traefik `hmr-headers` middleware that injects `Connection: Upgrade` on every
+  request — it corrupts normal HTML loads. Traefik v3 proxies the HMR websocket natively.
+
 ## Frontend chart UX (`frontend/src/app/chat/page.tsx` + `components/ChartArea`, `ChartControls`)
 - Claude-Desktop artifact panel: inline collapsible SQL per message, a chart **chip** per
   message that opens the right panel (auto-opens on a new chart; `key={msg.id}` remounts on switch).

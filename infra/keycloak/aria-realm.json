@@ -141,6 +141,8 @@
       "directAccessGrantsEnabled": true,
       "implicitFlowEnabled": false,
       "redirectUris": [
+        "http://aria.local/*",
+        "http://aria.local/api/auth/callback/keycloak",
         "http://localhost:3003/*",
         "http://localhost:3003/auth/callback"
       ],

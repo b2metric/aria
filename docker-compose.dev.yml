@@ -55,7 +55,13 @@ services:
     volumes:
       - ./infra/traefik-dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
     networks:
-      - aria-net
+      aria-net:
+        # In-cluster aliases so containers resolve the SAME external hostnames as
+        # the browser (-> consistent OIDC issuer). All three resolve to Traefik.
+        aliases:
+          - aria.local
+          - api.aria.local
+          - auth.aria.local
 
   # ── Keycloak (SSO & IAM) ───────────────────────────────────────────────
   keycloak:
@@ -70,17 +76,21 @@ services:
       KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak_dev
-      KC_HOSTNAME: "localhost"
-      KC_HOSTNAME_PORT: "8080"
+      # KC26 hostname v2: full external origin behind Traefik (http, port 80).
+      # Issuer becomes http://auth.aria.local/auth/realms/aria for every caller.
+      KC_HOSTNAME: "http://auth.aria.local/auth"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: "/auth"
-      KC_PROXY: "edge"
+      KC_PROXY_HEADERS: "xforwarded"
     volumes:
       - ./infra/keycloak/aria-realm.json:/opt/keycloak/data/import/aria-realm.json:ro
     depends_on:
       keycloak-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost:9000\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q UP"]
+      # KC_HTTP_RELATIVE_PATH=/auth moves the mgmt health endpoint under /auth too.
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost:9000\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q UP"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -116,7 +126,9 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://aria:aria_dev@postgres:5432/aria
       - REDIS_URL=redis://redis:6379/0
-      - KEYCLOAK_URL=http://keycloak:8080/auth
+      # Resolve auth.aria.local via Traefik alias so the JWKS host + token `iss`
+      # match (no split-horizon issuer mismatch).
+      - KEYCLOAK_URL=http://auth.aria.local/auth
     depends_on:
       - postgres
       - redis
@@ -129,7 +141,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: aria-frontend
-    command: "npm run dev"
+    # Bind 0.0.0.0 so Traefik (other container) can reach Next dev — default
+    # localhost-only bind was the 502 root cause.
+    command: "npm run dev -- -H 0.0.0.0"
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -137,7 +151,8 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://api.aria.local
       - NEXTAUTH_URL=http://aria.local
-      - KEYCLOAK_ISSUER=http://keycloak:8080/realms/aria
+      # Server-side next-auth issuer MUST equal the browser issuer and include /auth.
+      - KEYCLOAK_ISSUER=http://auth.aria.local/auth/realms/aria
       - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://auth.aria.local/auth/realms/aria
     networks:
       - aria-net
