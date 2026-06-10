@@ -182,6 +182,7 @@ dependencies = [
     { name = "boto3" },
     { name = "fastapi", extra = ["standard"] },
     { name = "httpx" },
+    { name = "mem0ai" },
     { name = "minio" },
     { name = "oracledb" },
     { name = "passlib", extra = ["bcrypt"] },
@@ -237,10 +238,11 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.115,<1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.28,<1" },
-    { name = "kaleido", marker = "sys_platform == 'linux' and extra == 'chart-export'", specifier = ">=0.2,<1" },
+    { name = "kaleido", marker = "sys_platform == 'linux' and extra == 'chart-export'", specifier = ">=0.2,<2" },
+    { name = "mem0ai", specifier = ">=0.1,<1" },
     { name = "minio", specifier = ">=7.2,<8" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14,<2" },
-    { name = "oracledb", specifier = ">=2.0,<3" },
+    { name = "oracledb", specifier = ">=2.0,<5" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7,<2" },
     { name = "pgvector", specifier = ">=0.3,<1" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.8,<3" },
@@ -260,11 +262,11 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0,<2" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.3,<4" },
     { name = "qdrant-client", specifier = ">=1.13,<2" },
-    { name = "redis", extras = ["hiredis"], specifier = ">=5.2,<6" },
+    { name = "redis", extras = ["hiredis"], specifier = ">=5.2,<9" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9,<1" },
     { name = "sentry-sdk", extras = ["fastapi"], specifier = ">=2.20,<3" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0,<3" },
-    { name = "sse-starlette", specifier = ">=2.1,<3" },
+    { name = "sse-starlette", specifier = ">=2.1,<4" },
     { name = "structlog", specifier = ">=24.4,<27" },
     { name = "tenacity", specifier = ">=9.0,<10" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34,<1" },
@@ -342,6 +344,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz", hash = "sha256:d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32", size = 952055 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/64/b4/17d4b0b2a2dc85a6df63d1157e028ed19f90d4cd97c36717afef2bc2f395/attrs-26.1.0-py3-none-any.whl", hash = "sha256:c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309", size = 67548 },
+]
+
+[[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148 },
 ]
 
 [[package]]
@@ -2152,6 +2163,24 @@ wheels = [
 ]
 
 [[package]]
+name = "mem0ai"
+version = "0.1.118"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "openai" },
+    { name = "posthog" },
+    { name = "protobuf" },
+    { name = "pydantic" },
+    { name = "pytz" },
+    { name = "qdrant-client" },
+    { name = "sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/db/1d/b7797ee607d0de2979d2a8b4c0c102989d5e1a1c9d67478dc6a2e2e0b2a8/mem0ai-0.1.118.tar.gz", hash = "sha256:d62497286616357f8726b849afc20031cd0ab56d1cf312fa289b006be33c3ce7", size = 159324 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/78/70/e648ab026aa6505b920ed405a422727777bebdc5135691b2ca6350a02062/mem0ai-0.1.118-py3-none-any.whl", hash = "sha256:c2b371224a340fd5529d608dfbd2e77c610c7ffe421005ff7e862fd6f322cca8", size = 239476 },
+]
+
+[[package]]
 name = "minio"
 version = "7.2.20"
 source = { registry = "https://pypi.org/simple" }
@@ -2386,7 +2415,7 @@ wheels = [
 
 [[package]]
 name = "openai"
-version = "2.41.0"
+version = "1.109.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
@@ -2398,9 +2427,9 @@ dependencies = [
     { name = "tqdm" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/a6/5815fe2e2aca74b36c650d1bd43b69827cee568073d0d2d9b6fc5aaac80c/openai-2.41.0.tar.gz", hash = "sha256:db5c362acd6604b84f076abbefa66826ea4b46ecba2954ed866e6a149a1352c0", size = 783525 }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/a1/a303104dc55fc546a3f6914c842d3da471c64eec92043aef8f652eb6c524/openai-1.109.1.tar.gz", hash = "sha256:d173ed8dbca665892a6db099b4a2dfac624f94d20a93f46eb0b56aae940ed869", size = 564133 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/be/51/d82bb424e8aa372190c5233253a2ceb399a778747d18b42cff487411e663/openai-2.41.0-py3-none-any.whl", hash = "sha256:20cc7952e8501c7e5773dd2ef7be437bae9cb549044902e1041a83a54516e375", size = 1353378 },
+    { url = "https://files.pythonhosted.org/packages/1d/2a/7dd3d207ec669cacc1f186fd856a0f61dbc255d24f6fdc1a6715d6051b0f/openai-1.109.1-py3-none-any.whl", hash = "sha256:6bcaf57086cf59159b8e27447e4e7dd019db5d29a438072fbd49c290c7e65315", size = 948627 },
 ]
 
 [[package]]
@@ -2750,6 +2779,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5e/77/65b857a69ed876e1951e88aaba60f5ce6120c33703f7cb61a3c894b8c1b6/portalocker-3.2.0.tar.gz", hash = "sha256:1f3002956a54a8c3730586c5c77bf18fae4149e07eaf1c29fc3faf4d5a3f89ac", size = 95644 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4b/a6/38c8e2f318bf67d338f4d629e93b0b4b9af331f455f0390ea8ce4a099b26/portalocker-3.2.0-py3-none-any.whl", hash = "sha256:3cdc5f565312224bc570c49337bd21428bba0ef363bbcf58b9ef4a9f11779968", size = 22424 },
+]
+
+[[package]]
+name = "posthog"
+version = "7.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a6/41/d7922b23d9f3dec427286b13f8f15b12c08eea3950a6cfd53979a54aed91/posthog-7.18.0.tar.gz", hash = "sha256:560230cf9616ac1fde5e3bfba1c666ab69e8488e5417005f86f91f7c6ef74252", size = 229913 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/45/33/cb300af867a22c5e1680f6d1ebe5242ebe7de8280a82a5759e16211e28ee/posthog-7.18.0-py3-none-any.whl", hash = "sha256:9913586a958e5e81dbb1cdc4d4bedc8f95a268807b17ad03b5c55d2adff55dd7", size = 268498 },
 ]
 
 [[package]]

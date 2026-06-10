@@ -1,5 +1,11 @@
 version: "3.9"
 
+# In-cluster LLM stack (LiteLLM + Langfuse), copied from hermes-llm-infra and run
+# as part of THIS project on aria-net. Backend reaches the proxy at http://litellm:4000.
+include:
+  - path: infra/llm/docker-compose.llm.yml
+    env_file: infra/llm/.env
+
 # ─── ARIA Development Environment ───────────────────────────────────────
 # Services: PostgreSQL, Redis, Keycloak, MinIO, Qdrant, Prefect
 # Usage:    docker compose -f docker-compose.dev.yml up -d
@@ -59,9 +65,9 @@ services:
         # In-cluster aliases so containers resolve the SAME external hostnames as
         # the browser (-> consistent OIDC issuer). All three resolve to Traefik.
         aliases:
-          - aria.local
-          - api.aria.local
-          - auth.aria.local
+          - aria.localhost
+          - api.aria.localhost
+          - auth.aria.localhost
 
   # ── Keycloak (SSO & IAM) ───────────────────────────────────────────────
   keycloak:
@@ -77,8 +83,8 @@ services:
       KC_DB_USERNAME: keycloak
       KC_DB_PASSWORD: keycloak_dev
       # KC26 hostname v2: full external origin behind Traefik (http, port 80).
-      # Issuer becomes http://auth.aria.local/auth/realms/aria for every caller.
-      KC_HOSTNAME: "http://auth.aria.local/auth"
+      # Issuer becomes http://auth.aria.localhost/auth/realms/aria for every caller.
+      KC_HOSTNAME: "http://auth.aria.localhost/auth"
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: "/auth"
@@ -123,12 +129,26 @@ services:
     command: "uvicorn backend.app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./backend:/app/backend
+      # Schema vault (docs/vaults/<workspace>/tables/*.md) drives SQL generation;
+      # not COPYed in the image, so mount it for dev (else queries → no_tables_found).
+      - ./docs:/app/docs
     environment:
       - DATABASE_URL=postgresql+asyncpg://aria:aria_dev@postgres:5432/aria
       - REDIS_URL=redis://redis:6379/0
-      # Resolve auth.aria.local via Traefik alias so the JWKS host + token `iss`
+      # Resolve auth.aria.localhost via Traefik alias so the JWKS host + token `iss`
       # match (no split-horizon issuer mismatch).
-      - KEYCLOAK_URL=http://auth.aria.local/auth
+      - KEYCLOAK_URL=http://auth.aria.localhost/auth
+      # mem0 writes a telemetry/user-id file under ~/.mem0; container user `aria`
+      # has no writable HOME, so point it at /tmp and disable telemetry.
+      - MEM0_DIR=/tmp/.mem0
+      - MEM0_TELEMETRY=False
+      # In-cluster Qdrant host (config default localhost:6333 is the backend itself).
+      - QDRANT_URL=http://qdrant:6333
+      # LiteLLM proxy now runs in-cluster (infra/llm, service `litellm`) on aria-net.
+      # Overrides the localhost:4000 value in backend/.env (env vars > .env file).
+      - LITELLM_API_BASE=http://litellm:4000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - postgres
       - redis
@@ -149,11 +169,11 @@ services:
       - /app/node_modules
       - /app/.next
     environment:
-      - NEXT_PUBLIC_API_URL=http://api.aria.local
-      - NEXTAUTH_URL=http://aria.local
+      - NEXT_PUBLIC_API_URL=http://api.aria.localhost
+      - NEXTAUTH_URL=http://aria.localhost
       # Server-side next-auth issuer MUST equal the browser issuer and include /auth.
-      - KEYCLOAK_ISSUER=http://auth.aria.local/auth/realms/aria
-      - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://auth.aria.local/auth/realms/aria
+      - KEYCLOAK_ISSUER=http://auth.aria.localhost/auth/realms/aria
+      - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://auth.aria.localhost/auth/realms/aria
     networks:
       - aria-net
 

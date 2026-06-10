@@ -17,7 +17,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from mem0 import Memory
+try:
+    from mem0 import Memory
+except ImportError:  # mem0ai not installed — memory features degrade to a no-op
+    Memory = None  # type: ignore[assignment, misc]
 
 from backend.app.core.config import get_settings
 
@@ -124,6 +127,8 @@ class MemoryService:
         }
 
         try:
+            if Memory is None:
+                raise RuntimeError("mem0 package not installed")
             self._memory = Memory.from_config(config)
             logger.info(
                 "MemoryService initialized: qdrant=%s:%d, collection=%s",
