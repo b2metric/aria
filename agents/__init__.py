@@ -28,7 +28,7 @@ from agents.chart_renderer import (
     RenderOutput,
     render_all,
     render_csv,
-    render_html,
+    render_json,
     render_png,
 )
 from agents.chart_builder import (
@@ -63,7 +63,7 @@ __all__ = [
     "RenderOutput",
     "render_all",
     "render_csv",
-    "render_html",
+    "render_json",
     "render_png",
     # chart_builder
     "ChartPipelineResult",

@@ -28,7 +28,7 @@ from agents.chart_heuristic import (
 from agents.chart_renderer import (
     render_all,
     render_csv,
-    render_html,
+    render_json,
 )
 from agents.chart_builder import (
     ChartPipelineResult,
@@ -264,28 +264,28 @@ class TestHeuristicProposer:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestRendererHTML:
-    def test_bar_html(self, sales_data):
+class TestRendererJSON:
+    def test_bar_json(self, sales_data):
         cfg = propose_chart(sales_data)
-        out = render_html(sales_data, cfg)
-        assert out.format == "html"
+        out = render_json(sales_data, cfg)
+        assert out.format == "json"
         assert out.content is not None
         content = out.content if isinstance(out.content, str) else ""
-        assert "<html" in content or "Plotly" in content or "<div" in content
+        assert '"chart_data"' in content and '"chart_config"' in content
         assert out.size_bytes > 0
 
-    def test_table_html(self, large_data):
+    def test_table_json(self, large_data):
         cfg = ChartConfig(chart_type=ChartType.TABLE, title="Big Data")
-        out = render_html(large_data[:10], cfg)
+        out = render_json(large_data[:10], cfg)
         content = out.content if isinstance(out.content, str) else ""
-        assert "<table" in content.lower() or "<th" in content.lower()
+        assert '"chart_type": "table"' in content and '"chart_data"' in content
 
     def test_html_to_file(self, sales_data):
         cfg = propose_chart(sales_data)
-        with tempfile.NamedTemporaryFile(suffix=".html", delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:
-            out = render_html(sales_data, cfg, output_path=path)
+            out = render_json(sales_data, cfg, output_path=path)
             assert out.path == path
             assert os.path.exists(path)
             content = open(path).read()
@@ -295,19 +295,19 @@ class TestRendererHTML:
 
     def test_line_html(self, time_series_data):
         cfg = propose_chart(time_series_data)
-        out = render_html(time_series_data, cfg)
+        out = render_json(time_series_data, cfg)
         assert cfg.chart_type == ChartType.LINE
         assert out.content is not None
 
     def test_scatter_html(self, scatter_data):
         cfg = propose_chart(scatter_data)
-        out = render_html(scatter_data, cfg)
+        out = render_json(scatter_data, cfg)
         assert cfg.chart_type == ChartType.SCATTER
         assert out.content is not None
 
     def test_pie_html(self, pie_data):
         cfg = propose_chart(pie_data)
-        out = render_html(pie_data, cfg)
+        out = render_json(pie_data, cfg)
         assert cfg.chart_type == ChartType.PIE
         assert out.content is not None
 
@@ -365,17 +365,17 @@ class TestRenderAll:
         cfg = propose_chart(sales_data)
         with tempfile.TemporaryDirectory() as tmpdir:
             results = render_all(sales_data, cfg, output_dir=tmpdir, base_name="test")
-            assert "html" in results
+            assert "json" in results
             assert "csv" in results
-            html_path = os.path.join(tmpdir, "test.html")
-            assert os.path.exists(html_path)
+            json_path = os.path.join(tmpdir, "test.json")
+            assert os.path.exists(json_path)
             csv_path = os.path.join(tmpdir, "test.csv")
             assert os.path.exists(csv_path)
 
     def test_render_all_in_memory(self, sales_data):
         cfg = propose_chart(sales_data)
         results = render_all(sales_data, cfg)
-        assert results["html"].content is not None
+        assert results["json"].content is not None
         assert results["csv"].content is not None
 
 
@@ -390,14 +390,14 @@ class TestChartPipeline:
         assert isinstance(result, ChartPipelineResult)
         assert result.source == "heuristic"
         assert result.config.chart_type == ChartType.BAR
-        assert result.html is not None
+        assert result.json is not None
         assert result.csv is not None
         assert len(result.errors) == 0
 
     def test_pipeline_sync_line(self, time_series_data):
         result = run_chart_pipeline_sync(time_series_data)
         assert result.config.chart_type == ChartType.LINE
-        assert result.html is not None
+        assert result.json is not None
         assert result.csv is not None
 
     def test_pipeline_sync_pie(self, pie_data):
@@ -418,10 +418,10 @@ class TestChartPipeline:
         assert result.config.confidence == 0.0
         assert len(result.errors) > 0
 
-    def test_pipeline_html_content(self, sales_data):
+    def test_pipeline_json_content(self, sales_data):
         result = run_chart_pipeline_sync(sales_data)
-        assert result.html_content is not None
-        assert len(result.html_content) > 0
+        assert result.json_content is not None
+        assert len(result.json_content) > 0
 
     def test_pipeline_csv_content(self, sales_data):
         result = run_chart_pipeline_sync(sales_data)
@@ -438,9 +438,9 @@ class TestChartPipeline:
                 sales_data,
                 output_dir=tmpdir,
                 base_name="sales",
-                render_formats=("html", "csv"),
+                render_formats=("json", "csv"),
             )
-            assert os.path.exists(os.path.join(tmpdir, "sales.html"))
+            assert os.path.exists(os.path.join(tmpdir, "sales.json"))
             assert os.path.exists(os.path.join(tmpdir, "sales.csv"))
 
 
@@ -462,7 +462,7 @@ class TestPublicAPI:
             propose_chart_llm_with_heuristic,
             LlmChartChoice,
             build_chart_agent,
-            render_html,
+            render_json,
             render_csv,
             render_all,
             RenderOutput,
