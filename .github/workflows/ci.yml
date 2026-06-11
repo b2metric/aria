@@ -207,3 +207,25 @@ jobs:
       - name: npm audit
         working-directory: frontend
         run: npm install && npm audit --audit-level=high
+
+  codegraph-drift:
+    # engineering-core:code-knowledge-graph — architecture-drift gate.
+    # REPORT-ONLY (continue-on-error) until the existing pgvector drift is reconciled;
+    # then set continue-on-error: false to make it blocking.
+    name: "Code Knowledge Graph (drift)"
+    runs-on: ubuntu-latest
+    needs: [lint-backend]
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build code knowledge graph + drift audit
+        run: python3 codegraph/build_graph.py --backend backend/app --frontend frontend/src --decisions LOCKED-DECISIONS.md --out codegraph --check
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: code-knowledge-graph
+          path: codegraph/graph.html
+          retention-days: 14

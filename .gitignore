@@ -55,3 +55,8 @@ tmp/
 
 # LLM stack secrets (copied from hermes-llm-infra)
 infra/llm/.env
+
+# code knowledge graph (generated)
+codegraph/graph.json
+codegraph/graph.html
+codegraph/drift-audit.json
