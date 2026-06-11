@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Search, Database, Table as TableIcon, Edit2, Check, X, FileText, Link as LinkIcon, Key, ChevronRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -44,10 +45,17 @@ type TableDetail = {
 };
 
 export default function SchemaPage() {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const token = (session as any)?.accessToken;
   const isAdmin = true; // In a real app, check session.user.role or similar
   const workspaceId = "default";
+  const router = useRouter();
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/api/auth/signin');
+    }
+  }, [status, router]);
 
   const [tables, setTables] = useState<TableSummary[]>([]);
   const [selectedTable, setSelectedTable] = useState<TableDetail | null>(null);
@@ -85,6 +93,7 @@ export default function SchemaPage() {
       setLoadingDetail(true);
       const res = await fetch(`${API_BASE}/api/workspaces/vault/tables/${tableName}?workspace_id=${workspaceId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        cache: "no-store",
       });
       if (res.ok) {
         const data = await res.json();
@@ -135,6 +144,7 @@ export default function SchemaPage() {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
+          column_name: columnName,
           description: newDescription,
         }),
       });
