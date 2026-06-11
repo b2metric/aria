@@ -1,9 +1,8 @@
-"""Memory and knowledge-vault models with pgvector embeddings."""
+"""Memory and knowledge-vault models. (Embeddings are managed externally in Qdrant)."""
 
 import uuid
 from datetime import datetime
 
-from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,7 +12,7 @@ from backend.app.models.enums import KnowledgeType
 
 
 class MemoryEntry(Base, UUIDMixin, TimestampMixin):
-    """Agent memory entry — contextual recall with optional embedding."""
+    """Agent memory entry — contextual recall. (Vectors stored in Qdrant)"""
 
     __tablename__ = "memory_entries"
 
@@ -27,14 +26,14 @@ class MemoryEntry(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     ttl_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    embedding: Mapped[Vector | None] = mapped_column(Vector(1536), nullable=True)  # type: ignore[valid-type]
+    # Note: embedding moved to Qdrant (LOCKED-DECISIONS #1)
 
     def __repr__(self) -> str:
         return f"<MemoryEntry {self.key}>"
 
 
 class VaultKnowhow(Base, UUIDMixin, TimestampMixin):
-    """Curated knowledge-base entry (SQL patterns, business terms, metrics)."""
+    """Curated knowledge-base entry (SQL patterns, business terms, metrics). (Vectors stored in Qdrant)"""
 
     __tablename__ = "vault_knowhow"
 
@@ -46,7 +45,7 @@ class VaultKnowhow(Base, UUIDMixin, TimestampMixin):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, server_default="{}")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
-    embedding: Mapped[Vector | None] = mapped_column(Vector(1536), nullable=True)  # type: ignore[valid-type]
+    # Note: embedding moved to Qdrant (LOCKED-DECISIONS #1)
 
     def __repr__(self) -> str:
         return f"<VaultKnowhow {self.title} [{self.type.value}]>"
