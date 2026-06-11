@@ -173,14 +173,22 @@ def main() -> int:
         "L30D_IS_REVENUE_ACTIVE_BASE": rng.choice([0, 1]),
     } for s in subs for mb in range(6)])
 
-    counts["fct_prep_rev"] = seed("fct_prep_rev", [(lambda s: {
-        "EXEC_DATE": TODAY, "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
+    # PLAN_ID MUST be a real dim_prep_products.OFFER_ID and EXEC_DATE MUST span several
+    # months, or "monthly revenue by region" (GROUP BY month, dp.BUSINESS via the
+    # PLAN_ID=OFFER_ID join) collapses to a single NULL-region row. (Both were broken:
+    # PLAN_ID was never inserted -> NULL join; EXEC_DATE was always TODAY -> one month.)
+    counts["fct_prep_rev"] = seed("fct_prep_rev", [(lambda s, p: {
+        "EXEC_DATE": TODAY - timedelta(days=30 * rng.randint(0, 11)),
+        "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
         "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "PLAN_NAME": s["PLAN_NAME"], "BS_TYPE": rng.choice(["GSM", "DATA"]),
+        "PREPOST_PAID": s["PREPOST_PAID"],
+        "PLAN_ID": p[0],            # -> dim_prep_products.OFFER_ID (join key)
+        "PLAN_NAME": p[3],          # matching product name (consistent with PLAN_ID)
+        "BS_TYPE": rng.choice(["GSM", "DATA"]),
         "CDR_TYPE": rng.choice(CALL_TYPES), "CHARGINGTYPE": rng.choice(["PREPAID", "HYBRID"]),
         "BILLAMOUNT": round(rng.uniform(0.05, 45.0), 3), "LOGDATE": days_back(rng, 360),
         "CALLTYPE": rng.choice(CALL_TYPES),
-    })(rng.choice(subs)) for _ in range(1600)])
+    })(rng.choice(subs), rng.choice(PRODUCTS)) for _ in range(1600)])
 
     counts["dim_prep_products"] = seed("dim_prep_products", [{
         "OFFER_ID": p[0], "PROD_OFFERING_ID": p[1], "BUSINESS": p[2], "PRODUCT_OFFER_NAME": p[3],
@@ -232,7 +240,19 @@ def main() -> int:
     })(rng.choice(subs), rng.choice(kpis)) for _ in range(900)])
 
     print("Seeded rows:", counts)
+
+    # Self-check: "monthly revenue by region" must actually join AND span months.
+    # Guards the exact regression we hit: fct_prep_rev.PLAN_ID NULL (join dead ->
+    # single NULL-region row) or EXEC_DATE all one day (single month).
+    regions, months = cur.execute(
+        "SELECT COUNT(DISTINCT dp.BUSINESS), COUNT(DISTINCT TRUNC(fr.EXEC_DATE,'MM')) "
+        "FROM fct_prep_rev fr JOIN dim_prep_products dp ON fr.PLAN_ID = dp.OFFER_ID"
+    ).fetchone()
+    print(f"Sanity: revenue-by-region joins -> {regions} region(s) x {months} month(s)")
     conn.close()
+    if (regions or 0) < 2 or (months or 0) < 2:
+        print("ERROR: revenue-by-region would collapse to one row — seeding is broken.")
+        return 1
     return 0
 
 
