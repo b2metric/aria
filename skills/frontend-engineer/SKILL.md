@@ -12,7 +12,7 @@ component tree, chart rendering, and auth. Do not re-invent the UI.
 
 1. **VERIFY WITH YOUR EYES.** After any frontend change you MUST render it and look:
    - Ensure dev server is up: `cd frontend && npm run dev` (background).
-   - `browser_navigate` to `http://localhost:3000` (and `/chat`), then `browser_screenshots`.
+   - `browser_navigate` to `http://aria.localhost` (and `/chat`), then `browser_screenshots`.
    - Read the screenshot + `browser_console` for errors. Never claim "done" on UI work
      without a screenshot proving it renders. You are vision-capable — use it.
 2. **TARGETED PATCHES, NEVER FULL REWRITES.** Edit the specific lines. Do not rewrite
@@ -37,3 +37,9 @@ component tree, chart rendering, and auth. Do not re-invent the UI.
 
 ## Engineering-core
 This IS **engineering-core:frontend-visual-verification** — navigate→screenshot→console→network before done; SafeIframe rejects srcDoc >1MB at runtime; charts from JSON (recharts), not inline Plotly HTML.
+
+## Auth/login changes — REAL verification required (added 2026-06-12)
+- The app runs dockerized at **`http://aria.localhost`** (host `frontend/` is bind-mounted → hot-reload). Do NOT start a second `npm run dev`; navigate to `aria.localhost`.
+- The default Playwright E2E **mocks** auth (`e2e/utils/auth.ts`) — it does NOT test real login/logout. For ANY auth change, run the real-auth E2E:
+  `PLAYWRIGHT_NO_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://aria.localhost E2E_TEST_USER=… E2E_TEST_PASS=… npm run test:e2e:auth`
+- NEVER add `app/api/auth/session/route.ts` (shadows NextAuth → bypasses login). Federated logout via `lib/auth.ts keycloakLogout`.

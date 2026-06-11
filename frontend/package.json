@@ -2,7 +2,7 @@
   "name": "aria-web",
   "version": "0.1.0",
   "private": true,
-  "description": "ARIA — AI-Driven Analytics Platform Frontend",
+  "description": "ARIA \u2014 AI-Driven Analytics Platform Frontend",
   "scripts": {
     "dev": "next dev -p 3003",
     "build": "next build",
@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "npx playwright test",
-    "test:e2e:headed": "npx playwright test --headed"
+    "test:e2e:headed": "npx playwright test --headed",
+    "test:e2e:auth": "PLAYWRIGHT_NO_WEBSERVER=1 playwright test auth-flow"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.0",

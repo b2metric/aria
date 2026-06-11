@@ -41,22 +41,21 @@ Detection: `_detect_requested_chart_type`, `_is_chart_type_only_request`, `_want
 - `/chat` redirects unauthenticated users to `signIn("keycloak")`.
 
 ## Dockerized stack (Traefik) — `docker-compose.dev.yml` + `infra/traefik-dynamic.yml`
-The full stack can run behind Traefik on port 80 with hostnames in `/etc/hosts`
-(`127.0.0.1 aria.local api.aria.local auth.aria.local`). Routing:
-`aria.local`→frontend:3003, `api.aria.local`→backend:8000, `auth.aria.local`→keycloak:8080.
+The full stack can run behind Traefik on port 80. macOS `.local` resolution is fraught; we use `.localhost` instead which automatically resolves to loopback on macOS without editing `/etc/hosts` (mostly). Routing:
+`aria.localhost`→frontend:3000, `api.aria.localhost`→backend:8000, `auth.aria.localhost`→keycloak:8080.
 
 **The one rule that makes OIDC work: every actor must use the SAME external issuer URL.**
-- Traefik has **in-cluster network aliases** (`aria.local`, `api.aria.local`, `auth.aria.local`
+- Traefik has **in-cluster network aliases** (`aria.localhost`, `api.aria.localhost`, `auth.aria.localhost`
   on `aria-net`) so containers resolve those hostnames to Traefik — i.e. the browser AND the
-  backend AND next-auth all talk to `http://auth.aria.local/auth`. No split-horizon.
-- Keycloak: `KC_HOSTNAME: "http://auth.aria.local/auth"` (full URL **including `/auth`** — KC26
+  backend AND next-auth all talk to `http://auth.aria.localhost/auth`. No split-horizon.
+- Keycloak: `KC_HOSTNAME: "http://auth.aria.localhost/auth"` (full URL **including `/auth`** — KC26
   builds the issuer from the hostname and does NOT prepend `KC_HTTP_RELATIVE_PATH`),
   `KC_HOSTNAME_STRICT: "false"`, `KC_HTTP_ENABLED: "true"`, `KC_PROXY_HEADERS: "xforwarded"`.
-  Resulting issuer: `http://auth.aria.local/auth/realms/aria`.
-- Must all equal that issuer: frontend `KEYCLOAK_ISSUER` + `NEXT_PUBLIC_KEYCLOAK_ISSUER`,
-  backend `KEYCLOAK_URL=http://auth.aria.local/auth`, and the token `iss` claim.
-- `aria-web` client `redirectUris` in `infra/keycloak/aria-realm.json` must include
-  `http://aria.local/*` (and the next-auth callback `http://aria.local/api/auth/callback/keycloak`).
+  Resulting issuer: `http://auth.aria.localhost/auth/realms/aria`.
+- This exact issuer string must match in frontend `NEXT_PUBLIC_KEYCLOAK_ISSUER`,
+  backend `KEYCLOAK_URL=http://auth.aria.localhost/auth`, and the token `iss` claim.
+- The `aria-web` client in Keycloak must have `Valid Redirect URIs` and `Web Origins` set to
+  `http://aria.localhost/*` (and the next-auth callback `http://aria.localhost/api/auth/callback/keycloak`).
   **Realm changes only apply on re-import** → wipe the volume: `docker volume rm
   b2metric-aria_keycloak_db_data` then `up -d` (dev-only data; no real users).
 - **Frontend dev MUST bind `0.0.0.0`** (`command: npm run dev -- -H 0.0.0.0`). Default
@@ -94,3 +93,11 @@ The full stack can run behind Traefik on port 80 with hostnames in `/etc/hosts`
 - **Keycloak JWKS:** `http://auth.aria.localhost/auth/realms/aria/protocol/openid-connect/certs` (the `/auth` segment is required; resolves in-container too). Token `iss` = `http://auth.aria.localhost/auth/realms/aria` and must match `keycloak_issuer`.
 - **LITELLM_API_KEY:** backend now fails loudly at startup if missing/dummy `sk-1234` (`validate_runtime`). Use `ARIA_SKIP_STARTUP_CHECKS=1` only for offline work.
 - **Frontend hardcoded fallback trap:** `frontend/src/app/chat/page.tsx` + `api/auth/[...nextauth]/route.ts` carry `http://localhost:8080/auth` fallbacks — if `KEYCLOAK_ISSUER`/`NEXT_PUBLIC_KEYCLOAK_ISSUER` env is unset they hit the wrong host. Keep the env set (dev = `auth.aria.localhost/auth`).
+
+## Frontend auth traps (added 2026-06-12)
+
+- **Rogue `app/api/auth/session/route.ts`** shadows NextAuth's session endpoint and returns `{session}` → `useSession()` reads a truthy object → everyone "authenticated" → dashboard shown without login. Do not create it; NextAuth provides this route.
+- **Federated logout** must clear NextAuth (`signOut({redirect:false})`) then `window.location` to the Keycloak end-session URL with `id_token_hint` (helper: `frontend/src/lib/auth.ts`). `signOut({callbackUrl:<cross-origin>})` is silently dropped → SSO persists → silent re-login.
+- **`NEXTAUTH_SECRET`** must be set for the frontend (compose) — needs a `docker compose up -d frontend` restart to apply.
+- **Frontend dev target = `http://aria.localhost`** (dockerized, host `frontend/` bind-mounted → hot-reload). NOT `localhost:3000`. Do not start a second `npm run dev`.
+- **Mocked E2E ≠ real auth.** `e2e/utils/auth.ts` mocks the session; the real flow is only covered by `npm run test:e2e:auth` (real Keycloak). Run it before declaring any auth/login change done.

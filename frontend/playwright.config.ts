@@ -1,5 +1,9 @@
 import { defineConfig } from "@playwright/test";
 
+// Set PLAYWRIGHT_NO_WEBSERVER=1 to run against an already-running stack (e.g. the
+// dockerized app at http://aria.localhost) instead of spawning a local `next dev`.
+const noWebServer = !!process.env.PLAYWRIGHT_NO_WEBSERVER;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -13,10 +17,14 @@ export default defineConfig({
     video: "retain-on-failure",
     trace: "on-first-retry",
   },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3003",
-    reuseExistingServer: !process.env.CI,
-    timeout: 30000,
-  },
+  ...(noWebServer
+    ? {}
+    : {
+        webServer: {
+          command: "npm run dev",
+          url: "http://localhost:3003",
+          reuseExistingServer: !process.env.CI,
+          timeout: 30000,
+        },
+      }),
 });

@@ -171,6 +171,9 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://api.aria.localhost
       - NEXTAUTH_URL=http://aria.localhost
+      # REQUIRED by NextAuth — without it sessions use an unstable auto-generated dev
+      # secret (resets every restart; breaks in prod). Override via .env in real envs.
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-aria-dev-nextauth-secret-change-me}
       # Server-side next-auth issuer MUST equal the browser issuer and include /auth.
       - KEYCLOAK_ISSUER=http://auth.aria.localhost/auth/realms/aria
       - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://auth.aria.localhost/auth/realms/aria

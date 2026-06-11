@@ -91,3 +91,22 @@ chart spec) → render text in chat, chart via `ChartArea`. History via
 ## SafeIframe runtime guard (added 2026-06-11)
 
 `SafeIframe.tsx` now **refuses `srcDocContent` > 1 MB** at runtime (renders a notice instead of `doc.write`) — the code-level guard against the ~5 MB inline-Plotly blob that crashed the React tree. Charts must render from JSON (`chart_data`) via recharts, never inline multi-MB HTML. Enforced by engineering-core:frontend-visual-verification.
+
+## Auth flow (login / logout) — added 2026-06-12
+
+- **Login:** `/` (`app/page.tsx`) shows "Login with Keycloak" when `status === "unauthenticated"` → `signIn("keycloak")` → Keycloak (`auth.aria.localhost/auth`) → callback → dashboard.
+- **Logout:** `lib/auth.ts` `keycloakLogout(idToken)` — clears NextAuth (`signOut({ redirect:false })`) THEN navigates to Keycloak's end-session endpoint with `id_token_hint` + `post_logout_redirect_uri`. Used by both the Sidebar and the chat sidebar.
+
+### Auth pitfalls (these actually broke prod-like dev)
+- **NEVER add `app/api/auth/session/route.ts`.** A custom route there *shadows* NextAuth's own `/api/auth/session`; returning `{ session }` makes `useSession()` see a non-empty object and treat the user as **authenticated** → the dashboard renders for everyone, login is bypassed. (This exact rogue file was the "login akışı bozuk / dashboard'a yönlendiriyor" bug.)
+- **Logout must not rely on `signOut({ callbackUrl: <Keycloak URL> })`** — NextAuth only honors *same-origin* callback URLs, so a cross-origin Keycloak end-session URL is dropped and the SSO cookie survives → the next login is a silent SSO re-auth straight to the dashboard. Use the `keycloakLogout` helper pattern.
+- **`NEXTAUTH_SECRET` is REQUIRED** (set in `docker-compose.dev.yml`). Without it sessions use an unstable auto-generated secret.
+- Keycloak `aria-web` client must list `http://aria.localhost` (and `/*`) under **Valid post logout redirect URIs**.
+
+### Verifying auth (do NOT trust the mocked E2E)
+The default Playwright specs **mock** `/api/auth/session` (`e2e/utils/auth.ts`) — they never exercise real Keycloak. Verify auth changes with the **real-auth** E2E:
+```bash
+PLAYWRIGHT_NO_WEBSERVER=1 PLAYWRIGHT_BASE_URL=http://aria.localhost \
+  E2E_TEST_USER=<user> E2E_TEST_PASS=<pass> npm run test:e2e:auth
+```
+It asserts login → dashboard → logout → **login requires a fresh Keycloak form** (SSO cleared).
