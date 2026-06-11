@@ -5,9 +5,20 @@
 # authenticated request succeeds. Exit != 0 on any failure -> blocks completion.
 set -uo pipefail
 
-BACKEND="${SMOKE_BACKEND_URL:-http://localhost:8000}"
-KC="${SMOKE_KEYCLOAK_URL:-http://localhost:8080/auth}"
-REALM="${SMOKE_REALM:-aria}"
+# Auto-read Keycloak config from backend/.env so the gate matches the EXACT URL the
+# backend uses (no localhost:8080 guess). Env vars still override. Override the .env
+# path with SMOKE_ENV_FILE.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="${SMOKE_ENV_FILE:-$ROOT/backend/.env}"
+envget() { [ -f "$ENV_FILE" ] && sed -n "s/^$1=//p" "$ENV_FILE" | tail -1 | tr -d '"'\''\r'; }
+
+BACKEND="${SMOKE_BACKEND_URL:-http://api.aria.localhost}"
+KC="${SMOKE_KEYCLOAK_URL:-$(envget KEYCLOAK_URL)}";        KC="${KC:-http://localhost:8080/auth}"
+REALM="${SMOKE_REALM:-$(envget KEYCLOAK_REALM)}";          REALM="${REALM:-aria}"
+# Login client: explicit override, else the public browser client (direct-access grant),
+# else whatever the backend uses. aria-web is the frontend's public client.
+CLIENT="${SMOKE_CLIENT_ID:-${SMOKE_LOGIN_CLIENT:-aria-web}}"
 JWKS="$KC/realms/$REALM/protocol/openid-connect/certs"
 TOKEN_URL="$KC/realms/$REALM/protocol/openid-connect/token"
 fail=0
@@ -30,10 +41,11 @@ JC="$(code "$JWKS")"
 [ "$JC" = "200" ] && pass "JWKS 200 ($JWKS)" || bad "JWKS $JC ($JWKS) — login will 500 (check /auth path + realm)"
 
 # 3) optional real login round-trip
-if [ -n "${SMOKE_TEST_USER:-}" ] && [ -n "${SMOKE_TEST_PASS:-}" ] && [ -n "${SMOKE_CLIENT_ID:-}" ]; then
+if [ -n "${SMOKE_TEST_USER:-}" ] && [ -n "${SMOKE_TEST_PASS:-}" ] && [ -n "$CLIENT" ]; then
+  echo "  login client: $CLIENT"
   RESP="$(curl -s --max-time 10 -X POST "$TOKEN_URL" \
     -H 'Content-Type: application/x-www-form-urlencoded' \
-    -d "grant_type=password" -d "client_id=${SMOKE_CLIENT_ID}" \
+    -d "grant_type=password" -d "client_id=${CLIENT}" \
     ${SMOKE_CLIENT_SECRET:+-d "client_secret=${SMOKE_CLIENT_SECRET}"} \
     -d "username=${SMOKE_TEST_USER}" -d "password=${SMOKE_TEST_PASS}" 2>/dev/null)"
   TOKEN="$(printf '%s' "$RESP" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
