@@ -87,3 +87,7 @@ chart spec) → render text in chat, chart via `ChartArea`. History via
 1. Is the **backend up and 200**? `curl -s localhost:8000/api/conversations -H "Authorization: Bearer <t>"`. 500 → Keycloak JWKS URL (above), not the frontend.
 2. Is the response a **JSON chart spec** or a giant HTML blob? If HTML → fix the backend to return data points; don't iframe it.
 3. Only then touch `ChartArea`/`page.tsx`, with a **targeted patch**, and **verify visually** (screenshot localhost:3000) before claiming done.
+
+## SafeIframe runtime guard (added 2026-06-11)
+
+`SafeIframe.tsx` now **refuses `srcDocContent` > 1 MB** at runtime (renders a notice instead of `doc.write`) — the code-level guard against the ~5 MB inline-Plotly blob that crashed the React tree. Charts must render from JSON (`chart_data`) via recharts, never inline multi-MB HTML. Enforced by engineering-core:frontend-visual-verification.
