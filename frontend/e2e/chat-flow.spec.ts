@@ -10,7 +10,7 @@
  *   - Keycloak on http://localhost:8080
  *   - Valid test user credentials in environment
  */
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./utils/auth";
 
 test.describe("Chat flow", () => {
   test("renders the chat page with sidebar and input", async ({ page }) => {

@@ -60,3 +60,5 @@ infra/llm/.env
 codegraph/graph.json
 codegraph/graph.html
 codegraph/drift-audit.json
+frontend/tsconfig.tsbuildinfo
+frontend/test-results/

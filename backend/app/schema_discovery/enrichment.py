@@ -267,7 +267,8 @@ def _update_columns_section(body: str, columns_enrichment: list[ColumnEnrichment
                     enrichment = enrichment_map[col_upper]
                     if enrichment.description:
                         # Update description (last column before closing |)
-                        parts[-2] = enrichment.description[:100]  # Truncate for table
+                        # Remove the [:100] truncate limit to save full user descriptions
+                        parts[-2] = enrichment.description
                         line = " | ".join(parts)
             
             new_lines.append(line)
@@ -317,7 +318,7 @@ def _add_enrichment_section(body: str, enrichment: TableEnrichment) -> str:
         section_lines.append("### Column Descriptions")
         section_lines.append("")
         for col in cols_with_desc:
-            desc = col.description.replace("\n", " ").strip()
+            desc = col.description.replace("\n", " ").strip() if col.description else ""
             section_lines.append(f"- **{col.name}**: {desc}")
         section_lines.append("")
     
