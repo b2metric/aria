@@ -86,3 +86,11 @@ The full stack can run behind Traefik on port 80 with hostnames in `/etc/hosts`
 - Backend: `cd ~/projects/b2metric-aria && .venv/bin/uvicorn backend.app.main:app --port 8000 --reload`
 - Frontend: `cd frontend && npm run dev -- -p 3003`
 - **Never run `next build` while `next dev` is running** — it clobbers `.next` and hangs the dev server.
+
+## Engineering-core operational notes (added 2026-06-11)
+
+- **Real backend ingress is `http://api.aria.localhost`** (Traefik). The `aria-backend` container does NOT publish host `:8000`. If a stale host process squats on `localhost:8000` it may 500 on `/me` — that is NOT the real backend; kill it (`lsof -i :8000`).
+- **Smoke gate:** `bash smoke/check.sh` auto-reads `backend/.env` (`KEYCLOAK_URL`/`KEYCLOAK_REALM`/`KEYCLOAK_CLIENT_ID`); login client defaults to the public `aria-web`. Full round-trip: `SMOKE_TEST_USER=<u> SMOKE_TEST_PASS=<p> bash smoke/check.sh`.
+- **Keycloak JWKS:** `http://auth.aria.localhost/auth/realms/aria/protocol/openid-connect/certs` (the `/auth` segment is required; resolves in-container too). Token `iss` = `http://auth.aria.localhost/auth/realms/aria` and must match `keycloak_issuer`.
+- **LITELLM_API_KEY:** backend now fails loudly at startup if missing/dummy `sk-1234` (`validate_runtime`). Use `ARIA_SKIP_STARTUP_CHECKS=1` only for offline work.
+- **Frontend hardcoded fallback trap:** `frontend/src/app/chat/page.tsx` + `api/auth/[...nextauth]/route.ts` carry `http://localhost:8080/auth` fallbacks — if `KEYCLOAK_ISSUER`/`NEXT_PUBLIC_KEYCLOAK_ISSUER` env is unset they hit the wrong host. Keep the env set (dev = `auth.aria.localhost/auth`).

@@ -164,3 +164,18 @@ gunicorn -k uvicorn.workers.UvicornWorker -w 4 -b 0.0.0.0:8000 app.main:app
 - Middleware: rate limit, circuit breaker in YAML
 - Dashboard: built-in web UI on :8080
 - No config reload needed on container changes
+
+---
+
+## Engineering-core gates & hybrid LLM routing (added 2026-06-11)
+
+The repo now follows the **engineering-core** discipline (hermes-toolkit `skills/engineering-core`). Architecture is anchored in `LOCKED-DECISIONS.md` (compaction-immune ADR ledger) + `AGENTS.md` (read-first).
+
+**Hard gates (enforced in code/CI, not prose):**
+- **Boot+login smoke** — `smoke/check.sh` + CI `smoke-boot` job. Health → Keycloak JWKS (`/auth` path) → OIDC login round-trip → authenticated `GET /me`. Run: `bash smoke/check.sh` (auto-reads `backend/.env`; targets `http://api.aria.localhost`, client `aria-web`). No "done" on a full-stack change without a green smoke.
+- **Backend startup validation** — `backend/app/main.py` lifespan + `core/config.py` `validate_runtime()`: fails loudly on dummy/missing `LITELLM_API_KEY` (no silent `sk-1234`) and unreachable Keycloak JWKS. Bypass for offline/tests: `ARIA_SKIP_STARTUP_CHECKS=1`.
+- **Frontend** — `SafeIframe.tsx` refuses `srcDoc > 1 MB` (the 5 MB Plotly React-crash); charts render from JSON (`chart_data`) via recharts.
+- **Repo-path guard** — `.githooks/pre-commit` (`core.hooksPath=.githooks`): blocks scratch files, >2 MB blobs, nested repos, ground-truth-doc deletion.
+
+**Hybrid LLM routing** (`infra/llm/config.yaml`, LiteLLM behind Traefik at `llm.aria.localhost` / `langfuse.aria.localhost`):
+per-role aliases (`role-architect|lead-dev|backend-codegen|frontend-vision|debugger|reviewer|qa-gate|bulk-worker`), **reviewer ≠ author** via `review-of-<family>` chains, hybrid cloud + local **vLLM** (`local-thinking|vision|embed` via `LOCAL_LLM_BASE`, RTX 6000 — see `infra/llm/RUNBOOK-local-serving.md`), per-role `cost_per_token`, fallbacks crossing local↔cloud. Stack policy: **Python/FastAPI first; Go only for a measured hot path** (engineering-core:stack-decision).

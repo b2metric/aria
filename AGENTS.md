@@ -69,3 +69,10 @@
 - Before claiming "done", run the build/tests and paste the real output.
 - When you make a new architectural choice, append it to
   `docs/technical-architecture.md` so it survives the next session.
+
+## 5. Engineering-core (added 2026-06-11)
+
+- **Ground truth: `LOCKED-DECISIONS.md`** (ADR ledger) — read alongside this file; never re-litigate a locked row.
+- **Hard gates** (code/CI, no "done" without them): boot+login smoke (`bash smoke/check.sh`), backend startup validation (`validate_runtime`), `SafeIframe` >1 MB guard, `.githooks/pre-commit` path guard. Cite run-evidence before claiming done (engineering-core:verification-before-completion).
+- **LLM calls** route via LiteLLM per-role aliases (`infra/llm/config.yaml`); **reviewer ≠ author**. Stack: Python/FastAPI → Go only when measured (engineering-core:stack-decision).
+- Full discipline pack: hermes-toolkit `skills/engineering-core/`.
