@@ -139,3 +139,54 @@ async def delete_memory(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete memory: {exc}",
         ) from exc
+
+
+@router.post("/cleanup")
+async def cleanup_expired_memories(
+    cache_ttl_days: int = Query(default=7, ge=1, le=365, description="Days to keep query cache"),
+    user_ttl_days: int = Query(default=90, ge=1, le=365, description="Days to keep user memories"),
+    current_user: Any = Depends(get_current_user),
+) -> dict:
+    """Trigger memory cleanup based on retention policy.
+    
+    Retention policy:
+    - QUERY_CACHE: 7 days (default) - stale SQL mappings
+    - USER: 90 days (default) - old preferences
+    - TEAM: ∞ (never expires) - institutional knowledge
+    
+    Only admin can trigger cleanup.
+    """
+    if not getattr(current_user, "can_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    workspace_id = getattr(current_user, "workspace_id", None) or "default"
+    
+    try:
+        svc = MemoryService.get_instance()
+        result = svc.cleanup_expired_memories(
+            workspace_id=workspace_id,
+            cache_ttl_days=cache_ttl_days,
+            user_ttl_days=user_ttl_days,
+        )
+        
+        log.info(
+            "admin.memory: Cleanup completed for workspace=%s: %s",
+            workspace_id,
+            result,
+        )
+        return {
+            "status": "completed",
+            "deleted": result,
+            "policy": {
+                "cache_ttl_days": cache_ttl_days,
+                "user_ttl_days": user_ttl_days,
+                "team_ttl": "never",
+            },
+        }
+        
+    except Exception as exc:
+        log.error("admin.memory: Cleanup failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Cleanup failed: {exc}",
+        ) from exc

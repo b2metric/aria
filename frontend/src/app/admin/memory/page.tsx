@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { Trash2, Brain, Users, Database, Filter } from "lucide-react";
+import { Trash2, Brain, Users, Database, Filter, Sparkles } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -25,6 +25,8 @@ export default function MemoryManagerPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<MemoryType>("all");
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanupResult, setCleanupResult] = useState<{ cache: number; user: number } | null>(null);
 
   useEffect(() => {
     if (token) {
@@ -77,6 +79,35 @@ export default function MemoryManagerPage() {
     }
   };
 
+  const handleCleanup = async () => {
+    if (!confirm("This will delete expired memories:\n- Query cache older than 7 days\n- User preferences older than 90 days\n\nTeam conventions are never deleted.\n\nContinue?")) {
+      return;
+    }
+    
+    setCleaning(true);
+    setCleanupResult(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/memory/cleanup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setCleanupResult(data.deleted);
+        // Refresh the list
+        fetchMemories();
+      } else {
+        const err = await res.json();
+        alert(`Error: ${err.detail || "Cleanup failed"}`);
+      }
+    } catch (err) {
+      console.error("Failed to cleanup memories", err);
+    } finally {
+      setCleaning(false);
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case "user":
@@ -111,30 +142,48 @@ export default function MemoryManagerPage() {
         </p>
       </div>
 
-      {/* Filter */}
-      <div className="mb-6 flex items-center gap-3">
-        <Filter className="w-5 h-5 text-gray-400" />
-        <div className="flex gap-2">
-          {(["all", "user", "team", "cache"] as MemoryType[]).map((type) => (
-            <button
-              key={type}
-              onClick={() => setFilter(type)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
-                filter === type
-                  ? "bg-blue-50 text-blue-700 border-blue-200"
-                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
-              }`}
-            >
-              {type === "all" ? "All" : type.charAt(0).toUpperCase() + type.slice(1)}
-              {type !== "all" && (
-                <span className="ml-1.5 text-xs text-gray-400">
-                  ({memories.filter((m) => filter === "all" || m.type === type).length})
-                </span>
-              )}
-            </button>
-          ))}
+      {/* Filter + Cleanup */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Filter className="w-5 h-5 text-gray-400" />
+          <div className="flex gap-2">
+            {(["all", "user", "team", "cache"] as MemoryType[]).map((type) => (
+              <button
+                key={type}
+                onClick={() => setFilter(type)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
+                  filter === type
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {type === "all" ? "All" : type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
+        
+        <button
+          onClick={handleCleanup}
+          disabled={cleaning}
+          className={`px-4 py-2 text-sm font-medium rounded-lg border transition-all flex items-center gap-2 ${
+            cleaning
+              ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
+              : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          {cleaning ? "Cleaning..." : "Cleanup Expired"}
+        </button>
       </div>
+
+      {/* Cleanup Result */}
+      {cleanupResult && (
+        <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+          Cleanup complete: {cleanupResult.cache} cache entries deleted
+          {cleanupResult.user > 0 && `, ${cleanupResult.user} user entries deleted`}
+        </div>
+      )}
 
       {/* List */}
       {loading ? (
@@ -211,13 +260,18 @@ export default function MemoryManagerPage() {
         </div>
       )}
       
-      {/* Stats */}
+      {/* Stats + Retention Info */}
       {!loading && memories.length > 0 && (
-        <div className="mt-4 flex gap-4 text-sm text-gray-500">
-          <span>Total: {memories.length}</span>
-          <span>User: {memories.filter((m) => m.type === "user").length}</span>
-          <span>Team: {memories.filter((m) => m.type === "team").length}</span>
-          <span>Cache: {memories.filter((m) => m.type === "cache").length}</span>
+        <div className="mt-4 flex justify-between text-sm text-gray-500">
+          <div className="flex gap-4">
+            <span>Total: {memories.length}</span>
+            <span>User: {memories.filter((m) => m.type === "user").length}</span>
+            <span>Team: {memories.filter((m) => m.type === "team").length}</span>
+            <span>Cache: {memories.filter((m) => m.type === "cache").length}</span>
+          </div>
+          <div className="text-xs text-gray-400">
+            Retention: Cache=7d, User=90d, Team=∞
+          </div>
         </div>
       )}
     </div>
