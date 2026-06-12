@@ -250,6 +250,24 @@ export async function deleteConversation(conversationId: string, tokenOverride?:
   if (!res.ok) throw new Error(`Failed to delete conversation: ${res.status}`);
 }
 
+/**
+ * Fetch agent memory entries for the admin's workspace/user (admin only).
+ *
+ * Hits the FastAPI backend at ${API_BASE} — NOT a relative path. A relative
+ * "/api/admin/memory" resolves to the Next.js dev server (which has no such
+ * route) and returns its HTML 404 page, breaking JSON.parse with
+ * "Unexpected token '<'". The backend mounts this router at /api/admin/memory.
+ */
+export async function fetchAdminMemory(token: string): Promise<any[]> {
+  const res = await fetch(`${API_BASE}/api/admin/memory`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) throw new Error(`Failed to fetch admin memory: ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
 export interface VaultTable {
   name: string;
   description?: string;

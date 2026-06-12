@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { fetchAdminMemory } from "@/lib/api";
 
 export default function MemoryManagerPage() {
   const { data: session } = useSession();
@@ -12,15 +13,9 @@ export default function MemoryManagerPage() {
   useEffect(() => {
     if (!session?.accessToken) return;
 
-    fetch("/api/admin/memory", {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-      },
-    })
-      .then((res) => res.json())
+    fetchAdminMemory(session.accessToken)
       .then((data) => {
-        // Handle backend payload, defaulting to empty array
-        setMemories(Array.isArray(data) ? data : []);
+        setMemories(data);
         setLoading(false);
       })
       .catch((err) => {
