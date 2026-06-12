@@ -58,9 +58,15 @@ export const authOptions: NextAuthOptions = {
       issuer: KEYCLOAK_ISSUER,
       authorization: {
         params: {
-          // offline_access guarantees Keycloak issues a refresh_token so the
-          // jwt callback can rotate the short-lived access token.
-          scope: "openid profile email offline_access",
+          // The Keycloak `aria-web` client only has the `openid` scope assigned;
+          // requesting `profile`, `email`, or `offline_access` makes Keycloak
+          // reject the whole request with invalid_scope -> NextAuth error=Callback,
+          // which broke every login/logout round-trip (verified: only `openid`
+          // is accepted by this client). Roles come from the access-token JWT and
+          // a refresh_token is issued for the auth-code flow regardless of scope,
+          // so `openid` is sufficient. To request profile/email/offline_access,
+          // first add them as client scopes on aria-web in Keycloak admin.
+          scope: "openid",
         },
       },
     }),
