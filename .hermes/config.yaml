@@ -15,7 +15,7 @@
 #   - auxiliary compression model deepseek-v4-flash -> gemini-chat: summary
 #     quality = what the agent remembers; flash had only 256K and summarized poorly.
 #   - agent.max_turns 90 -> 35: shorter scoped runs; less compounding drift.
-#   - mcp_servers trimmed 13 -> 2 (github, supabase): 432 tools = ~79K tokens of
+#   - mcp_servers trimmed 13 -> 1 (github): 432 tools = ~79K tokens of
 #     schema overhead per request. Business MCPs (odoo/slack/stripe/sendgrid/jira/
 #     ga4/sentry/search-console/google-workspace/vercel/odoo-business) preserved in
 #     config.yaml.bak.aria-tuning-* — copy a block back here to re-enable.
@@ -86,12 +86,6 @@ auxiliary:
     extra_body: {}
     context_length: 1000000
 mcp_servers:
-  supabase:
-    url: https://mcp.supabase.com/mcp?project_ref=${SUPABASE_PROJECT_REF}
-    headers:
-      Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}
-    timeout: 180
-    connect_timeout: 60
   github:
     command: npx
     args:
