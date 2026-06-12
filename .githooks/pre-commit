@@ -33,5 +33,21 @@ while IFS= read -r f; do
   case "$f" in AGENTS.md|LOCKED-DECISIONS.md) echo "BLOCKED: $f is being deleted — it is the ground-truth anchor.";  fail=1;; esac
 done < <(git diff --cached --name-only --diff-filter=D)
 
+# 5) secret scan — block committing live credentials (engineering-core:secret-safety).
+#    Config (e.g. .hermes/config.yaml) must reference secrets as ${VAR} (Hermes expands
+#    them at load) and keep real values in a gitignored .env — never inline.
+SECRET_RE='sk-[A-Za-z0-9]{20,}|xoxb-[A-Za-z0-9-]{10,}|gh[pousr]_[A-Za-z0-9]{30,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+while IFS= read -r f; do
+  case "$f" in *.env.example|*.lock) continue;; esac
+  blob=$(git show ":$f" 2>/dev/null) || continue
+  hits=$(printf '%s\n' "$blob" | grep -nIaE "$SECRET_RE" 2>/dev/null | grep -vE '\$\{[A-Za-z_][A-Za-z0-9_]*\}|os\.environ' || true)
+  if [ -n "$hits" ]; then
+    echo "BLOCKED: possible hard-coded secret in staged $f:"
+    printf '%s\n' "$hits" | head -3 | sed 's/^/    /'
+    echo "  -> reference secrets as \${VAR} and keep values in a gitignored .env"
+    fail=1
+  fi
+done < <(staged)
+
 [ "$fail" -eq 1 ] && { echo "--- pre-commit guard failed (engineering-core) ---"; exit 1; }
 exit 0
