@@ -221,7 +221,7 @@ model_list:
       max_tokens: 32000
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
-    model_info: { role_tier:reasoning }
+    model_info: { role_tier: reasoning }
 
   # -- Lead dev / writing-plans (mid) --
   - model_name: role-lead-dev
@@ -230,7 +230,7 @@ model_list:
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-    model_info: { role_tier:mid }
+    model_info: { role_tier: mid }
 
   # -- Backend codegen (cheap-fast, high volume; local-first when GPU up) --
   - model_name: role-backend-codegen
@@ -240,7 +240,7 @@ model_list:
       api_key: os.environ/DEEPSEEK_API_KEY
       input_cost_per_token: 0.00000174
       output_cost_per_token: 0.00000348
-    model_info: { role_tier:cheap-fast, max_input_tokens: 1000000 }
+    model_info: { role_tier: cheap-fast, max_input_tokens: 1000000 }
   - model_name: role-backend-codegen        # local-first (active when LOCAL_LLM_BASE set)
     litellm_params:
       model: openai/local-thinking
@@ -248,7 +248,7 @@ model_list:
       api_key: os.environ/LOCAL_LLM_KEY
       input_cost_per_token: 0
       output_cost_per_token: 0
-    model_info: { role_tier:cheap-fast, weight: 2 }
+    model_info: { role_tier: cheap-fast, weight: 2 }
 
   # -- Frontend (mid + VISION; only role that needs to read screenshots) --
   - model_name: role-frontend-vision
@@ -257,7 +257,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.00001
-    model_info: { role_tier:vision }
+    model_info: { role_tier: vision }
 
   # -- Systematic debugger / root-cause (reasoning) --
   - model_name: role-debugger
@@ -268,7 +268,7 @@ model_list:
       max_tokens: 32000
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
-    model_info: { role_tier:reasoning }
+    model_info: { role_tier: reasoning }
 
   # -- Code reviewer (reasoning; route via review-of-<author-family> for diversity) --
   - model_name: role-reviewer
@@ -277,7 +277,7 @@ model_list:
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
-    model_info: { role_tier:reasoning }
+    model_info: { role_tier: reasoning }
 
   # -- QA / smoke / verification gate (cheap-fast, mechanical) --
   - model_name: role-qa-gate
@@ -286,7 +286,7 @@ model_list:
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000005
-    model_info: { role_tier:cheap-fast }
+    model_info: { role_tier: cheap-fast }
 
   # -- Bulk worker (cheapest; renames, boilerplate, log summarization) --
   - model_name: role-bulk-worker
@@ -296,7 +296,7 @@ model_list:
       api_key: os.environ/DEEPSEEK_API_KEY
       input_cost_per_token: 0.00000014
       output_cost_per_token: 0.00000028
-    model_info: { role_tier:cheapest }
+    model_info: { role_tier: cheapest }
 
   # -- Reviewer-diversity aliases: reviewer MUST be a DIFFERENT family than author.
   #    Orchestrator passes the author family -> picks review-of-<family>; the
