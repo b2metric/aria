@@ -150,8 +150,16 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      # Wait for Keycloak's healthcheck (mgmt /auth/health/ready) before the backend
+      # boots, so the JWKS startup gate doesn't race a still-booting Keycloak and exit
+      # (that race left api.aria.localhost 502 -> surfaced in the browser as "CORS").
+      # The backend ALSO retries JWKS with backoff for residual Traefik routing lag.
+      keycloak:
+        condition: service_healthy
     networks:
       - aria-net
 

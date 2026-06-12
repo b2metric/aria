@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -43,22 +44,42 @@ async def lifespan(app: FastAPI):
     if not _truthy(os.environ.get("ARIA_SKIP_STARTUP_CHECKS")):
         settings = get_settings()
         problems = settings.validate_runtime()
-        try:
-            async with httpx.AsyncClient(
-                verify=settings.keycloak_verify_ssl, timeout=5.0
-            ) as client:
-                resp = await client.get(settings.keycloak_jwks_url)
-            if resp.status_code != 200:
-                problems.append(
+        # Keycloak (JVM + realm import) and Traefik routing can lag the backend on
+        # a cold `docker compose up`; a single probe races and kills the backend
+        # (JWKS 502 -> startup fail -> exit -> api 502, which surfaces in the browser
+        # as a CORS error). Retry with backoff up to ~60s before failing loud — this
+        # tolerates slow startup WITHOUT weakening the gate: a genuinely unreachable
+        # or misconfigured Keycloak still fails after the retries are exhausted.
+        attempts = int(os.environ.get("ARIA_JWKS_STARTUP_ATTEMPTS", "30"))
+        delay = float(os.environ.get("ARIA_JWKS_STARTUP_DELAY", "2.0"))
+        jwks_problem: str | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                async with httpx.AsyncClient(
+                    verify=settings.keycloak_verify_ssl, timeout=5.0
+                ) as client:
+                    resp = await client.get(settings.keycloak_jwks_url)
+                if resp.status_code == 200:
+                    jwks_problem = None
+                    break
+                jwks_problem = (
                     f"Keycloak JWKS {settings.keycloak_jwks_url} returned "
                     f"{resp.status_code} (expected 200). Logins will fail "
                     "(check the /auth path / realm)."
                 )
-        except Exception as exc:  # noqa: BLE001 — startup gate must report any failure
-            problems.append(
-                f"Keycloak JWKS {settings.keycloak_jwks_url} unreachable: {exc!r}. "
-                "Logins will fail."
-            )
+            except Exception as exc:  # noqa: BLE001 — startup gate must report any failure
+                jwks_problem = (
+                    f"Keycloak JWKS {settings.keycloak_jwks_url} unreachable: {exc!r}. "
+                    "Logins will fail."
+                )
+            if attempt < attempts:
+                logger.warning(
+                    "Keycloak JWKS not ready (%d/%d): %s — retrying in %.1fs",
+                    attempt, attempts, jwks_problem, delay,
+                )
+                await asyncio.sleep(delay)
+        if jwks_problem:
+            problems.append(jwks_problem)
         if problems:
             for p in problems:
                 logger.critical("STARTUP CHECK FAILED: %s", p)
