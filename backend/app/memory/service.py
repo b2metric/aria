@@ -176,10 +176,10 @@ class MemoryService:
         all_memories = []
 
         try:
-            # Search user memories (Mem0 v0.1.x uses filters instead of user_id)
+            # Search user memories (Mem0 0.1.x API: user_id is a direct parameter)
             user_results = self._memory.search(
                 query=question,
-                filters={"user_id": f"{workspace_id}:{user_id}"},
+                user_id=f"{workspace_id}:{user_id}",
                 limit=limit,
             )
             if user_results and "results" in user_results:
@@ -190,7 +190,7 @@ class MemoryService:
             if team_id:
                 team_results = self._memory.search(
                     query=question,
-                    filters={"user_id": f"{workspace_id}:team:{team_id}"},
+                    user_id=f"{workspace_id}:team:{team_id}",
                     limit=limit,
                 )
                 if team_results and "results" in team_results:
@@ -200,7 +200,7 @@ class MemoryService:
             # Search query cache (workspace-wide)
             cache_results = self._memory.search(
                 query=question,
-                filters={"user_id": f"{workspace_id}:query_cache"},
+                user_id=f"{workspace_id}:query_cache",
                 limit=limit,
             )
             if cache_results and "results" in cache_results:
