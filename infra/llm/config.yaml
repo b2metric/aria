@@ -221,7 +221,7 @@ model_list:
       max_tokens: 32000
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
-    model_info: { tier: reasoning }
+    model_info: { role_tier:reasoning }
 
   # -- Lead dev / writing-plans (mid) --
   - model_name: role-lead-dev
@@ -230,7 +230,7 @@ model_list:
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
-    model_info: { tier: mid }
+    model_info: { role_tier:mid }
 
   # -- Backend codegen (cheap-fast, high volume; local-first when GPU up) --
   - model_name: role-backend-codegen
@@ -240,7 +240,7 @@ model_list:
       api_key: os.environ/DEEPSEEK_API_KEY
       input_cost_per_token: 0.00000174
       output_cost_per_token: 0.00000348
-    model_info: { tier: cheap-fast, max_input_tokens: 1000000 }
+    model_info: { role_tier:cheap-fast, max_input_tokens: 1000000 }
   - model_name: role-backend-codegen        # local-first (active when LOCAL_LLM_BASE set)
     litellm_params:
       model: openai/local-thinking
@@ -248,7 +248,7 @@ model_list:
       api_key: os.environ/LOCAL_LLM_KEY
       input_cost_per_token: 0
       output_cost_per_token: 0
-    model_info: { tier: cheap-fast, weight: 2 }
+    model_info: { role_tier:cheap-fast, weight: 2 }
 
   # -- Frontend (mid + VISION; only role that needs to read screenshots) --
   - model_name: role-frontend-vision
@@ -257,7 +257,7 @@ model_list:
       api_key: os.environ/GEMINI_API_KEY
       input_cost_per_token: 0.000002
       output_cost_per_token: 0.00001
-    model_info: { tier: vision }
+    model_info: { role_tier:vision }
 
   # -- Systematic debugger / root-cause (reasoning) --
   - model_name: role-debugger
@@ -268,7 +268,7 @@ model_list:
       max_tokens: 32000
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
-    model_info: { tier: reasoning }
+    model_info: { role_tier:reasoning }
 
   # -- Code reviewer (reasoning; route via review-of-<author-family> for diversity) --
   - model_name: role-reviewer
@@ -277,7 +277,7 @@ model_list:
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
-    model_info: { tier: reasoning }
+    model_info: { role_tier:reasoning }
 
   # -- QA / smoke / verification gate (cheap-fast, mechanical) --
   - model_name: role-qa-gate
@@ -286,7 +286,7 @@ model_list:
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000005
-    model_info: { tier: cheap-fast }
+    model_info: { role_tier:cheap-fast }
 
   # -- Bulk worker (cheapest; renames, boilerplate, log summarization) --
   - model_name: role-bulk-worker
@@ -296,7 +296,7 @@ model_list:
       api_key: os.environ/DEEPSEEK_API_KEY
       input_cost_per_token: 0.00000014
       output_cost_per_token: 0.00000028
-    model_info: { tier: cheapest }
+    model_info: { role_tier:cheapest }
 
   # -- Reviewer-diversity aliases: reviewer MUST be a DIFFERENT family than author.
   #    Orchestrator passes the author family -> picks review-of-<family>; the
@@ -350,6 +350,30 @@ model_list:
       model: openai/local-embed
       api_base: os.environ/LOCAL_LLM_BASE
       api_key: os.environ/LOCAL_LLM_KEY
+
+# Router-level retry policy (engineering-core: billing/auth fallback robustness).
+# retry_policy is ONLY a Router arg and MUST live under router_settings (the proxy
+# forwards router_settings keys into litellm.Router(); litellm_settings is NOT
+# scanned for retry_policy). When a retry_policy is set, Router.async_function_with_retries
+# sets _retry_policy_applies=True and SKIPS should_retry_this_error -- the single place
+# a non-retryable 400/401 could be re-raised in a way that some main-stable builds fail
+# to route onward (see LiteLLM #24320 Anthropic credit-balance 400, #12503 400-not-falling-back).
+# Result: BadRequestError (Anthropic "credit balance too low", HTTP 400) and
+# AuthenticationError (key not injected, HTTP 401) now cleanly exhaust (0 retries -- no
+# wasted calls on a doomed bad key/empty wallet) and fall through to the EXISTING
+# litellm_settings.fallbacks chain (claude-opus -> claude-sonnet -> gemini-reasoner, etc).
+# Transient classes keep retrying (mirrors litellm_settings.num_retries: 2).
+# NOTE: fallbacks/context_window_fallbacks intentionally stay under litellm_settings
+# (Router reads `fallbacks or litellm.fallbacks`); they are NOT duplicated here so the
+# existing chains are not overridden/blanked by router_settings precedence.
+router_settings:
+  retry_policy:
+    BadRequestErrorRetries: 0
+    AuthenticationErrorRetries: 0
+    TimeoutErrorRetries: 2
+    RateLimitErrorRetries: 2
+    InternalServerErrorRetries: 2
+    ContentPolicyViolationErrorRetries: 2
 
 litellm_settings:
   drop_params: true
