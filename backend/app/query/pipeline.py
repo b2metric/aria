@@ -34,8 +34,116 @@ from backend.app.query import (
     QueryStatus,
 )
 from backend.app.db import DBConfig, DatabaseType
+from backend.app.memory.service import MemoryService
 
 logger = logging.getLogger(__name__)
+
+
+# ── User Preference Detection ─────────────────────────────────────────────────
+
+
+def _detect_user_correction(question: str, prev_messages: list) -> dict | None:
+    """Detect if user is correcting a previous result.
+    
+    Patterns:
+    - "no, I meant X" / "hayır, X'i kastetmiştim"
+    - "not X, use Y" / "X değil, Y kullan"
+    - "actually I want X" / "aslında X istiyorum"
+    - "wrong column, use X" / "yanlış kolon, X kullan"
+    
+    Returns dict with correction info if detected, None otherwise.
+    """
+    q = question.lower()
+    
+    correction_patterns = [
+        # English
+        (r"\b(no|not)\b.*(meant|want|use|should be|i need)\s+(\w+)", "correction"),
+        (r"\bactually\b.*(want|need|use|meant)\s+(\w+)", "correction"),
+        (r"\bwrong\b.*(column|table|field).*(use|should be)\s+(\w+)", "column_correction"),
+        (r"\binstead of\b.*\buse\s+(\w+)", "correction"),
+        # Turkish
+        (r"\b(hayır|yanlış|değil)\b.*(kastet|kullan|olmalı|istiyorum)\s*(\w+)?", "correction"),
+        (r"\baslında\b.*(istiyorum|kullan|lazım)\s*(\w+)?", "correction"),
+    ]
+    
+    for pattern, correction_type in correction_patterns:
+        match = re.search(pattern, q, re.IGNORECASE)
+        if match:
+            # Extract what they want
+            groups = match.groups()
+            target = groups[-1] if groups[-1] else None
+            return {
+                "type": correction_type,
+                "target": target,
+                "original_question": question,
+            }
+    
+    return None
+
+
+def _detect_chart_preference(question: str) -> dict | None:
+    """Detect chart type preference from user message.
+    
+    E.g., "always show as bar chart", "I prefer pie charts"
+    """
+    q = question.lower()
+    
+    preference_patterns = [
+        (r"\b(always|prefer|like)\b.*(bar|line|pie|area|scatter|table)", "chart_type"),
+        (r"\b(her zaman|tercih|seviyorum)\b.*(bar|çizgi|pasta|alan|tablo)", "chart_type"),
+    ]
+    
+    chart_map = {
+        "bar": "bar", "line": "line", "pie": "pie", "area": "area", 
+        "scatter": "scatter", "table": "table",
+        "çizgi": "line", "pasta": "pie", "alan": "area", "tablo": "table",
+    }
+    
+    for pattern, pref_type in preference_patterns:
+        match = re.search(pattern, q, re.IGNORECASE)
+        if match:
+            chart_word = match.group(2).lower()
+            chart_type = chart_map.get(chart_word)
+            if chart_type:
+                return {
+                    "type": pref_type,
+                    "value": chart_type,
+                    "original_question": question,
+                }
+    
+    return None
+
+
+def _extract_preference_from_successful_query(
+    question: str,
+    sql: str,
+    table: str,
+    columns_used: list[str],
+) -> str | None:
+    """Extract implicit preference from successful query patterns.
+    
+    E.g., if user asks for "revenue" and we used TOPUP_AMOUNT successfully,
+    store: "User uses TOPUP_AMOUNT for revenue queries"
+    """
+    q = question.lower()
+    
+    # Revenue/amount mapping
+    if any(w in q for w in ["revenue", "gelir", "amount", "tutar"]):
+        amount_cols = [c for c in columns_used if any(
+            x in c.lower() for x in ["amount", "revenue", "total", "sum", "topup", "bill"]
+        )]
+        if amount_cols:
+            return f"User associates '{amount_cols[0]}' with revenue/amount queries on {table}"
+    
+    # Count/subscriber mapping  
+    if any(w in q for w in ["subscriber", "customer", "abone", "müşteri", "count"]):
+        id_cols = [c for c in columns_used if any(
+            x in c.lower() for x in ["msisdn", "subscriber", "customer", "id", "contrno"]
+        )]
+        if id_cols:
+            return f"User uses '{id_cols[0]}' for subscriber/customer counts on {table}"
+    
+    return None
 
 
 async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[dict]:
@@ -888,7 +996,6 @@ async def process_query(
     5. RENDERING_CHART — chart builder + Plotly render + MinIO upload
     6. COMPLETE — final response ready
     """
-    from backend.app.memory.service import MemoryService
     from backend.app.query.conversation import (
         append_message,
         get_conversation,
@@ -1120,19 +1227,60 @@ async def process_query(
     }
 
     # Stage 5.5: STORE_MEMORY
-    # Sadece veri donduyse (success rate %100 ise) SQL cache'e veya pattern hafizasina at
+    # Store query cache + detect user preferences from successful queries
     if len(rows) > 0:
         try:
-            # Arka planda await blocklamamak icin asenkron degil, hizlica yolluyoruz (veya async function cevrilmeli, service senkron oldugu icin direkt calisir)
+            # Extract table name from SQL for better context
+            table_match = re.search(r'\bFROM\s+(\w+)', sql, re.IGNORECASE)
+            table_name = table_match.group(1) if table_match else "unknown"
+            
+            # Extract columns used from SQL
+            select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql, re.IGNORECASE | re.DOTALL)
+            columns_used = []
+            if select_match:
+                cols_str = select_match.group(1)
+                # Extract column names (simplified)
+                columns_used = re.findall(r'\b([A-Z_][A-Z0-9_]*)\b', cols_str, re.IGNORECASE)
+            
+            # 1. Store query cache (existing)
             memory_svc.store_query(
                 question=request.question,
                 sql=sql,
-                table="unknown", # We can extract best_table if needed, mock for now
+                table=table_name,
                 user_id=user_id,
                 workspace_id=workspace_id,
                 row_count=len(rows)
             )
-            logger.info("Successfully stored query context in Mem0 MemoryService")
+            logger.info("Stored query cache for user %s", user_id)
+            
+            # 2. Detect and store user preferences from successful patterns
+            preference = _extract_preference_from_successful_query(
+                question=request.question,
+                sql=sql,
+                table=table_name,
+                columns_used=columns_used,
+            )
+            if preference:
+                memory_svc.store_user_preference(
+                    preference=preference,
+                    user_id=user_id,
+                    workspace_id=workspace_id,
+                    metadata={"table": table_name, "columns": columns_used[:5]},
+                )
+                logger.info("Stored user preference: %s", preference[:50])
+            
+            # 3. Detect explicit chart preference
+            chart_pref = _detect_chart_preference(request.question)
+            if chart_pref:
+                pref_text = f"User prefers {chart_pref['value']} charts for data visualization"
+                memory_svc.store_user_preference(
+                    preference=pref_text,
+                    user_id=user_id,
+                    workspace_id=workspace_id,
+                    metadata={"chart_type": chart_pref['value']},
+                )
+                logger.info("Stored chart preference: %s", chart_pref['value'])
+                
         except Exception as e:
             logger.warning("Failed to store memory: %s", e)
             
