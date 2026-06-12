@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -40,12 +40,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               href="/admin/memory" 
               className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
                 ${isCollapsed ? "justify-center" : "justify-start gap-3"}
-                ${pathname?.includes("/admin/memory") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+                ${pathname?.includes("/admin/memory") && !pathname?.includes("team-memory") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
               `}
               title="Memory Manager"
             >
-              <Settings className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Memory Manager</span>}
+              <Brain className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Agent Memory</span>}
+            </Link>
+            
+            <Link 
+              href="/admin/team-memory" 
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/team-memory") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Team Conventions"
+            >
+              <Users className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Team Conventions</span>}
             </Link>
             
             <Link 
