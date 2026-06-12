@@ -1,4 +1,7 @@
-"""initial_schema — all 13 tables + 10 enum types + pgvector extension.
+"""initial_schema — all 13 tables + 10 enum types.
+
+Embeddings are plain Postgres float arrays; vector search lives in Qdrant
+(LOCKED-DECISIONS #1: pgvector REMOVED). No vector extension is required.
 
 Revision ID: ce0a16365076
 Revises:
@@ -33,9 +36,6 @@ ENUMS = [
 
 
 def upgrade() -> None:
-    # ── Extension ────────────────────────────────────────────────────
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
-
     # ── Enum types ───────────────────────────────────────────────────
     for name, values in ENUMS:
         enum_type = postgresql.ENUM(*values, name=name, create_type=False)
@@ -210,7 +210,7 @@ def upgrade() -> None:
         sa.Column("ttl_seconds", sa.Integer(), nullable=True),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("embedding", postgresql.ARRAY(sa.Float(), dimensions=1536), nullable=True,
-                  comment="pgvector embedding (1536-d)"),
+                  comment="embedding (1536-d float array; vectors in Qdrant)"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
@@ -230,7 +230,7 @@ def upgrade() -> None:
         sa.Column("tags", postgresql.ARRAY(sa.String()), server_default=sa.text("'{}'::text[]")),
         sa.Column("is_active", sa.Boolean(), server_default=sa.text("true")),
         sa.Column("embedding", postgresql.ARRAY(sa.Float(), dimensions=1536), nullable=True,
-                  comment="pgvector embedding (1536-d)"),
+                  comment="embedding (1536-d float array; vectors in Qdrant)"),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
     )
