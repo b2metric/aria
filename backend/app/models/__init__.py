@@ -13,6 +13,7 @@ from . import (  # noqa: F401  (imported for metadata registration, not direct u
     artifact,
     database,
     enums,
+    governance,
     memory,
     organization,
     query,
