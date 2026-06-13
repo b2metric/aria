@@ -2,14 +2,14 @@
 
 This pipeline transforms natural language questions into SQL queries,
 executes them, feeds results through the chart builder (heuristic + Plotly),
-uploads rendered HTML/PNG/CSV to MinIO, and streams results via SSE.
+uploads a static PNG + CSV chart artifact to MinIO, and streams results via SSE.
 
 Pipeline stages:
   1. THINKING — validating input
   2. GENERATING_SQL — schema discovery + SQL generation
   3. SQL_READY — SQL preview available
   4. SQL_EXECUTING — executing query against database
-  5. RENDERING_CHART — chart builder + Plotly render + MinIO upload
+  5. RENDERING_CHART — chart builder → Recharts JSON + MinIO PNG/CSV artifact
   6. COMPLETE — final response ready
 """
 
@@ -20,10 +20,14 @@ import json
 import logging
 import re
 from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.artifact_store import ArtifactStore
 from agents.chart_builder import run_chart_pipeline_sync
@@ -146,19 +150,30 @@ def _extract_preference_from_successful_query(
     return None
 
 
-async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[dict]:
+async def _get_available_tables(
+    engine: AsyncEngine,
+    workspace_id: str,
+    db: "AsyncSession | None" = None,
+    team_id: str | None = None,
+) -> list[dict]:
     """Discover available tables from Obsidian vault (multi-tenant).
-    
+
     Returns list of dicts with: name, keywords, description (for semantic matching).
+
+    When *db* and *team_id* are provided, a ``TeamVaultPolicy`` lookup is
+    performed and the table list is pruned to only include tables listed in
+    ``policy.allowed_tables``.  If no policy exists for the team the full
+    vault table list is returned unchanged.
     """
     import glob
     import os
     import pathlib
-    
+    import uuid as _uuid
+
     # Use absolute path based on project root
     project_root = pathlib.Path(__file__).parent.parent.parent.parent
     vault_path = os.path.join(project_root, "docs", "vaults", workspace_id, "tables")
-    
+
     try:
         files = glob.glob(os.path.join(vault_path, "*.md"))
         tables = []
@@ -173,47 +188,86 @@ async def _get_available_tables(engine: AsyncEngine, workspace_id: str) -> list[
             try:
                 with open(f) as fp:
                     content = fp.read()
-                
+
                 # Extract generic metadata from frontmatter or text
                 domain_match = re.search(r'(?:domain:\s*["\']?([^"\'\n]+)|## Domain\s*\n([^\n#]+))', content, re.IGNORECASE)
                 topic_match = re.search(r'(?:topic:\s*["\']?([^"\'\n]+)|## Topic\s*\n([^\n#]+))', content, re.IGNORECASE)
                 order_match = re.search(r'(?:order:\s*(\d+))', content, re.IGNORECASE)
-                
+
                 if domain_match:
                     domain = (domain_match.group(1) or domain_match.group(2)).strip()
                 if topic_match:
                     topic = (topic_match.group(1) or topic_match.group(2)).strip()
                 if order_match:
                     order = int(order_match.group(1).strip())
-                    
+
                 # Extract insights as list
                 insights_match = re.search(r'(?:insights:\s*\n(.*?)---)', content, re.IGNORECASE | re.DOTALL)
                 if insights_match:
                     lines = insights_match.group(1).strip().split('\n')
                     insights = [line.strip().lstrip('-').strip() for line in lines if line.strip() and not line.strip().startswith('#')]
-                
+
                 # Extract keywords section
                 kw_match = re.search(r'(?:keywords:\s*["\']?([^"\'\n]+)|## Keywords\s*\n([^\n#]+))', content, re.IGNORECASE)
                 if kw_match:
                     keywords = (kw_match.group(1) or kw_match.group(2)).strip()
-                    
+
                 # Extract description section
                 desc_match = re.search(r'(?:description:\s*["\']?([^"\'\n]+)|## Description\s*\n([^\n#]+))', content, re.IGNORECASE)
                 if desc_match:
                     description = (desc_match.group(1) or desc_match.group(2)).strip()
-                    
+
             except Exception:
                 pass
-            
+
             tables.append({
-                "name": name, 
-                "keywords": keywords, 
+                "name": name,
+                "keywords": keywords,
                 "description": description,
                 "domain": domain,
                 "topic": topic,
                 "order": order,
                 "insights": insights
             })
+
+        # ── TeamVaultPolicy pruning ───────────────────────────────────────
+        if db is not None and team_id:
+            try:
+                from sqlalchemy import select as sa_select
+
+                from backend.app.models.governance import TeamVaultPolicy
+
+                # Accept team_id as either a UUID string or a raw UUID
+                if isinstance(team_id, str):
+                    try:
+                        team_uuid = _uuid.UUID(team_id)
+                    except ValueError:
+                        logger.warning("Invalid team_id UUID: %s", team_id)
+                        return tables
+                else:
+                    team_uuid = team_id
+
+                result = await db.execute(
+                    sa_select(TeamVaultPolicy).where(
+                        TeamVaultPolicy.team_id == team_uuid,
+                        TeamVaultPolicy.is_active == True,  # noqa: E712
+                    )
+                )
+                policy = result.scalars().first()
+
+                if policy and policy.allowed_tables:
+                    allowed = set(policy.allowed_tables)
+                    original_count = len(tables)
+                    tables = [t for t in tables if t["name"] in allowed]
+                    logger.info(
+                        "Vault policy %r applied: pruned %d tables → %d allowed",
+                        policy.name,
+                        original_count,
+                        len(tables),
+                    )
+            except Exception:
+                logger.exception("Failed to enforce vault policy — returning full table list")
+
         return tables
     except Exception as e:
         logger.warning("Could not discover tables from vault: %s", e)
@@ -281,12 +335,14 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
 async def _generate_sql(
     question: str, engine: AsyncEngine, workspace_id: str, memory_context=None,
     history: list[dict] | None = None,
+    db: "AsyncSession | None" = None,
+    team_id: str | None = None,
 ) -> tuple[str, str]:
     """Generate SQL from a natural language question using Obsidian vault schema.
     
     Returns (sql, explanation).
     """
-    tables = await _get_available_tables(engine, workspace_id)
+    tables = await _get_available_tables(engine, workspace_id, db=db, team_id=team_id)
     if not tables:
         return (
             "SELECT 'no_tables_found' AS info",
@@ -598,7 +654,7 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     async with engine.connect() as conn:
         result = await conn.execute(
             sa_text("""
-                SELECT db_type, host, port, database_name, username, encrypted_password
+                SELECT db_type, host, port, database, username, encrypted_password
                 FROM customer_db_configs cdc
                 JOIN customers c ON cdc.customer_id = c.id
                 WHERE c.slug = :workspace_id
@@ -805,7 +861,10 @@ def _build_chart(
     conversation_id: str,
     forced_type: str | None = None,
 ) -> dict:
-    """Run the chart builder pipeline: heuristic → Plotly render → MinIO upload.
+    """Run the chart builder pipeline: heuristic → render → MinIO artifact upload.
+
+    Interactive chart is client-side Recharts (from chart_data). MinIO stores a
+    static PNG + CSV artifact for history/export (no Plotly HTML — removed).
 
     Args:
         rows: Query result rows (list of dicts).
@@ -813,7 +872,7 @@ def _build_chart(
         conversation_id: For MinIO key prefix.
 
     Returns:
-        Dict with chart_html, chart_url, chart_type, csv_url, and errors.
+        Dict with chart_data, chart_config, chart_url (PNG), csv_url, and errors.
     """
     if not rows:
         return {
@@ -826,25 +885,29 @@ def _build_chart(
             "errors": ["No data returned"],
         }
 
-    # ── Stage 1: Chart pipeline (heuristic proposer + Plotly render) ──────
+    # ── Stage 1: Chart pipeline (heuristic proposer + render) ─────────────
+    # The interactive chart is drawn client-side via Recharts from chart_data
+    # (derived below). The MinIO artifact is a static PNG (Plotly/Kaleido) plus
+    # the raw CSV — for history/export. Plotly HTML iframe rendering was removed
+    # (see agents/chart_renderer), so we no longer produce/upload chart HTML.
     columns = list(rows[0].keys())
     pipeline_result = run_chart_pipeline_sync(
         rows,
         columns=columns,
         question=question,
         use_llm=False,  # Heuristic only — fast, no external API call
-        render_formats=("html", "csv"),
+        render_formats=("png", "csv"),
     )
 
     chart_type = pipeline_result.config.chart_type.value
     # Honor an explicit user request ("give me a pie chart") over the heuristic pick.
     if forced_type:
         chart_type = forced_type
-    html_content = pipeline_result.html_content or _empty_chart_html("Chart rendering failed.")
+    png_bytes = pipeline_result.png_bytes
     csv_content = pipeline_result.csv_content or ""
     errors = pipeline_result.errors
 
-    # ── Stage 2: Upload to MinIO ──────────────────────────────────────────
+    # ── Stage 2: Upload artifacts to MinIO (static PNG image + CSV data) ──
     chart_url = ""
     csv_url = ""
 
@@ -852,14 +915,14 @@ def _build_chart(
         store = ArtifactStore()
         prefix = f"conversations/{conversation_id}"
 
-        if html_content:
-            html_ref = store.upload_html(
-                html_content,
+        if png_bytes:
+            png_ref = store.upload_png(
+                png_bytes,
                 key_prefix=prefix,
-                key=f"{prefix}/chart_{conversation_id}.html",
+                key=f"{prefix}/chart_{conversation_id}.png",
             )
-            chart_url = html_ref.public_url() or html_ref.presigned_url(expires=86400)
-            logger.info("chart_uploaded_to_minio", key=html_ref.key)
+            chart_url = png_ref.public_url() or png_ref.presigned_url(expires=86400)
+            logger.info("chart_uploaded_to_minio", key=png_ref.key)
 
         if csv_content:
             csv_ref = store.upload_csv(
@@ -869,9 +932,9 @@ def _build_chart(
             )
             csv_url = csv_ref.public_url() or csv_ref.presigned_url(expires=86400)
     except Exception as exc:
-        logger.warning("MinIO upload failed, using inline HTML: %s", exc)
+        logger.warning("MinIO chart artifact upload failed: %s", exc)
         errors.append(f"MinIO upload failed: {exc}")
-        # Even if MinIO fails, chart_html is still available inline
+        # Chart still renders client-side from chart_data even if MinIO is down.
 
     # Derive recharts keys + JSON data for client-side rendering (ChartArea).
     # This replaces shipping multi-MB inline Plotly HTML to the browser.
@@ -938,7 +1001,7 @@ def _build_chart(
 
     return {
         "chart_type": chart_type,
-        "chart_html": html_content,
+        "chart_html": "",  # interactive chart is client-side Recharts (chart_data); no server HTML
         "chart_url": chart_url,
         "csv_url": csv_url,
         "chart_data": chart_data,
@@ -985,6 +1048,7 @@ async def process_query(
     request: QueryRequest,
     workspace_id: str,
     user_id: str,
+    team_id: str | None = None,
 ) -> AsyncGenerator[dict, None]:
     """Process a natural language query and yield SSE events.
 
@@ -993,7 +1057,7 @@ async def process_query(
     2. GENERATING_SQL — schema discovery + SQL generation
     3. SQL_READY — SQL preview available
     4. SQL_EXECUTING — executing query against database
-    5. RENDERING_CHART — chart builder + Plotly render + MinIO upload
+    5. RENDERING_CHART — chart builder → Recharts JSON + MinIO PNG/CSV artifact
     6. COMPLETE — final response ready
     """
     from backend.app.query.conversation import (
@@ -1139,10 +1203,33 @@ async def process_query(
             _prev_q = None
 
     try:
-        sql, explanation = await _generate_sql(
-            request.question, engine, workspace_id,
-            memory_context=mem_context, history=history,
-        )
+        # ── Open a DB session for vault-policy enforcement ──────────────────
+        from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
+
+        gen_kwargs: dict = {}
+        if team_id:
+            gen_kwargs["team_id"] = team_id
+            try:
+                async with _AsyncSession(engine) as sess:
+                    gen_kwargs["db"] = sess
+                    sql, explanation = await _generate_sql(
+                        request.question, engine, workspace_id,
+                        memory_context=mem_context, history=history,
+                        **gen_kwargs,
+                    )
+            except Exception:
+                # If session creation fails, fall back without policy enforcement
+                logger.exception("Failed to open DB session for vault policy")
+                sql, explanation = await _generate_sql(
+                    request.question, engine, workspace_id,
+                    memory_context=mem_context, history=history,
+                )
+        else:
+            sql, explanation = await _generate_sql(
+                request.question, engine, workspace_id,
+                memory_context=mem_context, history=history,
+                **gen_kwargs,
+            )
     except Exception as e:
         logger.exception("SQL generation failed")
         yield {

@@ -79,6 +79,7 @@ async def query(
                 request=body,
                 workspace_id=workspace_id,
                 user_id=user.user_id,
+                team_id=user.team_id,
             ):
                 if await request.is_disconnected():
                     logger.info("Client disconnected during SSE stream")
