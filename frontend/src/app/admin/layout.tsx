@@ -107,6 +107,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <Lock className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Vault Access</span>}
             </Link>
+            
+            <Link 
+              href="/admin/users" 
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/users") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Users & Teams"
+            >
+              <Users className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Users & Teams</span>}
+            </Link>
           </nav>
         </aside>
         <main className="flex-1 p-8 overflow-y-auto w-full transition-all duration-300">
