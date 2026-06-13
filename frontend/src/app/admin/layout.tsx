@@ -83,6 +83,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <Database className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Vault Schema</span>}
             </Link>
+            
+            <Link 
+              href="/admin/audit-log" 
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/audit-log") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Audit Logs"
+            >
+              <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Audit Logs</span>}
+            </Link>
           </nav>
         </aside>
         <main className="flex-1 p-8 overflow-y-auto w-full transition-all duration-300">
