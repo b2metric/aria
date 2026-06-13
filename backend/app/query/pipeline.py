@@ -19,6 +19,7 @@ import asyncio
 import json
 import logging
 import re
+import uuid as _uuid
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,7 @@ from backend.app.query import (
 )
 from backend.app.db import DBConfig, DatabaseType
 from backend.app.memory.service import MemoryService
+from backend.app.services.audit import AuditService
 
 logger = logging.getLogger(__name__)
 
@@ -706,28 +708,81 @@ async def _execute_sql(
     sql: str,
     engine: AsyncEngine,
     workspace_id: str | None = None,
+    db: "AsyncSession | None" = None,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Execute a generated SQL query against the customer's database.
-    
+
     This function supports multiple database backends:
     - PostgreSQL
     - MySQL
     - Oracle (thin mode by default)
     - MSSQL
-    
+
     Args:
         sql: The SQL query to execute
         engine: Async SQLAlchemy engine (for fetching DB config)
         workspace_id: Workspace/customer ID to look up DB config
-        
+        db: Optional AsyncSession for audit logging (writes to data_audit_logs)
+        user_id: Optional user ID string for audit logging
+
     Returns:
         List of dicts, each representing a row
-        
+
     Raises:
         ValueError: If no DB config found or unsupported DB type
     """
     from backend.app.db import execute_query
-    
+
+    # ── Resolve customer UUID for audit logging ──────────────────────────
+    _customer_uuid: "_uuid.UUID | None" = None
+    _user_uuid: "_uuid.UUID | None" = None
+
+    if db is not None and workspace_id:
+        try:
+            result = await db.execute(
+                text("SELECT id FROM customers WHERE slug = :slug"),
+                {"slug": workspace_id},
+            )
+            row = result.fetchone()
+            if row:
+                _customer_uuid = row[0]
+        except Exception:
+            logger.debug("Could not resolve customer UUID for audit: %s", workspace_id)
+
+    if user_id:
+        try:
+            _user_uuid = _uuid.UUID(user_id)
+        except (ValueError, AttributeError):
+            pass
+
+    # ── Audit helper ────────────────────────────────────────────────────
+    async def _audit(success: bool, row_count: int = 0, error: str | None = None) -> None:
+        """Write a query audit log entry if db + customer_uuid are available."""
+        if db is None or _customer_uuid is None:
+            return
+        try:
+            audit = AuditService(db)
+            details_sql = sql[:2000] if sql else None
+            if success:
+                await audit.log_query(
+                    customer_id=_customer_uuid,
+                    user_id=_user_uuid,
+                    sql=details_sql,
+                    row_count=row_count,
+                )
+            else:
+                from backend.app.services.audit import AuditAction, AuditResourceType
+                await audit.log_event(
+                    customer_id=_customer_uuid,
+                    user_id=_user_uuid,
+                    action=AuditAction.QUERY,
+                    resource_type=AuditResourceType.QUERY,
+                    details={"sql": details_sql, "error": error, "success": False},
+                )
+        except Exception:
+            logger.exception("Failed to write audit log")
+
     # If no workspace_id, try to execute against metadata DB (for schema queries)
     if not workspace_id:
         try:
@@ -735,19 +790,23 @@ async def _execute_sql(
                 result = await conn.execute(text(sql))
                 rows = result.fetchall()
                 if not rows:
+                    await _audit(success=True, row_count=0)
                     return []
                 columns = list(result.keys())
-                return [dict(zip(columns, row, strict=False)) for row in rows]
-        except Exception:
+                rows_out = [dict(zip(columns, row, strict=False)) for row in rows]
+                await _audit(success=True, row_count=len(rows_out))
+                return rows_out
+        except Exception as e:
             logger.exception("SQL execution failed: %s", sql[:200])
+            await _audit(success=False, error=str(e))
             raise
-    
+
     # Get customer's DB config and execute
     config = await _get_db_config(engine, workspace_id)
-    
+
     # Transform SQL for target dialect (LIMIT → FETCH FIRST for Oracle)
     transformed_sql = _transform_sql_for_dialect(sql, config.db_type)
-    
+
     logger.info(
         "Executing query on %s://%s:%d/%s",
         config.db_type.value,
@@ -755,15 +814,18 @@ async def _execute_sql(
         config.port,
         config.database,
     )
-    
+
     try:
-        return await execute_query(transformed_sql, config)
-    except Exception:
+        result = await execute_query(transformed_sql, config)
+        await _audit(success=True, row_count=len(result))
+        return result
+    except Exception as e:
         logger.exception(
             "SQL execution failed on %s: %s",
             config.db_type.value,
             sql[:200],
         )
+        await _audit(success=False, error=str(e))
         raise
 
 
@@ -1267,7 +1329,14 @@ async def process_query(
 
     rows: list[dict] = []
     try:
-        rows = await _execute_sql(sql, engine, workspace_id=workspace_id)
+        from sqlalchemy.ext.asyncio import AsyncSession as _ExecSession
+        async with _ExecSession(engine) as sess:
+            rows = await _execute_sql(
+                sql, engine,
+                workspace_id=workspace_id,
+                db=sess,
+                user_id=user_id,
+            )
     except Exception as e:
         logger.exception("SQL execution failed")
         yield {
