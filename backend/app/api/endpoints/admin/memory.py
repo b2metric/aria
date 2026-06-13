@@ -6,9 +6,11 @@ Supports viewing all memory types:
 - QUERY_CACHE: Cached NL→SQL mappings
 """
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from backend.app.auth.dependencies import get_current_user
 from backend.app.memory.service import MemoryService, MemoryType
@@ -190,3 +192,64 @@ async def cleanup_expired_memories(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Cleanup failed: {exc}",
         ) from exc
+
+
+class MemoryTTLUpdate(BaseModel):
+    ttl_days: int | None = None
+
+
+@router.patch("/{memory_id}")
+async def update_memory_ttl(
+    memory_id: str,
+    update: MemoryTTLUpdate,
+    current_user: Any = Depends(get_current_user),
+) -> dict:
+    """Update TTL for a specific memory entry."""
+    if not getattr(current_user, "can_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    try:
+        svc = MemoryService.get_instance()
+
+        if update.ttl_days == 0:
+            success = svc.delete_memory(memory_id)
+            if success:
+                return {"deleted": True, "id": memory_id}
+            raise HTTPException(status_code=404, detail="Memory not found")
+
+        success = svc.update_memory_ttl(memory_id, update.ttl_days)
+
+        if success:
+            expires_at = None
+            if update.ttl_days:
+                expires_at = (datetime.now(timezone.utc) + timedelta(days=update.ttl_days)).isoformat()
+
+            log.info("admin.memory: Updated TTL for %s to %s days", memory_id, update.ttl_days)
+            return {"updated": True, "id": memory_id, "ttl_days": update.ttl_days, "expires_at": expires_at}
+        else:
+            raise HTTPException(status_code=404, detail="Memory not found or update failed")
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.error("admin.memory: Failed to update TTL for %s: %s", memory_id, exc)
+        raise HTTPException(status_code=500, detail=f"Failed to update TTL: {exc}") from exc
+
+
+@router.get("/stats")
+async def get_memory_stats(
+    current_user: Any = Depends(get_current_user),
+) -> dict:
+    """Get memory statistics for the workspace."""
+    if not getattr(current_user, "can_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    workspace_id = getattr(current_user, "workspace_id", None) or "default"
+
+    try:
+        svc = MemoryService.get_instance()
+        stats = svc.get_memory_stats(workspace_id)
+        return stats
+    except Exception as exc:
+        log.error("admin.memory: Failed to get stats: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to get stats: {exc}") from exc

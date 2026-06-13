@@ -35,6 +35,8 @@ Detection: `_detect_requested_chart_type`, `_is_chart_type_only_request`, `_want
 - Keycloak 26 runs with `KC_HTTP_RELATIVE_PATH=/auth`, so JWKS lives at
   `http://localhost:8080/auth/realms/aria/protocol/openid-connect/certs`.
   `backend/.env` `KEYCLOAK_URL` **must include `/auth`** (do NOT "fix" by removing it).
+- **Dev login credentials:** username=`admin`, password=`12345`, email=`admin@aria.local`.
+  (NOT `admin@aria.localhost` — the realm JSON and live Keycloak DB must match.)
 - Frontend logout is **federated**: `signOut()` + redirect to Keycloak end-session
   (`id_token_hint` + `post_logout_redirect_uri`), else the SSO cookie silently re-logs in.
   (`post_logout_redirect_uri` = `http://localhost:3003` must be registered on the `aria-web` client.)
@@ -75,11 +77,11 @@ The full stack can run behind Traefik on port 80. macOS `.local` resolution is f
 - **🎨 palette switcher** cycles color palettes client-side.
 
 ## Mock Oracle data
-- The vault documents 9 tables but the mock Oracle (`stc/stc123@localhost:1521/FREEPDB1`,
-  schema STC) originally had only `fct_prep_master` + `fct_prep_rev` (4 rows each) → the LLM
-  often picked non-existent tables.
-- **Reseed:** `python backend/scripts/seed_dummy_data.py` creates any missing vault table and
-  fills all 9 with JOIN-consistent, multi-month, multi-nationality dummy data (idempotent).
+- Dev Oracle runs at `localhost:1521/FREEPDB1`. Reseed with
+  `python backend/scripts/seed_dummy_data.py` (idempotent).
+- **DB Config required:** Each workspace needs a matching row in `customers` +
+  `customer_db_configs`. Without this the query pipeline fails. The `oracle` enum value
+  must exist in `database_type` — run migrations or `ALTER TYPE database_type ADD VALUE 'oracle'`.
 
 ## Running locally (don't break it)
 - Backend: `cd ~/projects/b2metric-aria && .venv/bin/uvicorn backend.app.main:app --port 8000 --reload`

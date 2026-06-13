@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.app.auth.dependencies import CurrentUser, get_current_user
+from backend.app.auth.dependencies import UserContext, get_current_user
 from backend.app.db.session import get_sessionmaker
 from backend.app.services.audit import AuditService
 
@@ -48,7 +48,7 @@ async def list_audit_logs(
     user_id: str | None = None,
     action: str | None = None,
     resource_type: str | None = Query(None, alias="resource_type"),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """List audit logs with filtering and pagination.
@@ -67,15 +67,27 @@ async def list_audit_logs(
             status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
         )
 
-    # Use the workspace_id as the customer_id for tenant scoping.
-    customer_id_raw = current_user.workspace_id or "stc-kuwait"
-
     try:
-        customer_id = uuid.UUID(customer_id_raw)
+        from backend.app.models.organization import Customer
+        from sqlalchemy import select as sa_select
+
+        customer_id_raw = getattr(current_user, "workspace_id", None)
+        
+        # Look up the actual customer UUID from the slug
+        result = await db.execute(sa_select(Customer.id).where(Customer.slug == customer_id_raw))
+        customer_uuid = result.scalar_one_or_none()
+        
+        if customer_uuid:
+            customer_id = customer_uuid
+        elif customer_id_raw and customer_id_raw != "stc-kuwait":
+            customer_id = uuid.UUID(str(customer_id_raw))
+        else:
+            # Fallback for old requests
+            customer_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid workspace UUID '{customer_id_raw}': {exc}",
+            detail=f"Invalid workspace UUID: {exc}",
         ) from exc
 
     user_uuid: uuid.UUID | None = None

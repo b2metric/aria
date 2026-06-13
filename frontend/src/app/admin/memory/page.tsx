@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import { Trash2, Brain, Users, Database, Filter, Sparkles } from "lucide-react";
+import { Trash2, Brain, Users, Database, Filter, Sparkles, Clock } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -15,6 +15,14 @@ interface Memory {
   type: "user" | "team" | "cache";
   created_at: string | null;
   metadata: Record<string, unknown> | null;
+  expires_at?: string | null;
+}
+
+interface MemoryStats {
+  total: number;
+  by_type: { user: number; team: number; cache: number };
+  expiring_soon: number;
+  recent_7d: number;
 }
 
 export default function MemoryManagerPage() {
@@ -27,10 +35,14 @@ export default function MemoryManagerPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [cleaning, setCleaning] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<{ cache: number; user: number } | null>(null);
+  const [editingTTL, setEditingTTL] = useState<string | null>(null);
+  const [ttlValue, setTtlValue] = useState<string>("");
+  const [stats, setStats] = useState<MemoryStats | null>(null);
 
   useEffect(() => {
     if (token) {
       fetchMemories();
+      fetchStats();
     }
   }, [token, filter]);
 
@@ -51,6 +63,20 @@ export default function MemoryManagerPage() {
       console.error("Failed to fetch memories", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchStats = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/memory/stats`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStats(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch stats", err);
     }
   };
 
@@ -108,6 +134,45 @@ export default function MemoryManagerPage() {
     }
   };
 
+  const handleTTLUpdate = async (memoryId: string) => {
+    const days = ttlValue === "" ? null : parseInt(ttlValue, 10);
+
+    if (ttlValue !== "" && (isNaN(days!) || days! < 0)) {
+      alert("Please enter a valid number of days (or leave empty for never)");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/memory/${memoryId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ttl_days: days }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.deleted) {
+          setMemories(memories.filter((m) => m.id !== memoryId));
+        } else {
+          setMemories(memories.map((m) =>
+            m.id === memoryId ? { ...m, expires_at: data.expires_at } : m
+          ));
+        }
+        setEditingTTL(null);
+        setTtlValue("");
+        fetchStats();
+      } else {
+        const err = await res.json();
+        alert(`Error: ${err.detail || "Failed to update TTL"}`);
+      }
+    } catch (err) {
+      console.error("Failed to update TTL", err);
+    }
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case "user":
@@ -141,6 +206,32 @@ export default function MemoryManagerPage() {
           View and manage Qdrant/Mem0 memory entries — user preferences, team conventions, and query cache.
         </p>
       </div>
+
+      {/* Stats Cards */}
+      {stats && (
+        <div className="mb-6 grid grid-cols-4 gap-4">
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+            <div className="text-sm text-gray-500">Total Memories</div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="text-2xl font-bold text-green-600">{stats.recent_7d}</div>
+            <div className="text-sm text-gray-500">Added (7d)</div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="text-2xl font-bold text-amber-600">{stats.expiring_soon}</div>
+            <div className="text-sm text-gray-500">Expiring Soon</div>
+          </div>
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex gap-2 text-sm">
+              <span className="text-purple-600">{stats.by_type.user} user</span>
+              <span className="text-blue-600">{stats.by_type.team} team</span>
+              <span className="text-green-600">{stats.by_type.cache} cache</span>
+            </div>
+            <div className="text-sm text-gray-500">By Type</div>
+          </div>
+        </div>
+      )}
 
       {/* Filter + Cleanup */}
       <div className="mb-6 flex items-center justify-between">
@@ -212,6 +303,7 @@ export default function MemoryManagerPage() {
                 <th className="px-6 py-4 font-medium w-24">Type</th>
                 <th className="px-6 py-4 font-medium">Content</th>
                 <th className="px-6 py-4 font-medium w-32">Created</th>
+                <th className="px-6 py-4 font-medium w-28">Expires</th>
                 <th className="px-6 py-4 font-medium text-right w-20">Actions</th>
               </tr>
             </thead>
@@ -236,6 +328,45 @@ export default function MemoryManagerPage() {
                     {mem.created_at
                       ? new Date(mem.created_at).toLocaleDateString()
                       : "N/A"}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500 text-xs">
+                    {editingTTL === mem.id ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="∞"
+                          value={ttlValue}
+                          onChange={(e) => setTtlValue(e.target.value)}
+                          className="w-16 px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                        <span className="text-gray-400">d</span>
+                        <button
+                          onClick={() => handleTTLUpdate(mem.id!)}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={() => { setEditingTTL(null); setTtlValue(""); }}
+                          className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setEditingTTL(mem.id);
+                          setTtlValue("");
+                        }}
+                        className="hover:text-blue-600 hover:underline"
+                      >
+                        {mem.expires_at
+                          ? new Date(mem.expires_at).toLocaleDateString()
+                          : "Never"}
+                      </button>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right">
                     {mem.id && (

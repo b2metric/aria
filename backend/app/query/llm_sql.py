@@ -52,7 +52,7 @@ def _build_schema_context(tables: list[dict], table_columns: dict[str, list[dict
         name = tbl["name"]
         cols = table_columns.get(name, [])
         col_str = ", ".join(
-            f"{c['name']} ({c['type']})" 
+            f"{c['name']} ({c['type']})"
             for c in cols[:20]  # Limit columns
         )
         parts.append(f"\n{name}: {col_str}")
@@ -100,21 +100,22 @@ async def generate_sql_with_llm(
     memory_context: MemoryContext | None = None,
     db_type: str = "oracle",
     history: list[dict] | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, str, dict]:
     """Generate SQL using LLM.
-    
+
     Args:
         question: Natural language question
         tables: List of table dicts with name, keywords, description
         table_columns: Dict mapping table names to column lists
         memory_context: Optional memory context for better accuracy
         db_type: Database type (oracle, postgresql, mysql, mssql)
-        
+
     Returns:
-        Tuple of (sql, explanation)
+        Tuple of (sql, explanation, token_usage) where token_usage is a dict
+        with keys: prompt_tokens, completion_tokens, model.
     """
     settings = get_settings()
-    
+
     # Build the prompt
     schema_ctx = _build_schema_context(tables, table_columns)
     memory_ctx = _build_memory_context(memory_context)
@@ -150,18 +151,31 @@ Generate the SQL query:"""
             )
             response.raise_for_status()
             data = response.json()
-            
+
         sql = data["choices"][0]["message"]["content"].strip()
-        
+
         # Clean up the SQL
         sql = _clean_sql(sql)
-        
+
         # Generate explanation
         explanation = f"LLM-generated query based on: {question[:100]}"
-        
-        logger.info("LLM SQL generation successful: %s", sql[:100])
-        return sql, explanation
-        
+
+        # Extract token usage from the response
+        usage = data.get("usage", {})
+        token_usage = {
+            "prompt_tokens": usage.get("prompt_tokens", 0),
+            "completion_tokens": usage.get("completion_tokens", 0),
+            "model": settings.llm_model,
+        }
+
+        logger.info(
+            "LLM SQL generation successful: %s (tokens: prompt=%d, completion=%d)",
+            sql[:100],
+            token_usage["prompt_tokens"],
+            token_usage["completion_tokens"],
+        )
+        return sql, explanation, token_usage
+
     except httpx.HTTPStatusError as e:
         logger.error("LLM API error: %s - %s", e.response.status_code, e.response.text[:200])
         raise ValueError(f"LLM API error: {e.response.status_code}") from e
@@ -173,22 +187,22 @@ Generate the SQL query:"""
 def _clean_sql(sql: str) -> str:
     """Clean up LLM-generated SQL."""
     # Remove markdown code blocks
-    sql = re.sub(r'^```sql\s*', '', sql, flags=re.MULTILINE)
-    sql = re.sub(r'^```\s*$', '', sql, flags=re.MULTILINE)
-    sql = re.sub(r'```$', '', sql)
-    
+    sql = re.sub(r"^```sql\s*", "", sql, flags=re.MULTILINE)
+    sql = re.sub(r"^```\s*$", "", sql, flags=re.MULTILINE)
+    sql = re.sub(r"```$", "", sql)
+
     # Remove trailing semicolons
-    sql = sql.rstrip(';').strip()
-    
+    sql = sql.rstrip(";").strip()
+
     # Remove any leading/trailing whitespace
     sql = sql.strip()
-    
+
     return sql
 
 
 def is_complex_query(question: str) -> bool:
     """Determine if a question requires LLM-based SQL generation.
-    
+
     Complex queries include:
     - JOINs (explicit or implicit via "with", "and their", "along with")
     - Subqueries ("where X is greater than average")
@@ -197,39 +211,34 @@ def is_complex_query(question: str) -> bool:
     - Comparisons ("compare", "vs", "difference between")
     """
     question_lower = question.lower()
-    
+
     complex_patterns = [
         # JOINs
-        r'\b(join|combine|merge|along with|together with|and their|with the)\b',
-        r'\bfrom\s+\w+\s+and\s+\w+\b',
-        
+        r"\b(join|combine|merge|along with|together with|and their|with the)\b",
+        r"\bfrom\s+\w+\s+and\s+\w+\b",
         # Subqueries
-        r'\b(greater than average|more than average|above average|below average)\b',
-        r'\b(where .+ is .+ than)\b',
-        r'\b(who have|that have|which have)\b',
-        
+        r"\b(greater than average|more than average|above average|below average)\b",
+        r"\b(where .+ is .+ than)\b",
+        r"\b(who have|that have|which have)\b",
         # Window functions
-        r'\b(running total|cumulative|rank|ranking|previous|next|lag|lead)\b',
-        r'\b(year over year|month over month|yoy|mom|growth rate)\b',
-        r'\b(moving average|rolling)\b',
-        
+        r"\b(running total|cumulative|rank|ranking|previous|next|lag|lead)\b",
+        r"\b(year over year|month over month|yoy|mom|growth rate)\b",
+        r"\b(moving average|rolling)\b",
         # Complex date
-        r'\b(last quarter|this quarter|previous quarter|q[1-4]\s+\d{4})\b',
-        r'\b(fiscal year|fy\d{2,4})\b',
-        r'\b(between .+ and .+ date)\b',
-        
+        r"\b(last quarter|this quarter|previous quarter|q[1-4]\s+\d{4})\b",
+        r"\b(fiscal year|fy\d{2,4})\b",
+        r"\b(between .+ and .+ date)\b",
         # Comparisons
-        r'\b(compare|comparison|vs|versus|difference between)\b',
-        r'\b(correlation|relationship between)\b',
-        
+        r"\b(compare|comparison|vs|versus|difference between)\b",
+        r"\b(correlation|relationship between)\b",
         # Percentages and ratios
-        r'\b(percentage of|percent of|ratio of|proportion)\b',
-        r'\b(share of|contribution)\b',
+        r"\b(percentage of|percent of|ratio of|proportion)\b",
+        r"\b(share of|contribution)\b",
     ]
-    
+
     for pattern in complex_patterns:
         if re.search(pattern, question_lower):
             logger.debug("Complex query detected (pattern: %s): %s", pattern, question[:50])
             return True
-    
+
     return False

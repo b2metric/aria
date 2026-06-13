@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from backend.app.auth.dependencies import CurrentUser, get_current_user
+from backend.app.auth.dependencies import UserContext, get_current_user
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.governance import TeamVaultPolicy
 
@@ -67,7 +67,7 @@ class VaultPolicyUpdate(BaseModel):
 
 @router.get("")
 async def get_team_policies(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """Get all vault policies for the current workspace.
@@ -121,7 +121,7 @@ async def get_team_policies(
 async def update_team_policy(
     team_id: str,
     payload: VaultPolicyUpdate,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Create or update the vault access policy for a team.

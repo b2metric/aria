@@ -29,7 +29,7 @@ ENUMS = [
     ("artifact_status", ["draft", "published", "archived"]),
     ("job_status", ["pending", "running", "completed", "failed", "cancelled"]),
     ("job_type", ["schema_sync", "insight_gen", "report_gen", "data_export"]),
-    ("database_type", ["postgresql", "mysql", "bigquery", "snowflake", "redshift", "mssql"]),
+    ("database_type", ["postgresql", "mysql", "bigquery", "snowflake", "redshift", "mssql", "oracle"]),
     ("knowledge_type", ["sql_pattern", "business_term", "metric_def", "relationship_def"]),
     ("quota_period", ["daily", "monthly"]),
 ]
@@ -97,7 +97,7 @@ def upgrade() -> None:
                   sa.ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True),
         sa.Column("name", sa.String(255), nullable=False),
         sa.Column("db_type", postgresql.ENUM("postgresql", "mysql", "bigquery", "snowflake",
-                                              "redshift", "mssql", name="database_type", create_type=False),
+                                              "redshift", "mssql", "oracle", name="database_type", create_type=False),
                   nullable=False),
         sa.Column("host", sa.String(512), nullable=False),
         sa.Column("port", sa.Integer(), nullable=False),

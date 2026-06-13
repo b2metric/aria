@@ -2,7 +2,7 @@
   "name": "aria-web",
   "version": "0.1.0",
   "private": true,
-  "description": "ARIA \u2014 AI-Driven Analytics Platform Frontend",
+  "description": "ARIA — AI-Driven Analytics Platform Frontend",
   "scripts": {
     "dev": "next dev -p 3003",
     "build": "next build",
@@ -17,6 +17,7 @@
     "test:e2e:auth": "PLAYWRIGHT_NO_WEBSERVER=1 playwright test auth-flow"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.16",
     "@tailwindcss/postcss": "^4.3.0",
     "@types/papaparse": "^5.5.2",
     "class-variance-authority": "^0.7.1",

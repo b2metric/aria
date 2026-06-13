@@ -6,6 +6,11 @@ import { Plus, Trash2, BookOpen, Users } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+interface Team {
+  id: string;
+  name: string;
+}
+
 interface TeamMemory {
   id: string | null;
   content: string;
@@ -23,12 +28,40 @@ export default function TeamMemoryPage() {
   const [creating, setCreating] = useState(false);
   const [newContent, setNewContent] = useState("");
   const [teamId, setTeamId] = useState("default");
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(true);
 
   useEffect(() => {
     if (token) {
       fetchMemories();
     }
   }, [token, teamId]);
+
+  useEffect(() => {
+    if (token) {
+      fetchTeams();
+    }
+  }, [token]);
+
+  const fetchTeams = async () => {
+    try {
+      setTeamsLoading(true);
+      const res = await fetch(`${API_BASE}/api/admin/teams`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTeams(data);
+        if (data.length > 0 && teamId === "default") {
+          setTeamId(data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch teams", err);
+    } finally {
+      setTeamsLoading(false);
+    }
+  };
 
   const fetchMemories = async () => {
     try {
@@ -134,13 +167,26 @@ export default function TeamMemoryPage() {
             <select
               value={teamId}
               onChange={(e) => setTeamId(e.target.value)}
-              className="w-full md:w-48 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={teamsLoading || teams.length === 0}
+              className="w-full md:w-48 bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <option value="default">Default Team</option>
-              <option value="finance">Finance</option>
-              <option value="marketing">Marketing</option>
-              <option value="operations">Operations</option>
+              {teamsLoading ? (
+                <option>Loading teams...</option>
+              ) : teams.length === 0 ? (
+                <option value="">No teams available</option>
+              ) : (
+                teams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {team.name}
+                  </option>
+                ))
+              )}
             </select>
+            {!teamsLoading && teams.length === 0 && (
+              <p className="text-sm text-amber-600 mt-1">
+                Please create a team in Users &amp; Teams first.
+              </p>
+            )}
           </div>
           
           <div>

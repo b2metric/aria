@@ -398,6 +398,133 @@ class MemoryService:
             logger.warning("Failed to delete memory %s: %s", memory_id, e)
             return False
 
+    def update_memory_ttl(
+        self,
+        memory_id: str,
+        ttl_days: int | None,
+    ) -> bool:
+        """Update TTL for a specific memory entry.
+
+        Args:
+            memory_id: Memory identifier
+            ttl_days: Days until expiration (None = never expire)
+
+        Returns:
+            True if updated successfully
+        """
+        if not self._memory:
+            return False
+
+        try:
+            # Calculate expires_at timestamp
+            if ttl_days is None:
+                expires_at = None  # Never expires
+            elif ttl_days == 0:
+                # Immediate deletion
+                return self.delete_memory(memory_id)
+            else:
+                expires_at = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
+
+            # Update metadata with expires_at using Qdrant directly
+            from qdrant_client import QdrantClient
+            settings = get_settings()
+
+            qdrant_url = settings.qdrant_url
+            if qdrant_url.startswith("http://"):
+                qdrant_host = qdrant_url.replace("http://", "").split(":")[0]
+                qdrant_port = int(qdrant_url.split(":")[-1])
+            else:
+                qdrant_host = "localhost"
+                qdrant_port = 6333
+
+            client = QdrantClient(host=qdrant_host, port=qdrant_port)
+
+            # Update the point's payload with expires_at
+            client.set_payload(
+                collection_name=settings.qdrant_collection,
+                payload={"expires_at": expires_at},
+                points=[memory_id],
+            )
+
+            logger.info("Updated TTL for memory %s: expires_at=%s", memory_id, expires_at)
+            return True
+
+        except Exception as e:
+            logger.warning("Failed to update TTL for memory %s: %s", memory_id, e)
+            return False
+
+    def get_memory_stats(self, workspace_id: str) -> dict:
+        """Get memory statistics for a workspace."""
+        if not self._memory:
+            return {"total": 0, "by_type": {}, "expiring_soon": 0}
+
+        stats = {
+            "total": 0,
+            "by_type": {"user": 0, "team": 0, "cache": 0},
+            "expiring_soon": 0,
+            "recent_7d": 0,
+        }
+
+        try:
+            now = datetime.now(timezone.utc)
+            soon_cutoff = now + timedelta(days=7)
+            recent_cutoff = now - timedelta(days=7)
+
+            # Get cache memories
+            cache_mems = self._memory.get_all(user_id=f"{workspace_id}:query_cache")
+            cache_results = cache_mems.get("results", []) if isinstance(cache_mems, dict) else []
+            stats["by_type"]["cache"] = len(cache_results)
+            stats["total"] += len(cache_results)
+
+            # Get team memories
+            team_mems = self._memory.get_all(user_id=f"{workspace_id}:team:default")
+            team_results = team_mems.get("results", []) if isinstance(team_mems, dict) else []
+            stats["by_type"]["team"] = len(team_results)
+            stats["total"] += len(team_results)
+
+            # Get user memories (user preferences stored under workspace_id:user:*)
+            # We search for memories that match user preference patterns
+            try:
+                user_mems = self._memory.search(
+                    query="user preference",
+                    user_id=f"{workspace_id}:user",
+                    limit=100,
+                )
+                user_results = user_mems.get("results", []) if isinstance(user_mems, dict) else []
+                stats["by_type"]["user"] = len(user_results)
+                stats["total"] += len(user_results)
+            except Exception:
+                # Fallback: count from get_all_memories with USER type
+                user_results = []
+
+            # Count recent and expiring
+            for mem in cache_results + team_results + user_results:
+                created_at = mem.get("created_at")
+                if created_at:
+                    try:
+                        if isinstance(created_at, str):
+                            mem_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                        else:
+                            mem_time = datetime.fromtimestamp(created_at, tz=timezone.utc)
+                        if mem_time > recent_cutoff:
+                            stats["recent_7d"] += 1
+                    except (ValueError, TypeError):
+                        pass
+
+                expires_at = mem.get("metadata", {}).get("expires_at") if mem.get("metadata") else None
+                if expires_at:
+                    try:
+                        exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                        if exp_time < soon_cutoff:
+                            stats["expiring_soon"] += 1
+                    except (ValueError, TypeError):
+                        pass
+
+        except Exception as e:
+            logger.warning("Failed to get memory stats: %s", e)
+
+        return stats
+
     def cleanup_expired_memories(
         self,
         workspace_id: str,

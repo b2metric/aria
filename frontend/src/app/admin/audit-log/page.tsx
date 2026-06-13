@@ -3,11 +3,18 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { ShieldAlert, Search, RefreshCw, AlertCircle, CheckCircle2, XCircle, Database } from "lucide-react";
+import { ShieldAlert, Search, RefreshCw, AlertCircle, CheckCircle2, XCircle, Eye } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -167,6 +174,40 @@ export default function AuditLogPage() {
                             Error: {log.details.error}
                           </div>
                         )}
+                        
+                        <div className="mt-2">
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
+                                <Eye className="w-3 h-3 mr-1" /> View Full Details
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                              <DialogHeader>
+                                <DialogTitle>Audit Log Details</DialogTitle>
+                              </DialogHeader>
+                              <div className="mt-4 space-y-4">
+                                <div>
+                                  <h4 className="text-sm font-semibold mb-1 text-gray-700">Metadata</h4>
+                                  <div className="bg-gray-50 p-3 rounded text-sm text-gray-600 grid grid-cols-2 gap-2">
+                                    <div><span className="font-medium text-gray-500">ID:</span> {log.id}</div>
+                                    <div><span className="font-medium text-gray-500">Action:</span> {log.action}</div>
+                                    <div><span className="font-medium text-gray-500">Resource Type:</span> {log.resource_type}</div>
+                                    <div><span className="font-medium text-gray-500">Status:</span> {log.status}</div>
+                                  </div>
+                                </div>
+                                {log.details && (
+                                  <div>
+                                    <h4 className="text-sm font-semibold mb-1 text-gray-700">Payload</h4>
+                                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all">
+                                      {JSON.stringify(log.details, null, 2)}
+                                    </pre>
+                                  </div>
+                                )}
+                              </div>
+                            </DialogContent>
+                          </Dialog>
+                        </div>
                       </div>
                     </td>
                   </tr>

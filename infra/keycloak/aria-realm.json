@@ -174,7 +174,7 @@
   "users": [
     {
       "username": "admin",
-      "email": "admin@aria.localhost",
+      "email": "admin@aria.local",
       "enabled": true,
       "emailVerified": true,
       "firstName": "ARIA",
@@ -189,8 +189,8 @@
       "credentials": [
         {
           "type": "password",
-          "value": "admin",
-          "temporary": true
+          "value": "12345",
+          "temporary": false
         }
       ]
     }

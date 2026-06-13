@@ -35,14 +35,14 @@ class TestQueryPipelineE2E:
                 },
             ) as response:
                 assert response.status_code == 200
-                
+
                 events = []
                 for line in response.iter_lines():
                     if line.startswith("data:"):
                         data = json.loads(line[5:].strip())
                         events.append(data)
                         print(f"SSE Event: {data.get('event', 'unknown')}")
-                
+
                 # Should have at least status and done events
                 event_types = [e.get("event") for e in events]
                 assert "status" in event_types or "done" in event_types
@@ -61,7 +61,7 @@ class TestQueryPipelineE2E:
                 },
             ) as response:
                 assert response.status_code == 200
-                
+
                 events = []
                 sql_event = None
                 for line in response.iter_lines():
@@ -70,7 +70,7 @@ class TestQueryPipelineE2E:
                         events.append(data)
                         if data.get("event") == "sql":
                             sql_event = data
-                
+
                 # Should have generated SQL (even if execution fails due to missing data)
                 if sql_event:
                     sql = sql_event.get("sql", "")
@@ -81,17 +81,17 @@ class TestQueryPipelineE2E:
     def test_query_with_memory_context(self):
         """Test that memory context is used in queries."""
         from backend.app.memory.service import MemoryService
-        
+
         # First, store a preference
         MemoryService._instance = None
         service = MemoryService()
-        
+
         service.store_user_preference(
             preference="User prefers monthly aggregations",
             user_id=USER_ID,
             workspace_id=WORKSPACE_ID,
         )
-        
+
         # Now query - memory context should be available
         with httpx.Client(timeout=60.0) as client:
             with client.stream(
@@ -104,7 +104,7 @@ class TestQueryPipelineE2E:
                 },
             ) as response:
                 assert response.status_code == 200
-                
+
                 # Just ensure the query completes
                 for line in response.iter_lines():
                     if line.startswith("data:"):
@@ -121,12 +121,12 @@ class TestSQLGeneration:
     def test_is_complex_query_detection(self):
         """Test complex query detection."""
         from backend.app.query.llm_sql import is_complex_query
-        
+
         # Simple queries
         assert not is_complex_query("show total revenue")
         assert not is_complex_query("count all customers")
         assert not is_complex_query("average order amount")
-        
+
         # Complex queries
         assert is_complex_query("compare revenue year over year")
         assert is_complex_query("show running total of sales")
@@ -140,23 +140,24 @@ class TestSQLGeneration:
         import asyncio
         from unittest.mock import MagicMock
         from backend.app.query.pipeline import _generate_sql
-        
+
         async def run_test():
             # Mock engine (not used for vault-based generation)
             mock_engine = MagicMock()
-            
-            sql, explanation = await _generate_sql(
+
+            sql, explanation, is_llm, token_usage = await _generate_sql(
                 question="show total revenue",
                 engine=mock_engine,
                 workspace_id=WORKSPACE_ID,
             )
-            
+
             assert sql is not None
             assert len(sql) > 10
             assert "SELECT" in sql.upper()
             print(f"Generated SQL: {sql}")
             print(f"Explanation: {explanation}")
-        
+            print(f"LLM used: {is_llm}, Token usage: {token_usage}")
+
         asyncio.run(run_test())
 
     @pytest.mark.integration
@@ -164,10 +165,14 @@ class TestSQLGeneration:
         """Test LLM-based SQL generation."""
         import asyncio
         from backend.app.query.llm_sql import generate_sql_with_llm
-        
+
         async def run_test():
             tables = [
-                {"name": "FCT_PREP_REV", "keywords": "revenue, topup, recharge", "description": "Revenue fact table"},
+                {
+                    "name": "FCT_PREP_REV",
+                    "keywords": "revenue, topup, recharge",
+                    "description": "Revenue fact table",
+                },
             ]
             table_columns = {
                 "FCT_PREP_REV": [
@@ -176,19 +181,20 @@ class TestSQLGeneration:
                     {"name": "MSISDN", "type": "VARCHAR2"},
                 ],
             }
-            
-            sql, explanation = await generate_sql_with_llm(
+
+            sql, explanation, token_usage = await generate_sql_with_llm(
                 question="show monthly revenue totals",
                 tables=tables,
                 table_columns=table_columns,
                 db_type="oracle",
             )
-            
+
             assert sql is not None
             assert len(sql) > 10
             assert "SELECT" in sql.upper()
             print(f"LLM SQL: {sql}")
-        
+            print(f"Token usage: {token_usage}")
+
         asyncio.run(run_test())
 
 
@@ -201,16 +207,16 @@ class TestVaultMatching:
         import asyncio
         from unittest.mock import MagicMock
         from backend.app.query.pipeline import _get_available_tables
-        
+
         async def run_test():
             mock_engine = MagicMock()
             tables = await _get_available_tables(mock_engine, WORKSPACE_ID)
-            
+
             assert len(tables) > 0
             print(f"Discovered {len(tables)} tables:")
             for t in tables[:5]:
                 print(f"  - {t['name']}: {t.get('keywords', '')[:50]}")
-        
+
         asyncio.run(run_test())
 
     @pytest.mark.integration
@@ -219,25 +225,26 @@ class TestVaultMatching:
         import asyncio
         from unittest.mock import MagicMock
         from backend.app.query.pipeline import _get_table_columns
-        
+
         async def run_test():
             mock_engine = MagicMock()
-            
+
             # Get first available table
             from backend.app.query.pipeline import _get_available_tables
+
             tables = await _get_available_tables(mock_engine, WORKSPACE_ID)
-            
+
             if not tables:
                 pytest.skip("No tables in vault")
-            
+
             table_name = tables[0]["name"]
             columns = await _get_table_columns(mock_engine, table_name, WORKSPACE_ID)
-            
+
             assert len(columns) > 0
             print(f"Columns for {table_name}:")
             for c in columns[:10]:
                 print(f"  - {c['name']} ({c['type']})")
-        
+
         asyncio.run(run_test())
 
 
@@ -249,14 +256,14 @@ class TestChartGeneration:
         """Test chart generation pipeline."""
         from agents.chart_builder import run_chart_pipeline_sync
         from agents.chart_types import ChartConfig, ChartType
-        
+
         # Sample data
         data = [
             {"month": "Jan", "revenue": 1000},
             {"month": "Feb", "revenue": 1500},
             {"month": "Mar", "revenue": 1200},
         ]
-        
+
         # Generate chart
         config = ChartConfig(
             chart_type=ChartType.BAR,
@@ -264,9 +271,9 @@ class TestChartGeneration:
             y_columns=["revenue"],
             title="Monthly Revenue",
         )
-        
+
         result = run_chart_pipeline_sync(data, config)
-        
+
         assert result is not None
         assert "plotly_json" in result or "html" in result or result.get("error") is None
 
@@ -289,7 +296,7 @@ class TestErrorHandling:
             ) as response:
                 # Should still return 200 (SSE stream) but with error event
                 assert response.status_code == 200
-                
+
                 has_error = False
                 for line in response.iter_lines():
                     if line.startswith("data:"):
