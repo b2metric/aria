@@ -15,9 +15,7 @@ from backend.app import __version__
 from backend.app.api.query import router as query_router
 from backend.app.api.schema import router as schema_router
 from backend.app.api.workspaces import router as workspaces_router
-from backend.app.api.endpoints.admin.memory import router as admin_memory_router
-from backend.app.api.endpoints.admin.tenant import router as admin_tenant_router
-from backend.app.api.endpoints.admin.team_memory import router as admin_team_memory_router
+from backend.app.api.endpoints.admin import router as admin_router
 from backend.app.auth.dependencies import CurrentUser, WorkspaceID, get_current_user
 from backend.app.auth.models import Role
 from backend.app.auth.rbac import require_role, require_sql_access
@@ -105,9 +103,7 @@ app = FastAPI(
 app.include_router(query_router)
 app.include_router(schema_router)
 app.include_router(workspaces_router)
-app.include_router(admin_memory_router, prefix="/api/admin/memory", tags=["admin"])
-app.include_router(admin_tenant_router, prefix="/api/admin/tenant", tags=["admin"])
-app.include_router(admin_team_memory_router, prefix="/api/admin/team-memory", tags=["admin"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 
 # ── CORS (dev: allow all) ──────────────────────────────────────────────
 app.add_middleware(
