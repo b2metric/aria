@@ -50,17 +50,17 @@ logger = logging.getLogger(__name__)
 
 def _detect_user_correction(question: str, prev_messages: list) -> dict | None:
     """Detect if user is correcting a previous result.
-    
+
     Patterns:
     - "no, I meant X" / "hayır, X'i kastetmiştim"
     - "not X, use Y" / "X değil, Y kullan"
     - "actually I want X" / "aslında X istiyorum"
     - "wrong column, use X" / "yanlış kolon, X kullan"
-    
+
     Returns dict with correction info if detected, None otherwise.
     """
     q = question.lower()
-    
+
     correction_patterns = [
         # English
         (r"\b(no|not)\b.*(meant|want|use|should be|i need)\s+(\w+)", "correction"),
@@ -71,7 +71,7 @@ def _detect_user_correction(question: str, prev_messages: list) -> dict | None:
         (r"\b(hayır|yanlış|değil)\b.*(kastet|kullan|olmalı|istiyorum)\s*(\w+)?", "correction"),
         (r"\baslında\b.*(istiyorum|kullan|lazım)\s*(\w+)?", "correction"),
     ]
-    
+
     for pattern, correction_type in correction_patterns:
         match = re.search(pattern, q, re.IGNORECASE)
         if match:
@@ -83,28 +83,35 @@ def _detect_user_correction(question: str, prev_messages: list) -> dict | None:
                 "target": target,
                 "original_question": question,
             }
-    
+
     return None
 
 
 def _detect_chart_preference(question: str) -> dict | None:
     """Detect chart type preference from user message.
-    
+
     E.g., "always show as bar chart", "I prefer pie charts"
     """
     q = question.lower()
-    
+
     preference_patterns = [
         (r"\b(always|prefer|like)\b.*(bar|line|pie|area|scatter|table)", "chart_type"),
         (r"\b(her zaman|tercih|seviyorum)\b.*(bar|çizgi|pasta|alan|tablo)", "chart_type"),
     ]
-    
+
     chart_map = {
-        "bar": "bar", "line": "line", "pie": "pie", "area": "area", 
-        "scatter": "scatter", "table": "table",
-        "çizgi": "line", "pasta": "pie", "alan": "area", "tablo": "table",
+        "bar": "bar",
+        "line": "line",
+        "pie": "pie",
+        "area": "area",
+        "scatter": "scatter",
+        "table": "table",
+        "çizgi": "line",
+        "pasta": "pie",
+        "alan": "area",
+        "tablo": "table",
     }
-    
+
     for pattern, pref_type in preference_patterns:
         match = re.search(pattern, q, re.IGNORECASE)
         if match:
@@ -116,7 +123,7 @@ def _detect_chart_preference(question: str) -> dict | None:
                     "value": chart_type,
                     "original_question": question,
                 }
-    
+
     return None
 
 
@@ -127,28 +134,32 @@ def _extract_preference_from_successful_query(
     columns_used: list[str],
 ) -> str | None:
     """Extract implicit preference from successful query patterns.
-    
+
     E.g., if user asks for "revenue" and we used TOPUP_AMOUNT successfully,
     store: "User uses TOPUP_AMOUNT for revenue queries"
     """
     q = question.lower()
-    
+
     # Revenue/amount mapping
     if any(w in q for w in ["revenue", "gelir", "amount", "tutar"]):
-        amount_cols = [c for c in columns_used if any(
-            x in c.lower() for x in ["amount", "revenue", "total", "sum", "topup", "bill"]
-        )]
+        amount_cols = [
+            c
+            for c in columns_used
+            if any(x in c.lower() for x in ["amount", "revenue", "total", "sum", "topup", "bill"])
+        ]
         if amount_cols:
             return f"User associates '{amount_cols[0]}' with revenue/amount queries on {table}"
-    
-    # Count/subscriber mapping  
+
+    # Count/subscriber mapping
     if any(w in q for w in ["subscriber", "customer", "abone", "müşteri", "count"]):
-        id_cols = [c for c in columns_used if any(
-            x in c.lower() for x in ["msisdn", "subscriber", "customer", "id", "contrno"]
-        )]
+        id_cols = [
+            c
+            for c in columns_used
+            if any(x in c.lower() for x in ["msisdn", "subscriber", "customer", "id", "contrno"])
+        ]
         if id_cols:
             return f"User uses '{id_cols[0]}' for subscriber/customer counts on {table}"
-    
+
     return None
 
 
@@ -192,9 +203,15 @@ async def _get_available_tables(
                     content = fp.read()
 
                 # Extract generic metadata from frontmatter or text
-                domain_match = re.search(r'(?:domain:\s*["\']?([^"\'\n]+)|## Domain\s*\n([^\n#]+))', content, re.IGNORECASE)
-                topic_match = re.search(r'(?:topic:\s*["\']?([^"\'\n]+)|## Topic\s*\n([^\n#]+))', content, re.IGNORECASE)
-                order_match = re.search(r'(?:order:\s*(\d+))', content, re.IGNORECASE)
+                domain_match = re.search(
+                    r'(?:domain:\s*["\']?([^"\'\n]+)|## Domain\s*\n([^\n#]+))',
+                    content,
+                    re.IGNORECASE,
+                )
+                topic_match = re.search(
+                    r'(?:topic:\s*["\']?([^"\'\n]+)|## Topic\s*\n([^\n#]+))', content, re.IGNORECASE
+                )
+                order_match = re.search(r"(?:order:\s*(\d+))", content, re.IGNORECASE)
 
                 if domain_match:
                     domain = (domain_match.group(1) or domain_match.group(2)).strip()
@@ -204,33 +221,49 @@ async def _get_available_tables(
                     order = int(order_match.group(1).strip())
 
                 # Extract insights as list
-                insights_match = re.search(r'(?:insights:\s*\n(.*?)---)', content, re.IGNORECASE | re.DOTALL)
+                insights_match = re.search(
+                    r"(?:insights:\s*\n(.*?)---)", content, re.IGNORECASE | re.DOTALL
+                )
                 if insights_match:
-                    lines = insights_match.group(1).strip().split('\n')
-                    insights = [line.strip().lstrip('-').strip() for line in lines if line.strip() and not line.strip().startswith('#')]
+                    lines = insights_match.group(1).strip().split("\n")
+                    insights = [
+                        line.strip().lstrip("-").strip()
+                        for line in lines
+                        if line.strip() and not line.strip().startswith("#")
+                    ]
 
                 # Extract keywords section
-                kw_match = re.search(r'(?:keywords:\s*["\']?([^"\'\n]+)|## Keywords\s*\n([^\n#]+))', content, re.IGNORECASE)
+                kw_match = re.search(
+                    r'(?:keywords:\s*["\']?([^"\'\n]+)|## Keywords\s*\n([^\n#]+))',
+                    content,
+                    re.IGNORECASE,
+                )
                 if kw_match:
                     keywords = (kw_match.group(1) or kw_match.group(2)).strip()
 
                 # Extract description section
-                desc_match = re.search(r'(?:description:\s*["\']?([^"\'\n]+)|## Description\s*\n([^\n#]+))', content, re.IGNORECASE)
+                desc_match = re.search(
+                    r'(?:description:\s*["\']?([^"\'\n]+)|## Description\s*\n([^\n#]+))',
+                    content,
+                    re.IGNORECASE,
+                )
                 if desc_match:
                     description = (desc_match.group(1) or desc_match.group(2)).strip()
 
             except Exception:
                 pass
 
-            tables.append({
-                "name": name,
-                "keywords": keywords,
-                "description": description,
-                "domain": domain,
-                "topic": topic,
-                "order": order,
-                "insights": insights
-            })
+            tables.append(
+                {
+                    "name": name,
+                    "keywords": keywords,
+                    "description": description,
+                    "domain": domain,
+                    "topic": topic,
+                    "order": order,
+                    "insights": insights,
+                }
+            )
 
         # ── TeamVaultPolicy pruning ───────────────────────────────────────
         if db is not None and team_id:
@@ -278,56 +311,63 @@ async def _get_available_tables(
 
 async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id: str) -> list[dict]:
     """Discover columns from Obsidian vault markdown (multi-tenant).
-    
+
     Parses the markdown table format:
     | Column | Type | Nullable | PK | Description |
     |--------|------|----------|----|-----------—|
     | EXEC_DATE | DATE | ✓ |  | Description text |
-    
+
     Also extracts column descriptions from the "## Column Descriptions" section
     for semantic SQL generation.
     """
     import os
     import pathlib
+
     project_root = pathlib.Path(__file__).parent.parent.parent.parent
     vault_path = os.path.join(project_root, "docs", "vaults", workspace_id, "tables")
     md_file = os.path.join(vault_path, f"{table_name}.md")
     try:
         with open(md_file) as f:
             content = f.read()
-        
+
         cols = []
-        
+
         # Parse markdown table format: | Column | Type | Nullable | PK | Description |
         # Handle leading whitespace and pipe delimiter
         # Example: " | EXEC_DATE | DATE | ✓ |  | Description... |"
-        table_pattern = r'^\s*\|\s*([A-Z_][A-Z0-9_]*)\s*\|\s*([A-Z0-9_()]+)\s*\|'
+        table_pattern = r"^\s*\|\s*([A-Z_][A-Z0-9_]*)\s*\|\s*([A-Z0-9_()]+)\s*\|"
         for match in re.finditer(table_pattern, content, re.MULTILINE | re.IGNORECASE):
             col_name = match.group(1).strip()
             col_type = match.group(2).strip()
             # Skip header/separator rows
-            if col_name.lower() in ('column', '---', '--------'):
+            if col_name.lower() in ("column", "---", "--------"):
                 continue
             cols.append({"name": col_name, "type": col_type})
-        
+
         # Also try to extract descriptions for better SQL generation context
         # Format: - **COLUMN_NAME**: Description text
         desc_map = {}
-        for match in re.finditer(r'-\s*\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*(.+?)(?:\n|$)', content, re.IGNORECASE):
-            desc_map[match.group(1).upper()] = match.group(2).strip()[:100]  # Truncate long descriptions
-        
+        for match in re.finditer(
+            r"-\s*\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*(.+?)(?:\n|$)", content, re.IGNORECASE
+        ):
+            desc_map[match.group(1).upper()] = match.group(2).strip()[
+                :100
+            ]  # Truncate long descriptions
+
         # Enrich columns with descriptions
         for col in cols:
             col["description"] = desc_map.get(col["name"].upper(), "")
-        
+
         if cols:
             logger.debug("Parsed %d columns from vault %s", len(cols), table_name)
             return cols
-        
+
         # Fallback: try legacy format **COLUMN**: TYPE (...)
-        for match in re.finditer(r'\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*([A-Z0-9_]+)', content, re.IGNORECASE):
+        for match in re.finditer(
+            r"\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*([A-Z0-9_]+)", content, re.IGNORECASE
+        ):
             cols.append({"name": match.group(1), "type": match.group(2), "description": ""})
-        
+
         return cols if cols else [{"name": "unknown", "type": "VARCHAR2", "description": ""}]
     except Exception as e:
         logger.warning("Could not read vault %s: %s", table_name, e)
@@ -335,20 +375,25 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
 
 
 async def _generate_sql(
-    question: str, engine: AsyncEngine, workspace_id: str, memory_context=None,
+    question: str,
+    engine: AsyncEngine,
+    workspace_id: str,
+    memory_context=None,
     history: list[dict] | None = None,
     db: "AsyncSession | None" = None,
     team_id: str | None = None,
-) -> tuple[str, str]:
+) -> tuple[str, str, bool, dict]:
     """Generate SQL from a natural language question using Obsidian vault schema.
-    
-    Returns (sql, explanation).
+
+    Returns (sql, explanation, is_llm, token_usage).
     """
     tables = await _get_available_tables(engine, workspace_id, db=db, team_id=team_id)
     if not tables:
         return (
             "SELECT 'no_tables_found' AS info",
             "No database tables were found. Please connect a database first.",
+            False,
+            {},
         )
 
     # Get columns for each table (up to 10 tables for performance)
@@ -360,7 +405,7 @@ async def _generate_sql(
         table_columns[tbl["name"]] = cols
         col_str = ", ".join(f"{c['name']} ({c['type']})" for c in cols[:15])
         schema_info.append(f"  {tbl['name']}: {col_str}")
-    
+
     # Generic SQL intent detection
 
     # Rule-based SQL generation based on question keywords and schema
@@ -368,30 +413,38 @@ async def _generate_sql(
 
     # Detect aggregations - with priority handling
     # "total" alone = count, "total X amount/revenue" = sum
-    question_has_measure = any(w in question_lower for w in ["amount", "revenue", "sales", "sum", "value", "money", "balance", "topup"])
-    wants_sum = question_has_measure and any(w in question_lower for w in ["sum", "total", "revenue", "amount"])
-    wants_count = any(w in question_lower for w in ["count", "how many", "number of"]) or ("total" in question_lower and not question_has_measure)
+    question_has_measure = any(
+        w in question_lower
+        for w in ["amount", "revenue", "sales", "sum", "value", "money", "balance", "topup"]
+    )
+    wants_sum = question_has_measure and any(
+        w in question_lower for w in ["sum", "total", "revenue", "amount"]
+    )
+    wants_count = any(w in question_lower for w in ["count", "how many", "number of"]) or (
+        "total" in question_lower and not question_has_measure
+    )
     wants_avg = any(w in question_lower for w in ["average", "avg", "mean"])
     wants_group = any(w in question_lower for w in ["by", "per", "each", "group"])
     wants_top = any(w in question_lower for w in ["top", "highest", "most", "largest", "best"])
-    wants_bottom = any(w in question_lower for w in ["bottom", "lowest", "least", "smallest", "worst"])
+    wants_bottom = any(
+        w in question_lower for w in ["bottom", "lowest", "least", "smallest", "worst"]
+    )
     wants_trend = any(
-        w in question_lower
-        for w in ["trend", "over time", "monthly", "daily", "weekly", "by date"]
+        w in question_lower for w in ["trend", "over time", "monthly", "daily", "weekly", "by date"]
     )
 
     # Find matching tables based on question keywords + vault metadata
     best_table = tables[0]["name"]
     best_score = 0
-    
+
     for tbl in tables:
         score = 0
         tbl_name_lower = tbl["name"].lower()
         keywords_lower = tbl.get("keywords", "").lower()
         description_lower = tbl.get("description", "").lower()
-        
+
         # Search context = table name + keywords + description
-        
+
         for word in question_lower.split():
             if len(word) < 3:  # Skip short words
                 continue
@@ -404,27 +457,33 @@ async def _generate_sql(
             # Match in description (weight: 2)
             if word in description_lower:
                 score += 2
-        
+
         # Use order as a tie-breaker or priority mechanism if scores are identical or very close (e.g., within 2 points)
         # Lower order number means higher priority.
         tbl_order = tbl.get("order", 999)
-        if score > best_score or (score >= best_score - 2 and score > 0 and tbl_order < tables[0].get("order", 999)):
+        if score > best_score or (
+            score >= best_score - 2 and score > 0 and tbl_order < tables[0].get("order", 999)
+        ):
             best_score = score
             best_table = tbl["name"]
-            
+
             # Update the top table properties for later comparison if needed
             # We move the best_table to the front of the list virtually by tracking its order
             if tbl_order < tables[0].get("order", 999):
-                 tables[0] = tbl
-    
+                tables[0] = tbl
+
     # If score is too low, our simple lexical heuristic failed to find a confident match
     # This means the question requires semantic understanding (e.g. synonyms, cross-language)
     # Forward to LLM instead of guessing blindly.
     if best_score < 15:
         from backend.app.query.llm_sql import generate_sql_with_llm
-        logger.info("Low confidence in rule-based table selection (score=%d). Delegating to LLM.", best_score)
+
+        logger.info(
+            "Low confidence in rule-based table selection (score=%d). Delegating to LLM.",
+            best_score,
+        )
         try:
-            return await generate_sql_with_llm(
+            sql, explanation, token_usage = await generate_sql_with_llm(
                 question=question,
                 tables=tables,
                 table_columns=table_columns,
@@ -432,38 +491,65 @@ async def _generate_sql(
                 db_type="oracle",
                 history=history,
             )
+            return sql, explanation, True, token_usage
         except Exception as e:
             logger.warning("LLM SQL generation failed during fallback: %s", e)
-    
-    logger.info("Table matching: question='%s' -> best_table='%s' (score=%d)", 
-                question[:50], best_table, best_score)
+
+    logger.info(
+        "Table matching: question='%s' -> best_table='%s' (score=%d)",
+        question[:50],
+        best_table,
+        best_score,
+    )
 
     # Build the SELECT clause
     columns = await _get_table_columns(engine, best_table, workspace_id)
-    
+
     # Oracle + PostgreSQL numeric types
     numeric_types = (
-        "integer", "numeric", "bigint", "double precision", "real", "float",
-        "number", "int", "decimal", "binary_float", "binary_double"
+        "integer",
+        "numeric",
+        "bigint",
+        "double precision",
+        "real",
+        "float",
+        "number",
+        "int",
+        "decimal",
+        "binary_float",
+        "binary_double",
     )
-    # Oracle + PostgreSQL text types  
+    # Oracle + PostgreSQL text types
     text_types = (
-        "character varying", "text", "varchar", "char", "varchar2", "nvarchar2", 
-        "clob", "nclob", "long"
+        "character varying",
+        "text",
+        "varchar",
+        "char",
+        "varchar2",
+        "nvarchar2",
+        "clob",
+        "nclob",
+        "long",
     )
     # Oracle + PostgreSQL date types
     date_types = (
-        "date", "timestamp without time zone", "timestamp with time zone",
-        "timestamptz", "timestamp", "datetime"
+        "date",
+        "timestamp without time zone",
+        "timestamp with time zone",
+        "timestamptz",
+        "timestamp",
+        "datetime",
     )
-    
+
     numeric_cols = [c for c in columns if c["type"].lower() in numeric_types]
     text_cols = [c for c in columns if c["type"].lower().split("(")[0] in text_types]
     date_cols = [c for c in columns if c["type"].lower().split("(")[0] in date_types]
     all_cols = columns
-    
+
     # Smart column selection: match column names/descriptions to question keywords
-    def _find_best_column(cols: list[dict], question_words: list[str], default_idx: int = 0) -> dict:
+    def _find_best_column(
+        cols: list[dict], question_words: list[str], default_idx: int = 0
+    ) -> dict:
         """Find the column most relevant to the question."""
         if not cols:
             return {"name": "unknown", "type": "VARCHAR2", "description": ""}
@@ -484,7 +570,7 @@ async def _generate_sql(
                 best_score = score
                 best = col
         return best
-    
+
     question_words = question_lower.split()
 
     if wants_count:
@@ -494,17 +580,21 @@ async def _generate_sql(
                 f"SELECT {group_col}, COUNT(*) AS count\nFROM {best_table}\n"
                 f"GROUP BY {group_col}\nORDER BY count DESC\nLIMIT 50",
                 f"Counting records grouped by {group_col} from the {best_table} table.",
+                False,
+                {},
             )
         return (
             f"SELECT COUNT(*) AS total_count FROM {best_table}",
             f"Counting all records in the {best_table} table.",
+            False,
+            {},
         )
 
     if wants_sum and numeric_cols:
         # Find the best numeric column matching the question (amount, revenue, etc.)
         measure_col = _find_best_column(numeric_cols, question_words)
         measure = measure_col["name"]
-        
+
         if wants_group:
             # Determine grouping: by date (month/day/week) or by category
             if date_cols and any(w in question_lower for w in ["month", "monthly", "by month"]):
@@ -517,8 +607,12 @@ async def _generate_sql(
                     f"ORDER BY month\n"
                     f"FETCH FIRST 100 ROWS ONLY",
                     f"Monthly total of {measure} from {best_table}, grouped by {date_col}.",
+                    False,
+                    {},
                 )
-            elif date_cols and any(w in question_lower for w in ["day", "daily", "by day", "by date"]):
+            elif date_cols and any(
+                w in question_lower for w in ["day", "daily", "by day", "by date"]
+            ):
                 date_col = _find_best_column(date_cols, question_words)["name"]
                 return (
                     f"SELECT TRUNC({date_col}) AS day, SUM({measure}) AS total_{measure}\n"
@@ -527,6 +621,8 @@ async def _generate_sql(
                     f"ORDER BY day\n"
                     f"FETCH FIRST 100 ROWS ONLY",
                     f"Daily total of {measure} from {best_table}, grouped by {date_col}.",
+                    False,
+                    {},
                 )
             elif text_cols:
                 group_col = _find_best_column(text_cols, question_words)["name"]
@@ -537,28 +633,34 @@ async def _generate_sql(
                     f"ORDER BY total_{measure} DESC\n"
                     f"FETCH FIRST 50 ROWS ONLY",
                     f"Summing {measure} grouped by {group_col} from {best_table}.",
+                    False,
+                    {},
                 )
         return (
             f"SELECT SUM({measure}) AS total_{measure} FROM {best_table}",
             f"Total sum of {measure} from {best_table}.",
+            False,
+            {},
         )
 
     if wants_top and numeric_cols:
         measure = numeric_cols[0]["name"]
         label_col = text_cols[0]["name"] if text_cols else all_cols[0]["name"]
         return (
-            f"SELECT {label_col}, {measure}\nFROM {best_table}\n"
-            f"ORDER BY {measure} DESC\nLIMIT 10",
+            f"SELECT {label_col}, {measure}\nFROM {best_table}\nORDER BY {measure} DESC\nLIMIT 10",
             f"Top 10 records from {best_table} ranked by {measure}.",
+            False,
+            {},
         )
 
     if wants_bottom and numeric_cols:
         measure = numeric_cols[0]["name"]
         label_col = text_cols[0]["name"] if text_cols else all_cols[0]["name"]
         return (
-            f"SELECT {label_col}, {measure}\nFROM {best_table}\n"
-            f"ORDER BY {measure} ASC\nLIMIT 10",
+            f"SELECT {label_col}, {measure}\nFROM {best_table}\nORDER BY {measure} ASC\nLIMIT 10",
             f"Bottom 10 records from {best_table} ranked by {measure}.",
+            False,
+            {},
         )
 
     if wants_trend and date_cols and numeric_cols:
@@ -569,6 +671,8 @@ async def _generate_sql(
             f"SUM({measure}) AS total\nFROM {best_table}\n"
             f"GROUP BY month\nORDER BY month\nLIMIT 100",
             f"Monthly trend of {measure} from {best_table}.",
+            False,
+            {},
         )
 
     if wants_avg and numeric_cols:
@@ -576,6 +680,8 @@ async def _generate_sql(
         return (
             f"SELECT AVG({measure}) AS avg_{measure} FROM {best_table}",
             f"Average {measure} from {best_table}.",
+            False,
+            {},
         )
 
     # Default: select first few columns
@@ -583,6 +689,8 @@ async def _generate_sql(
     return (
         f"SELECT {select_cols}\nFROM {best_table}\nLIMIT 50",
         f"Showing sample data from {best_table} (first 50 rows).",
+        False,
+        {},
     )
 
 
@@ -591,68 +699,73 @@ async def _generate_sql(
 
 def _transform_sql_for_dialect(sql: str, db_type: DatabaseType) -> str:
     """Transform SQL syntax for the target database dialect.
-    
+
     Handles dialect-specific differences like:
     - LIMIT N → FETCH FIRST N ROWS ONLY (Oracle)
     - LIMIT N → TOP N (MSSQL - for simple cases)
-    
+
     Args:
         sql: Original SQL query
         db_type: Target database type
-        
+
     Returns:
         Transformed SQL for the target dialect
     """
     from backend.app.db import DatabaseType
-    
+
     if db_type == DatabaseType.ORACLE:
         # Convert "LIMIT N" to "FETCH FIRST N ROWS ONLY"
         import re
-        pattern = r'\bLIMIT\s+(\d+)\s*$'
+
+        pattern = r"\bLIMIT\s+(\d+)\s*$"
         match = re.search(pattern, sql, re.IGNORECASE | re.MULTILINE)
         if match:
             n = match.group(1)
-            sql = re.sub(pattern, f'FETCH FIRST {n} ROWS ONLY', sql, flags=re.IGNORECASE | re.MULTILINE)
-    
+            sql = re.sub(
+                pattern, f"FETCH FIRST {n} ROWS ONLY", sql, flags=re.IGNORECASE | re.MULTILINE
+            )
+
     elif db_type == DatabaseType.MSSQL:
         # For MSSQL, LIMIT must be replaced with TOP (simple cases only)
         # Complex cases with ORDER BY need OFFSET/FETCH
         import re
-        pattern = r'\bLIMIT\s+(\d+)\s*$'
+
+        pattern = r"\bLIMIT\s+(\d+)\s*$"
         match = re.search(pattern, sql, re.IGNORECASE | re.MULTILINE)
         if match:
             n = match.group(1)
             # Remove LIMIT clause
-            sql = re.sub(pattern, '', sql, flags=re.IGNORECASE | re.MULTILINE)
+            sql = re.sub(pattern, "", sql, flags=re.IGNORECASE | re.MULTILINE)
             # Add TOP after SELECT
-            sql = re.sub(r'^SELECT\b', f'SELECT TOP {n}', sql, count=1, flags=re.IGNORECASE)
-    
+            sql = re.sub(r"^SELECT\b", f"SELECT TOP {n}", sql, count=1, flags=re.IGNORECASE)
+
     return sql
 
 
 async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     """Fetch database config for the workspace from customer_db_configs.
-    
+
     Args:
         engine: Async SQLAlchemy engine (metadata DB)
         workspace_id: Workspace/customer ID
-        
+
     Returns:
         DBConfig instance for the customer's database
-        
+
     Raises:
         ValueError: If no DB config found for workspace
     """
     import os
+
     env = os.getenv("APP_ENV", "development")
-    
+
     # Dev override: Ignore "default" workspace requests and force stc-kuwait
     if env != "production" and workspace_id == "default":
         workspace_id = "stc-kuwait"
     from sqlalchemy import text as sa_text
 
     from backend.app.db import DatabaseType, DBConfig
-    
+
     async with engine.connect() as conn:
         result = await conn.execute(
             sa_text("""
@@ -665,10 +778,11 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
             {"workspace_id": workspace_id},
         )
         row = result.fetchone()
-        
+
     if not row:
         # Fallback to defaults or dummy connection for local dev if customer is not found
         import os
+
         env = os.getenv("APP_ENV", "development")
         if env != "production":
             return DBConfig(
@@ -680,9 +794,9 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
                 password="stc123",
             )
         raise ValueError(f"No DB config found for workspace: {workspace_id}")
-    
+
     db_type_str, host, port, database, username, password = row
-    
+
     # Map string to enum
     db_type_map = {
         "postgresql": DatabaseType.POSTGRESQL,
@@ -693,7 +807,7 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     db_type = db_type_map.get(db_type_str.lower())
     if not db_type:
         raise ValueError(f"Unsupported database type: {db_type_str}")
-    
+
     return DBConfig(
         db_type=db_type,
         host=host,
@@ -773,6 +887,7 @@ async def _execute_sql(
                 )
             else:
                 from backend.app.services.audit import AuditAction, AuditResourceType
+
                 await audit.log_event(
                     customer_id=_customer_uuid,
                     user_id=_user_uuid,
@@ -871,13 +986,67 @@ def _detect_requested_chart_type(question: str) -> str | None:
 
 
 _CHART_REQ_FILLER = {
-    "give", "me", "a", "an", "the", "show", "make", "it", "as", "to", "chart",
-    "charts", "graph", "plot", "please", "can", "you", "this", "that", "into",
-    "draw", "display", "with", "of", "in", "view", "instead", "turn", "convert",
-    "now", "pie", "bar", "line", "area", "scatter", "table", "tablo", "grid", "data",
-    "color", "colour", "colors", "colours", "palette", "renk", "renkler", "rengini",
-    "renkleri", "rengi", "renge", "paleti", "palet",
-    "change", "different", "new", "style", "değiştir", "degistir", "yap", "çevir", "cevir",
+    "give",
+    "me",
+    "a",
+    "an",
+    "the",
+    "show",
+    "make",
+    "it",
+    "as",
+    "to",
+    "chart",
+    "charts",
+    "graph",
+    "plot",
+    "please",
+    "can",
+    "you",
+    "this",
+    "that",
+    "into",
+    "draw",
+    "display",
+    "with",
+    "of",
+    "in",
+    "view",
+    "instead",
+    "turn",
+    "convert",
+    "now",
+    "pie",
+    "bar",
+    "line",
+    "area",
+    "scatter",
+    "table",
+    "tablo",
+    "grid",
+    "data",
+    "color",
+    "colour",
+    "colors",
+    "colours",
+    "palette",
+    "renk",
+    "renkler",
+    "rengini",
+    "renkleri",
+    "rengi",
+    "renge",
+    "paleti",
+    "palet",
+    "change",
+    "different",
+    "new",
+    "style",
+    "değiştir",
+    "degistir",
+    "yap",
+    "çevir",
+    "cevir",
 }
 
 
@@ -1002,33 +1171,48 @@ def _build_chart(
     # This replaces shipping multi-MB inline Plotly HTML to the browser.
     cfg = pipeline_result.config
     x_key = cfg.x.column or (columns[0] if columns else "")
-    y_keys = [cfg.y.column] if cfg.y.column else [
-        c for c in columns
-        if c != x_key and rows and isinstance(rows[0].get(c), (int, float, str)) # str dahil (ör: "1,234.56" veya parse edilebilen stringler olabilir)
-    ]
-    
+    y_keys = (
+        [cfg.y.column]
+        if cfg.y.column
+        else [
+            c
+            for c in columns
+            if c != x_key
+            and rows
+            and isinstance(
+                rows[0].get(c), (int, float, str)
+            )  # str dahil (ör: "1,234.56" veya parse edilebilen stringler olabilir)
+        ]
+    )
+
     # If the LLM chart_builder specifically set Y to a metric, ensure we respect it
     if not cfg.y.column and y_keys:
         # Check if the query asks for revenue, count, etc., and force the appropriate column
         lower_q = question.lower()
-        if ("revenue" in lower_q or "sum" in lower_q or "total" in lower_q) and not any("revenue" in y.lower() for y in y_keys):
-             possible_ys = [c for c in columns if "revenue" in c.lower() or "total" in c.lower() or "amount" in c.lower()]
-             if possible_ys:
-                 y_keys = possible_ys
+        if ("revenue" in lower_q or "sum" in lower_q or "total" in lower_q) and not any(
+            "revenue" in y.lower() for y in y_keys
+        ):
+            possible_ys = [
+                c
+                for c in columns
+                if "revenue" in c.lower() or "total" in c.lower() or "amount" in c.lower()
+            ]
+            if possible_ys:
+                y_keys = possible_ys
         elif "count" in lower_q:
-             possible_ys = [c for c in columns if "count" in c.lower() or c.lower() == "count"]
-             if possible_ys:
-                 y_keys = possible_ys
+            possible_ys = [c for c in columns if "count" in c.lower() or c.lower() == "count"]
+            if possible_ys:
+                y_keys = possible_ys
 
     # Force x_key and y_keys for known SQL structures (like the revenue by region grouping)
     # If group by contains 'month' and 'region', x_key should probably be 'month' and 'region' is grouped.
     # We set x_key dynamically based on typical time-series axes
     if "month" in columns and "region" in columns:
-         x_key = "month"
+        x_key = "month"
 
     MAX_CHART_POINTS = 1000
     chart_data = _json_safe_rows(rows[:MAX_CHART_POINTS])
-    
+
     # ── Multi-Series Pivot for Recharts ──────────────────────────────────────────
     # If the result has exactly 3 columns and one is intended as a category (e.g. Month, Region, Revenue)
     # we need to pivot it so Recharts can draw one bar/line per Region.
@@ -1040,23 +1224,23 @@ def _build_chart(
             cat_col = cat_cols[0]
             pivoted_dict = {}
             unique_categories = set()
-            
+
             for row in chart_data:
                 x_val = row.get(x_col)
                 cat_val = row.get(cat_col)
                 y_val = row.get(y_col)
-                
+
                 if x_val is not None:
                     # Make sure X values are strings if they are dates, to match correctly
                     x_str = str(x_val)
                     if x_str not in pivoted_dict:
                         pivoted_dict[x_str] = {x_col: x_val}
-                    
+
                     if cat_val is not None:
                         cat_str = str(cat_val)
                         pivoted_dict[x_str][cat_str] = y_val
                         unique_categories.add(cat_str)
-            
+
             chart_data = list(pivoted_dict.values())
             y_keys = sorted(list(unique_categories))
             x_key = x_col
@@ -1130,9 +1314,10 @@ async def process_query(
 
     cid: str = request.conversation_id or ""
     conversation: Conversation | None = None
-    
+
     # Dev override: Force workspace_id to stc-kuwait
     import os
+
     env = os.getenv("APP_ENV", "development")
     if env != "production" and workspace_id == "default":
         workspace_id = "stc-kuwait"
@@ -1198,17 +1383,22 @@ async def process_query(
             }
         yield {
             "event": "chart",
-            "data": json.dumps({
-                "chart_type": new_type,
-                "chart_data": _prev_assistant.chart_data,
-                "chart_url": _prev_assistant.chart_url or "",
-                "csv_url": "",
-                "chart_config": cfg,
-                "row_count": len(_prev_assistant.chart_data),
-            }, default=str),
+            "data": json.dumps(
+                {
+                    "chart_type": new_type,
+                    "chart_data": _prev_assistant.chart_data,
+                    "chart_url": _prev_assistant.chart_url or "",
+                    "csv_url": "",
+                    "chart_config": cfg,
+                    "row_count": len(_prev_assistant.chart_data),
+                },
+                default=str,
+            ),
         }
         await append_message(
-            redis, workspace_id, cid,
+            redis,
+            workspace_id,
+            cid,
             ConversationMessage(
                 role="assistant",
                 content=note,
@@ -1220,11 +1410,13 @@ async def process_query(
         )
         yield {
             "event": "status",
-            "data": json.dumps({
-                "status": QueryStatus.COMPLETE.value,
-                "message": "Chart updated",
-                "conversation_id": cid,
-            }),
+            "data": json.dumps(
+                {
+                    "status": QueryStatus.COMPLETE.value,
+                    "message": "Chart updated",
+                    "conversation_id": cid,
+                }
+            ),
         }
         yield {"event": "done", "data": json.dumps({"conversation_id": cid})}
         return
@@ -1236,12 +1428,12 @@ async def process_query(
         question=request.question,
         user_id=user_id,
         workspace_id=workspace_id,
-        team_id="default-team"
+        team_id="default-team",
     )
     prompt_context = mem_context.to_prompt_context()
     if prompt_context:
         logger.info("Found memory context for user %s: %s bytes", user_id, len(prompt_context))
-    
+
     # Stage 2: GENERATING_SQL
     yield {
         "event": "status",
@@ -1265,33 +1457,90 @@ async def process_query(
             _prev_q = None
 
     try:
-        # ── Open a DB session for vault-policy enforcement ──────────────────
+        from sqlalchemy import select as sa_select
         from sqlalchemy.ext.asyncio import AsyncSession as _AsyncSession
 
+        from backend.app.models.organization import Customer
+        from backend.app.services.token import TokenService
+
         gen_kwargs: dict = {}
-        if team_id:
-            gen_kwargs["team_id"] = team_id
+        token_usage: dict = {}
+
+        async with _AsyncSession(engine) as sess:
+            # ── Resolve customer UUID from workspace slug ──────────────────
+            result = await sess.execute(
+                sa_select(Customer.id).where(Customer.slug == workspace_id)
+            )
+            customer_row = result.scalar_one_or_none()
+            customer_uuid: _uuid.UUID | None = customer_row
+
+            # Parse user and team UUIDs from string ids
             try:
-                async with _AsyncSession(engine) as sess:
-                    gen_kwargs["db"] = sess
-                    sql, explanation = await _generate_sql(
-                        request.question, engine, workspace_id,
-                        memory_context=mem_context, history=history,
-                        **gen_kwargs,
+                user_uuid = _uuid.UUID(user_id) if user_id else None
+            except (ValueError, TypeError):
+                user_uuid = None
+            try:
+                team_uuid = _uuid.UUID(team_id) if team_id else None
+            except (ValueError, TypeError):
+                team_uuid = None
+
+            # ── Token quota enforcement ────────────────────────────────────
+            token_svc = None
+            if customer_uuid and user_uuid:
+                try:
+                    token_svc = TokenService(db=sess, redis=redis)
+                    allowed = await token_svc.check_quota(
+                        customer_id=customer_uuid,
+                        user_id=user_uuid,
+                        team_id=team_uuid,
+                        session_id=cid,
                     )
-            except Exception:
-                # If session creation fails, fall back without policy enforcement
-                logger.exception("Failed to open DB session for vault policy")
-                sql, explanation = await _generate_sql(
-                    request.question, engine, workspace_id,
-                    memory_context=mem_context, history=history,
-                )
-        else:
-            sql, explanation = await _generate_sql(
-                request.question, engine, workspace_id,
-                memory_context=mem_context, history=history,
+                    if not allowed:
+                        yield {
+                            "event": "error",
+                            "data": json.dumps(
+                                {"error": "Daily token quota exceeded. "
+                                 "Please try again tomorrow."}
+                            ),
+                        }
+                        return
+                except Exception:
+                    logger.exception(
+                        "Token quota check failed — allowing request to proceed"
+                    )
+                    token_svc = None
+
+            # ── Generate SQL ───────────────────────────────────────────────
+            if team_id:
+                gen_kwargs["team_id"] = team_id
+                gen_kwargs["db"] = sess
+            sql, explanation, is_llm, token_usage = await _generate_sql(
+                request.question,
+                engine,
+                workspace_id,
+                memory_context=mem_context,
+                history=history,
                 **gen_kwargs,
             )
+
+            # ── Record token usage ─────────────────────────────────────────
+            if token_svc and token_usage and customer_uuid and user_uuid:
+                total = token_usage.get("prompt_tokens", 0) + token_usage.get(
+                    "completion_tokens", 0
+                )
+                if total > 0:
+                    try:
+                        await token_svc.record_usage(
+                            customer_id=customer_uuid,
+                            user_id=user_uuid,
+                            team_id=team_uuid,
+                            session_id=cid,
+                            model=token_usage.get("model", "unknown"),
+                            prompt_tokens=token_usage.get("prompt_tokens", 0),
+                            completion_tokens=token_usage.get("completion_tokens", 0),
+                        )
+                    except Exception:
+                        logger.exception("Failed to record token usage")
     except Exception as e:
         logger.exception("SQL generation failed")
         yield {
@@ -1330,9 +1579,11 @@ async def process_query(
     rows: list[dict] = []
     try:
         from sqlalchemy.ext.asyncio import AsyncSession as _ExecSession
+
         async with _ExecSession(engine) as sess:
             rows = await _execute_sql(
-                sql, engine,
+                sql,
+                engine,
                 workspace_id=workspace_id,
                 db=sess,
                 user_id=user_id,
@@ -1387,17 +1638,17 @@ async def process_query(
     if len(rows) > 0:
         try:
             # Extract table name from SQL for better context
-            table_match = re.search(r'\bFROM\s+(\w+)', sql, re.IGNORECASE)
+            table_match = re.search(r"\bFROM\s+(\w+)", sql, re.IGNORECASE)
             table_name = table_match.group(1) if table_match else "unknown"
-            
+
             # Extract columns used from SQL
-            select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql, re.IGNORECASE | re.DOTALL)
+            select_match = re.search(r"SELECT\s+(.+?)\s+FROM", sql, re.IGNORECASE | re.DOTALL)
             columns_used = []
             if select_match:
                 cols_str = select_match.group(1)
                 # Extract column names (simplified)
-                columns_used = re.findall(r'\b([A-Z_][A-Z0-9_]*)\b', cols_str, re.IGNORECASE)
-            
+                columns_used = re.findall(r"\b([A-Z_][A-Z0-9_]*)\b", cols_str, re.IGNORECASE)
+
             # 1. Store query cache (existing)
             memory_svc.store_query(
                 question=request.question,
@@ -1405,10 +1656,10 @@ async def process_query(
                 table=table_name,
                 user_id=user_id,
                 workspace_id=workspace_id,
-                row_count=len(rows)
+                row_count=len(rows),
             )
             logger.info("Stored query cache for user %s", user_id)
-            
+
             # 2. Detect and store user preferences from successful patterns
             preference = _extract_preference_from_successful_query(
                 question=request.question,
@@ -1424,7 +1675,7 @@ async def process_query(
                     metadata={"table": table_name, "columns": columns_used[:5]},
                 )
                 logger.info("Stored user preference: %s", preference[:50])
-            
+
             # 3. Detect explicit chart preference
             chart_pref = _detect_chart_preference(request.question)
             if chart_pref:
@@ -1433,13 +1684,13 @@ async def process_query(
                     preference=pref_text,
                     user_id=user_id,
                     workspace_id=workspace_id,
-                    metadata={"chart_type": chart_pref['value']},
+                    metadata={"chart_type": chart_pref["value"]},
                 )
-                logger.info("Stored chart preference: %s", chart_pref['value'])
-                
+                logger.info("Stored chart preference: %s", chart_pref["value"])
+
         except Exception as e:
             logger.warning("Failed to store memory: %s", e)
-            
+
     # Stage 6: COMPLETE
     assistant_msg = ConversationMessage(
         role="assistant",
