@@ -90,7 +90,7 @@ class AuditService:
             ip_address=ip_address,
         )
         self._session.add(entry)
-        await self._session.flush()
+        await self._session.commit()
         logger.debug(
             "Audit: %s %s/%s user=%s customer=%s",
             action,
@@ -111,6 +111,8 @@ class AuditService:
         resource_id: str | None = None,
         sql: str | None = None,
         row_count: int | None = None,
+        question: str | None = None,
+        explanation: str | None = None,
         ip_address: str | None = None,
     ) -> DataAuditLog:
         """Record a data-query event."""
@@ -119,6 +121,10 @@ class AuditService:
             details["sql"] = sql
         if row_count is not None:
             details["row_count"] = row_count
+        if question is not None:
+            details["question"] = question
+        if explanation is not None:
+            details["explanation"] = explanation
         return await self.log_event(
             customer_id=customer_id,
             user_id=user_id,

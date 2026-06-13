@@ -824,6 +824,8 @@ async def _execute_sql(
     workspace_id: str | None = None,
     db: "AsyncSession | None" = None,
     user_id: str | None = None,
+    question: str | None = None,
+    explanation: str | None = None,
 ) -> list[dict]:
     """Execute a generated SQL query against the customer's database.
 
@@ -884,6 +886,8 @@ async def _execute_sql(
                     user_id=_user_uuid,
                     sql=details_sql,
                     row_count=row_count,
+                    question=question,
+                    explanation=explanation,
                 )
             else:
                 from backend.app.services.audit import AuditAction, AuditResourceType
@@ -1587,6 +1591,8 @@ async def process_query(
                 workspace_id=workspace_id,
                 db=sess,
                 user_id=user_id,
+                question=request.question,
+                explanation=explanation,
             )
     except Exception as e:
         logger.exception("SQL execution failed")
