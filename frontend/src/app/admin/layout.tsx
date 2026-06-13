@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -94,6 +94,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             >
               <ShieldAlert className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Audit Logs</span>}
+            </Link>
+            
+            <Link 
+              href="/admin/vault-access" 
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/vault-access") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Vault Access"
+            >
+              <Lock className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Vault Access</span>}
             </Link>
           </nav>
         </aside>
