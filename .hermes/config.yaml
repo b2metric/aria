@@ -20,16 +20,23 @@
 #     ga4/sentry/search-console/google-workspace/vercel/odoo-business) preserved in
 #     config.yaml.bak.aria-tuning-* — copy a block back here to re-enable.
 model:
-  default: claude-opus
+  # Orchestrator = gemini-reasoner (gemini-3.1-pro): genuine ~1M context (fights the
+  # plan/decision drift behind "forgets the architecture"), vision-capable (frontend-
+  # visual-verification), strong tool-calling, verified working on the proxy. claude-* is
+  # BLOCKED ($0 Anthropic credit → loud 400; no longer silently swapped to gemini) — flip
+  # default back to claude-sonnet once billing is funded. DeepSeek-R1 is deliberately NOT
+  # the orchestrator (weak in agentic tool-loops; ~64K ctx, NOT 1M → silent-truncation
+  # trap); R1 serves the reasoning/review roles via the proxy role-*/review-of-* aliases.
+  default: gemini-reasoner
   provider: custom
   base_url: http://localhost:4000/v1
   api_key: ${LITELLM_API_KEY}
-  context_length: 200000
+  context_length: 1000000   # gemini-3.1-pro real ~1M — keep plan + grounding in-context
 # Subagent delegation — delegate_task resolves ONE model for ALL children
 # (tools/delegate_tool.py:2057 passes creds["model"] to every child; there is
 # no per-role hook in the runtime). Route bulk delegated work through the same
 # LiteLLM proxy to the cheap-fast role-backend-codegen alias so leaf subagents
-# stop burning claude-opus. Reasoning/review/vision roles (role-architect,
+# stop burning the orchestrator. Reasoning/review/vision roles (role-architect,
 # role-reviewer, review-of-*, role-frontend-vision, role-debugger, role-qa-gate)
 # stay at the ORCHESTRATOR level — the parent already routes per-role per
 # engineering-core:model-routing + SOUL.md. Do NOT delegate review to a leaf:
@@ -46,7 +53,7 @@ agent:
   reasoning_effort: high   # deeper, more careful reasoning (medium -> high)
 # Frontend work needs EYES: the agent must render localhost:3000 and screenshot it,
 # otherwise it edits the chart UI blind and thrashes (page.tsx rewritten 35x).
-# allow_private_urls lets browser_navigate reach localhost; claude-opus is vision-capable.
+# allow_private_urls lets browser_navigate reach localhost; gemini-reasoner is vision-capable.
 browser:
   engine: auto
   allow_private_urls: true
@@ -71,11 +78,11 @@ custom_providers:
   - glm-4
 compression:
   enabled: true
-  threshold: 0.75
+  threshold: 0.8          # compress later (gemini ~1M window) — keep more context live
   target_ratio: 0.5
-  protect_last_n: 40
+  protect_last_n: 60      # keep more recent turns uncompressed (less mid-task forgetting)
   hygiene_hard_message_limit: 400
-  protect_first_n: 3
+  protect_first_n: 5      # protect the opening plan + AGENTS/LOCKED grounding from compression
 auxiliary:
   compression:
     provider: custom
