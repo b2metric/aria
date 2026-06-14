@@ -92,7 +92,9 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: test
           SECRET_KEY: ci-test-secret-not-for-production
-        run: uv run pytest --suppress-no-test-exit-code || true
+        # BLOCKING gate (was `--suppress-no-test-exit-code || true` = no-op → zero TDD pressure).
+        # Backend tests now fail CI. coverage.xml comes from pyproject/pytest addopts.
+        run: uv run pytest
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v7

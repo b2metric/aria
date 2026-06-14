@@ -49,5 +49,19 @@ while IFS= read -r f; do
   fi
 done < <(staged)
 
+# 6) TDD guard (engineering-core:test-driven-development, code-enforced).
+#    Backend logic changes (api/services/query/agents/core) must ship with a test change.
+#    Override for genuine non-feature commits: SKIP_TDD_GUARD=1 git commit ...
+if [ "${SKIP_TDD_GUARD:-0}" != "1" ]; then
+  logic=$(staged | grep -E '^backend/app/(api|services|query|agents|core)/.*\.py$' | grep -vE '/__init__\.py$|/schemas?/|/config\.py$' || true)
+  tests=$(staged | grep -E '(^|/)tests?/|(^|/)test_.*\.py$|_test\.py$' || true)
+  if [ -n "$logic" ] && [ -z "$tests" ]; then
+    echo "BLOCKED (TDD): backend logic changed with NO test change:"
+    printf '%s\n' "$logic" | sed 's/^/    /'
+    echo "  -> write/adjust a test first (RED→GREEN). Genuinely no test needed? SKIP_TDD_GUARD=1 git commit …"
+    fail=1
+  fi
+fi
+
 [ "$fail" -eq 1 ] && { echo "--- pre-commit guard failed (engineering-core) ---"; exit 1; }
 exit 0
