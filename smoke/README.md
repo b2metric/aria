@@ -1,4 +1,4 @@
-# smoke/ — boot + login gate (engineering-core:smoke-gate)
+# smoke/ — boot + login gate
 
 The BLOCKING completion gate. Proves the stack boots and a real login round-trips
 before any "done"/deploy. Catches the two classes that shipped silently:
@@ -22,17 +22,11 @@ Env (defaults target local dev): `SMOKE_BACKEND_URL` (http://localhost:8000),
 
 Exit non-zero on any failed gate. Wired into CI (`.github/workflows/ci.yml`).
 
-## Profile audit (Hermes factory contract)
+## Definition of Done
 
-`verify-profile.sh` audits THIS project's Hermes profile against the Project
-Factory v4 contract — config-as-code symlinks, engineering-core, role + toolkit
-skills present AND curator-pinned, consumer bloat pruned, grounding. It is a thin
-wrapper over the canonical toolkit auditor (single source of truth, no drift) and
-auto-detects the slug from the repo directory.
+`done-check.sh` bundles the gates a full-stack slice must pass before any "done":
+backend tests + frontend tests + an API must have a UI surface + boot/login smoke.
 
 ```bash
-bash smoke/verify-profile.sh    # exit 0 = PASS · 1 = drift · 2 = toolkit not found
+bash smoke/done-check.sh    # exit 0 = done · 1 = not done (fix the HARD failures)
 ```
-
-Needs the toolkit on disk (`~/hermes-toolkit`, or `HERMES_TOOLKIT=/path`). On drift
-it prints the repair commands (re-pin / re-copy / de-bloat).

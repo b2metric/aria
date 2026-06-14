@@ -65,9 +65,9 @@ Copy `.env.example` to `.env` and adjust as needed. Default dev credentials are 
 
 Proprietary — B2Metric. All rights reserved.
 
-## Engineering-core & operations (v4)
+## Agent & operations (Claude Code)
 
-This repo follows the **engineering-core** discipline (hermes-toolkit `skills/engineering-core`). Ground truth: **`LOCKED-DECISIONS.md`** + **`AGENTS.md`** (read first). Authority docs: `docs/technical-architecture.md`, `docs/engineering-notes.md`, `docs/frontend-architecture.md`.
+This repo uses **Claude Code**, run on your own LLMs via **claude-code-router → LiteLLM** (Gemini/DeepSeek, no Anthropic billing — see `CLAUDE.md`). Discipline = skills (obra/superpowers + everything-claude-code) + the mechanical gates below. Ground truth: **`CLAUDE.md`** + **`LOCKED-DECISIONS.md`** + **`AGENTS.md`** (read first). Authority docs: `docs/technical-architecture.md`, `docs/engineering-notes.md`, `docs/frontend-architecture.md`.
 
 **Hard gates (code/CI — no "done" without them):**
 - **Boot + login smoke** — `bash smoke/check.sh` (auto-reads `backend/.env`; health → Keycloak JWKS `/auth` → OIDC login → authenticated `/me`) + CI `smoke-boot` job.

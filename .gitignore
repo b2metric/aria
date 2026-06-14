@@ -66,16 +66,5 @@ frontend/test-results/
 # Generated business PDFs (regenerable from docs/business/*.md; keep on disk, out of git)
 docs/business/pdf/
 
-# Hermes repo-local profile (config-as-code): default-deny — commit config, NEVER secrets/state
-.hermes/*
-!.hermes/config.yaml
-!.hermes/SOUL.md
-!.hermes/.env.example
-!.hermes/README.md
-!.hermes/agents/
-# skills: commit ONLY engineering-core (the project discipline). The generic Hermes skill
-# library + curator state/backups (.tar.gz binaries) + skill docs with example keys stay
-# on disk for the runtime agent but OUT of git.
-!.hermes/skills/
-.hermes/skills/*
-!.hermes/skills/engineering-core/
+# Claude Code: local-only settings + router config (never commit the real LiteLLM key)
+.claude/settings.local.json
