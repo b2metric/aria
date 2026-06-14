@@ -70,9 +70,9 @@
 - When you make a new architectural choice, append it to
   `docs/technical-architecture.md` so it survives the next session.
 
-## 5. Engineering-core (added 2026-06-11)
+## 5. Discipline (Claude Code — migrated off Hermes 2026-06-14)
 
 - **Ground truth: `LOCKED-DECISIONS.md`** (ADR ledger) — read alongside this file; never re-litigate a locked row.
-- **Hard gates** (code/CI, no "done" without them): boot+login smoke (`bash smoke/check.sh`), backend startup validation (`validate_runtime`), `SafeIframe` >1 MB guard, `.githooks/pre-commit` path guard. Cite run-evidence before claiming done (engineering-core:verification-before-completion).
-- **LLM calls** route via LiteLLM per-role aliases (`infra/llm/config.yaml`); **reviewer ≠ author**. Stack: Python/FastAPI → Go only when measured (engineering-core:stack-decision).
-- Full discipline pack: hermes-toolkit `skills/engineering-core/`.
+- **Hard gates** (mechanical, harness-independent — no "done" without them): boot+login smoke (`bash smoke/check.sh`), full Definition-of-Done (`bash smoke/done-check.sh` = BE+FE+tests+smoke), backend startup validation (`validate_runtime`), `SafeIframe` >1 MB guard, `.githooks/pre-commit` (TDD + path/secret guard), CI (`.github/workflows/ci.yml`, blocking). Cite run-evidence before claiming done.
+- **LLM calls** route via the LiteLLM proxy (`infra/llm/config.yaml`); **reviewer ≠ author**. Stack: Python/FastAPI → Go only when measured.
+- **Agent harness: Claude Code** (was Hermes). Discipline = **`CLAUDE.md`** + skills (superpowers + everything-claude-code) + the mechanical gates above. Models via claude-code-router → LiteLLM (see `CLAUDE.md` §2).

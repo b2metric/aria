@@ -1,0 +1,18 @@
+{
+  "_comment": "claude-code-router config. Copy to ~/.claude-code-router/config.json and replace ${LITELLM_API_KEY} with your real proxy key (from the LiteLLM proxy / hermes-llm-infra .env). Then launch Claude Code on YOUR models with: ccr code . — no Anthropic billing. Vision (screenshots) must route to gemini (R1 is text-only).",
+  "Providers": [
+    {
+      "name": "litellm",
+      "api_base_url": "http://localhost:4000/v1/chat/completions",
+      "api_key": "${LITELLM_API_KEY}",
+      "models": ["gemini-reasoner", "deepseek-reasoner", "deepseek-chat", "deepseek-v4-flash"]
+    }
+  ],
+  "Router": {
+    "default": "litellm,gemini-reasoner",
+    "background": "litellm,deepseek-v4-flash",
+    "think": "litellm,deepseek-reasoner",
+    "longContext": "litellm,gemini-reasoner",
+    "webSearch": "litellm,gemini-reasoner"
+  }
+}
