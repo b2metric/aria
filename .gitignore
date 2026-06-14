@@ -63,6 +63,9 @@ codegraph/drift-audit.json
 frontend/tsconfig.tsbuildinfo
 frontend/test-results/
 
+# Generated business PDFs (regenerable from docs/business/*.md; keep on disk, out of git)
+docs/business/pdf/
+
 # Hermes repo-local profile (config-as-code): default-deny — commit config, NEVER secrets/state
 .hermes/*
 !.hermes/config.yaml
