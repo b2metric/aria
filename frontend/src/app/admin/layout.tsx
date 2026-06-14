@@ -119,6 +119,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <Users className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Users & Teams</span>}
             </Link>
+
+            <Link 
+              href="/admin/tokens" 
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/tokens") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Token Management"
+            >
+              <Settings className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Token Quotas</span>}
+            </Link>
           </nav>
         </aside>
         <main className="flex-1 p-8 overflow-y-auto w-full transition-all duration-300">

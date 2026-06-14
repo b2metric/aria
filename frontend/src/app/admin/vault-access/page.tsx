@@ -28,7 +28,11 @@ export default function VaultAccessPage() {
 
   const [tables, setTables] = useState<VaultTable[]>([]);
   const [policies, setPolicies] = useState<VaultPolicy[]>([]);
+  
+  // Real DB Teams
+  const [teams, setTeams] = useState<any[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>("default");
+  
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -65,6 +69,15 @@ export default function VaultAccessPage() {
           if (defaultPolicy) {
             setAllowedTables(new Set(defaultPolicy.allowed_tables));
           }
+        }
+
+        // 3. Fetch real teams from the DB
+        const teamsRes = await fetch(`${API_BASE}/api/admin/teams`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (teamsRes.ok) {
+          const teamsData = await teamsRes.json();
+          setTeams(Array.isArray(teamsData) ? teamsData : []);
         }
       } catch (err) {
         console.error("Failed to fetch data", err);
@@ -173,7 +186,19 @@ export default function VaultAccessPage() {
             >
               Default Team
             </button>
-            {/* Future: Map over actual teams here */}
+            {teams.map((team) => (
+              <button
+                key={team.id}
+                className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium mt-1 ${
+                  selectedTeam === team.id
+                    ? "bg-blue-50 text-blue-700"
+                    : "text-gray-700 hover:bg-gray-100"
+                }`}
+                onClick={() => setSelectedTeam(team.id)}
+              >
+                {team.name}
+              </button>
+            ))}
           </CardContent>
         </Card>
 
@@ -188,8 +213,10 @@ export default function VaultAccessPage() {
                 </CardTitle>
                 <CardDescription className="mt-1">
                   Select the vault tables the{" "}
-                  <span className="font-semibold text-gray-900">{selectedTeam}</span> team can
-                  query.
+                  <span className="font-semibold text-gray-900">
+                    {selectedTeam === "default" ? "Default" : teams.find(t => t.id === selectedTeam)?.name || selectedTeam}
+                  </span>{" "}
+                  team can query.
                 </CardDescription>
               </div>
               <div className="text-sm font-medium text-gray-500 bg-white px-3 py-1 rounded-full border border-gray-200">
