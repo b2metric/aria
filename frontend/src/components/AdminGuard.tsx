@@ -16,7 +16,7 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     const roles = anySession?.user?.roles || [];
 
     if (!session || !roles.includes("admin")) {
-      router.replace("/dashboard");
+      router.replace("/");
     } else {
       setIsAuthorized(true);
     }
