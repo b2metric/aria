@@ -42,6 +42,9 @@ class TokenUsageDaily(Base, UUIDMixin):
     """Daily aggregated token consumption per user."""
 
     __tablename__ = "token_usage_daily"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "user_id", "usage_date", name="uix_token_usage_customer_user_date"),
+    )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
