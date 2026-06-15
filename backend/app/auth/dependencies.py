@@ -19,6 +19,12 @@ from backend.app.auth.jwt import (
     decode_token,
 )
 from backend.app.auth.models import Role, TokenPayload, UserContext
+import asyncio
+from functools import lru_cache
+
+# In-memory cache to avoid syncing the same user on every request
+_synced_users = set()
+
 
 logger = logging.getLogger(__name__)
 
