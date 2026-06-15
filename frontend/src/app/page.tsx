@@ -78,16 +78,11 @@ export default function DashboardPage() {
   );
 
   if (status === "unauthenticated") {
+    // Optionally redirect directly, but we can also just show a nice local link
+    router.push("/login");
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome to ARIA</h1>
-        <p className="text-gray-500">Please sign in to access your dashboard.</p>
-        <button
-          onClick={() => signIn("keycloak")}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          Login with Keycloak
-        </button>
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-pulse text-gray-400">Redirecting to login...</div>
       </div>
     );
   }

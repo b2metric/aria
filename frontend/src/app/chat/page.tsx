@@ -165,7 +165,7 @@ function ChatPageContent() {
   // instead of landing on /chat with no token ("No authentication token available").
   useEffect(() => {
     if (status === "unauthenticated") {
-      signIn("keycloak");
+      router.push("/login");
     }
   }, [status]);
 
@@ -260,7 +260,7 @@ function ChatPageContent() {
         if (!token) {
            // Session expired/missing — send the user to login instead of erroring.
            setIsStreaming(false);
-           signIn("keycloak");
+           router.push("/login");
            return;
         }
         
