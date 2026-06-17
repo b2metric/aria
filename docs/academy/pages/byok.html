@@ -1,100 +1,84 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Bring Your Own Key (BYOK) - ARIA Academy</title>
-  <style>
-    :root {
-      --primary: #2563eb;
-      --text-main: #1f2937;
-      --text-muted: #4b5563;
-      --bg-body: #f8fafc;
-      --bg-sidebar: #ffffff;
-      --border: #e2e8f0;
-      --radius: 8px;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-body); color: var(--text-main); display: flex; min-height: 100vh; }
-    .sidebar { width: 280px; background-color: var(--bg-sidebar); border-right: 1px solid var(--border); padding: 2rem 1.5rem; display: flex; flex-direction: column; gap: 1.5rem; flex-shrink: 0; }
-    .logo { font-size: 1.5rem; font-weight: 800; color: var(--primary); letter-spacing: -0.025em; text-decoration: none; }
-    .nav-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
-    .sidebar-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 600; margin-top: 1rem; margin-bottom: 0.5rem; }
-    .sidebar-link { text-decoration: none; color: var(--text-muted); font-size: 0.9rem; padding: 0.4rem 0.75rem; border-radius: 6px; transition: all 0.2s; display: block; }
-    .sidebar-link:hover, .sidebar-link.active { background-color: #eff6ff; color: var(--primary); font-weight: 500; }
-    .main-content { flex: 1; padding: 3rem 4rem; max-width: 900px; line-height: 1.6; }
-    .content-header { margin-bottom: 2.5rem; }
-    h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 1rem; letter-spacing: -0.025em; }
-    h2 { font-size: 1.5rem; font-weight: 600; margin-top: 2.5rem; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
-    h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; }
-    p { margin-bottom: 1.25rem; color: var(--text-muted); }
-    ul, ol { margin-bottom: 1.25rem; padding-left: 1.5rem; color: var(--text-muted); }
-    li { margin-bottom: 0.5rem; }
-    .info-box { background-color: #eff6ff; border-left: 4px solid var(--primary); padding: 1.25rem; border-radius: 0 var(--radius) var(--radius) 0; margin: 1.5rem 0; }
-    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85em; background-color: #f1f5f9; padding: 0.2em 0.4em; border-radius: 4px; color: #db2777; }
-    pre { background-color: #1e293b; color: #f8fafc; padding: 1.25rem; border-radius: var(--radius); overflow-x: auto; margin-bottom: 1.5rem; font-size: 0.9rem; }
-    pre code { background-color: transparent; color: inherit; padding: 0; }
-  </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bring Your Own Key (BYOK) | B2Metric Academy</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
 </head>
 <body>
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <a href="../index.html" class="logo">ARIA Academy</a>
-    <ul class="nav-list">
-      <div class="sidebar-title">Getting Started</div>
-      <li><a href="../index.html" class="sidebar-link">Introduction</a></li>
-      <li><a href="why-aria.html" class="sidebar-link">Why ARIA?</a></li>
 
-      <div class="sidebar-title">Core Concepts</div>
-      <li><a href="chat-flow.html" class="sidebar-link">The Chat Flow</a></li>
-      <li><a href="vault-sync.html" class="sidebar-link">Vault & Schema Sync</a></li>
-      <li><a href="team-memory.html" class="sidebar-link">Team Memory</a></li>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="../index.html" class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      B2Metric Academy
+    </a>
+  </nav>
 
-      <div class="sidebar-title">Security & Governance</div>
-      <li><a href="row-limits.html" class="sidebar-link">Row Limits & Guards</a></li>
-      <li><a href="byok.html" class="sidebar-link active">Bring Your Own Key (BYOK)</a></li>
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <ul class="sidebar-menu">
+        <div class="sidebar-title">Getting Started</div>
+        <li><a href="../index.html" class="sidebar-link">How ARIA Works</a></li>
+        <li><a href="chat-flow.html" class="sidebar-link">Chat Flow & Pipelines</a></li>
+        <li><a href="why-aria.html" class="sidebar-link">Why ARIA? (Comparisons)</a></li>
 
-      <div class="sidebar-title">Analytics & Artifacts</div>
-      <li><a href="chart-types.html" class="sidebar-link">Chart Types</a></li>
-      <li><a href="data-exports.html" class="sidebar-link">Data Exports (MinIO)</a></li>
-    </ul>
-  </aside>
+        <div class="sidebar-title">Security & Governance</div>
+        <li><a href="byok.html" class="sidebar-link active">Bring Your Own Key (BYOK)</a></li>
+        <li><a href="vault-sync.html" class="sidebar-link">Vault Auto-Sync</a></li>
+        <li><a href="row-limits.html" class="sidebar-link">Row Limits & Safeguards</a></li>
+        <li><a href="team-memory.html" class="sidebar-link">Team Memory (Mem0)</a></li>
 
-  <!-- Main Content -->
-  <main class="main-content">
-    <div class="content-header">
-      <h1>Bring Your Own Key (BYOK)</h1>
-      <p>Data sovereignty and custom LLM routing for enterprise customers.</p>
-    </div>
+        <div class="sidebar-title">Analytics & Artifacts</div>
+        <li><a href="chart-types.html" class="sidebar-link">Chart Types</a></li>
+        <li><a href="data-exports.html" class="sidebar-link">Data Exports (MinIO)</a></li>
+      </ul>
+    </aside>
 
-    <h2>What is BYOK?</h2>
-    <p>Bring Your Own Key (BYOK) is an enterprise security feature that allows customers to provide their own Large Language Model (LLM) API keys (such as OpenAI, Azure OpenAI, or Google Gemini) instead of using the shared ARIA platform key.</p>
-    <p>This ensures that sensitive queries and data schemas are sent directly to the customer's dedicated model endpoints, fulfilling strict data sovereignty and compliance requirements (e.g., GDPR, KVKK) often demanded by banking and healthcare organizations.</p>
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="content-header">
+        <h1 class="content-title">Bring Your Own Key (BYOK)</h1>
+        <p class="content-desc">Data sovereignty and custom LLM routing for enterprise customers.</p>
+      </header>
 
-    <h2>How it Works</h2>
-    <p>Even when a customer brings their own key, ARIA maintains full control over governance, token accounting, and security through its proxy architecture.</p>
-    
-    <ol>
-      <li><strong>Proxy Routing:</strong> Queries are still routed through the ARIA LiteLLM proxy. This allows ARIA to count tokens, log audits, and enforce quotas.</li>
-      <li><strong>Token Quotas:</strong> Custom keys do not bypass usage limits. Token consumption is intercepted from the provider's response payload, and the customer's daily <code>TokenQuota</code> is strictly enforced.</li>
-      <li><strong>Encrypted Storage:</strong> All customer API keys are encrypted at rest using AES/Fernet encryption via the <code>CustomerLLMConfig</code> table and decrypted only dynamically in memory before execution.</li>
-    </ol>
+      <div class="prose">
+        <h2>What is BYOK?</h2>
+        <p>Bring Your Own Key (BYOK) is an enterprise security feature that allows customers to provide their own Large Language Model (LLM) API keys (such as OpenAI, Azure OpenAI, or Google Gemini) instead of using the shared ARIA platform key.</p>
+        <p>This ensures that sensitive queries and data schemas are sent directly to the customer's dedicated model endpoints, fulfilling strict data sovereignty and compliance requirements (e.g., GDPR, KVKK) often demanded by banking and healthcare organizations.</p>
 
-    <h2>Configuring BYOK</h2>
-    <p>Workspace Administrators can configure their dedicated LLM provider through the ARIA Admin interface:</p>
-    <div class="info-box">
-      <strong>Setup Path:</strong> Navigation Menu ➔ <code>LLM Config (BYOK)</code>
-    </div>
-    
-    <ul>
-      <li>Select the LLM provider (OpenAI, Azure, Anthropic, Gemini).</li>
-      <li>Provide the endpoint API Base (if using Azure or a self-hosted enterprise endpoint).</li>
-      <li>Supply the secret API Key (this is masked and encrypted upon saving).</li>
-      <li>Specify the Model Name or Azure Deployment Version (e.g., <code>gpt-4o</code>).</li>
-    </ul>
+        <h2>How it Works</h2>
+        <p>Even when a customer brings their own key, ARIA maintains full control over governance, token accounting, and security through its proxy architecture.</p>
+        
+        <ol>
+          <li><strong>Proxy Routing:</strong> Queries are still routed through the ARIA LiteLLM proxy. This allows ARIA to count tokens, log audits, and enforce quotas.</li>
+          <li><strong>Token Quotas:</strong> Custom keys do not bypass usage limits. Token consumption is intercepted from the provider's response payload, and the customer's daily <code>TokenQuota</code> is strictly enforced.</li>
+          <li><strong>Encrypted Storage:</strong> All customer API keys are encrypted at rest using AES/Fernet encryption via the <code>CustomerLLMConfig</code> table and decrypted only dynamically in memory before execution.</li>
+        </ol>
 
-    <h2>Fallback Mechanisms</h2>
-    <p>If a customer disables their BYOK configuration, or if their API key expires/fails authentication repeatedly, ARIA's <code>llm_resolver.py</code> will automatically fall back to the platform's default shared key (if allowed) to ensure continuity of service.</p>
-  </main>
+        <h2>Configuring BYOK</h2>
+        <p>Workspace Administrators can configure their dedicated LLM provider through the ARIA Admin interface:</p>
+        <div class="note-box">
+          <strong>Setup Path:</strong> Navigation Menu ➔ <code>LLM Config (BYOK)</code>
+        </div>
+        
+        <ul>
+          <li>Select the LLM provider (OpenAI, Azure, Anthropic, Gemini).</li>
+          <li>Provide the endpoint API Base (if using Azure or a self-hosted enterprise endpoint).</li>
+          <li>Supply the secret API Key (this is masked and encrypted upon saving).</li>
+          <li>Specify the Model Name or Azure Deployment Version (e.g., <code>gpt-4o</code>).</li>
+        </ul>
+
+        <h2>Fallback Mechanisms</h2>
+        <p>If a customer disables their BYOK configuration, or if their API key expires/fails authentication repeatedly, ARIA's <code>llm_resolver.py</code> will automatically fall back to the platform's default shared key (if allowed) to ensure continuity of service.</p>
+      </div>
+    </main>
+  </div>
 </body>
 </html>
