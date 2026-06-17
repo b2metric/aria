@@ -65,6 +65,9 @@ export interface ChatMessage {
   chartSpec?: ChartSpec;
   chartHtml?: string;
   chartUrl?: string;
+  chartData?: any[]; // The raw JSON rows
+  summary?: string;
+  suggestions?: string[];
   status?: "streaming" | "complete" | "error";
   error?: string;
 }

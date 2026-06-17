@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -36,6 +36,34 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </div>
           
           <nav className="flex-1 space-y-1 overflow-x-hidden">
+
+            <Link 
+              href="/admin/health"
+              className={`flex items-center p-3 rounded-lg transition-colors whitespace-nowrap ${
+                pathname === "/admin/health" 
+                  ? "bg-blue-50 text-blue-700" 
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              } ${isCollapsed ? "justify-center" : "justify-start"}`}
+              title={isCollapsed ? "System Health" : undefined}
+            >
+              <Activity className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? "" : "mr-3"} ${pathname === "/admin/health" ? "text-blue-600" : "text-gray-500"}`} />
+              {!isCollapsed && <span className="font-medium">System Health</span>}
+            </Link>
+
+
+            <Link 
+              href="/admin"
+              className={`flex items-center p-3 rounded-lg transition-colors whitespace-nowrap ${
+                pathname === "/admin" 
+                  ? "bg-blue-50 text-blue-700" 
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              } ${isCollapsed ? "justify-center" : "justify-start"}`}
+              title={isCollapsed ? "Dashboard" : undefined}
+            >
+              <LayoutDashboard className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? "" : "mr-3"} ${pathname === "/admin" ? "text-blue-600" : "text-gray-500"}`} />
+              {!isCollapsed && <span className="font-medium">Overview</span>}
+            </Link>
+
             <Link 
               href="/admin/memory" 
               className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
@@ -118,6 +146,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             >
               <Users className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Users & Teams</span>}
+            </Link>
+
+            <Link 
+              href="/admin/tokens" 
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/tokens") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Token Management"
+            >
+              <Settings className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Token Quotas</span>}
             </Link>
           </nav>
         </aside>

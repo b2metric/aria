@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data Exports (MinIO) | B2Metric Academy</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="../index.html" class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      B2Metric Academy
+    </a>
+  </nav>
+
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <ul class="sidebar-menu">
+        <div class="sidebar-title">Getting Started</div>
+        <li><a href="../index.html" class="sidebar-link">How ARIA Works</a></li>
+        <li><a href="chat-flow.html" class="sidebar-link">Chat Flow & Pipelines</a></li>
+        <li><a href="why-aria.html" class="sidebar-link">Why ARIA? (Comparisons)</a></li>
+
+        <div class="sidebar-title">Security & Governance</div>
+        <li><a href="vault-sync.html" class="sidebar-link">Vault Auto-Sync</a></li>
+        <li><a href="row-limits.html" class="sidebar-link">Row Limits & Safeguards</a></li>
+        <li><a href="team-memory.html" class="sidebar-link">Team Memory (Mem0)</a></li>
+
+        <div class="sidebar-title">Analytics & Artifacts</div>
+        <li><a href="chart-types.html" class="sidebar-link">Chart Types</a></li>
+        <li><a href="data-exports.html" class="sidebar-link active">Data Exports (MinIO)</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="content-header">
+        <h1 class="content-title">Data Exports (MinIO)</h1>
+        <p class="content-desc">How ARIA handles artifact generation, image downloads, and CSV exports.</p>
+      </header>
+
+      <div class="prose">
+        <p>Whenever you generate a report or a chart, ARIA doesn't just display it on the screen—it securely preserves a copy of the raw data and visual artifact.</p>
+
+        <h2>S3-Compatible Object Storage</h2>
+        <p>ARIA utilizes <strong>MinIO</strong> (an S3-compatible highly scalable object storage service) to manage artifacts behind the scenes.</p>
+
+        <h3>1. CSV Exports</h3>
+        <p>Every successful SQL execution that returns data generates a temporary CSV file. A secure, pre-signed download link (valid for 24-72 hours depending on your configuration) is attached to your chat message. You can download the exact raw data behind any chart simply by clicking <code>"Download CSV"</code>.</p>
+
+        <h3>2. Large Data Handling (Background Workers)</h3>
+        <p>If you request an enormous dataset (e.g. 50,000 rows) that exceeds the browser's rendering capacity but stays within your Tenant Row Limit, ARIA intercepts the request.</p>
+        <p>Instead of freezing your screen, ARIA delegates the execution to a <strong>Background Worker</strong>. The worker fetches the data asynchronously, writes it to MinIO, and delivers a download link directly into your chat.</p>
+
+        <div class="admonition warning">
+          <div class="admonition-title">⚠️ Retention Policy</div>
+          <p>Data exports and CSV artifacts are considered ephemeral. They are automatically cleared from the MinIO bucket based on your organization's artifact retention policy to ensure data privacy and minimize storage costs.</p>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

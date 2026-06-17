@@ -24,7 +24,6 @@ type AuditLog = {
   resource_type: string;
   resource_id: string | null;
   details: any;
-  status: string;
   user_id: string | null;
   ip_address: string | null;
   created_at: string;
@@ -49,15 +48,19 @@ export default function AuditLogPage() {
     try {
       setLoading(true);
       let url = `${API_BASE}/api/admin/audit-logs?limit=100`;
-      if (statusFilter !== "all") url += `&status=${statusFilter}`;
+      // Note: Backend doesn't support status filter out-of-the-box on the root, but we can filter action.
       if (actionFilter !== "all") url += `&action=${actionFilter}`;
-      
+
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        setLogs(data.data || []);
+        // client side status filtering since it's nested in details JSON
+        let filtered = data.data || [];
+        if (statusFilter === "success") filtered = filtered.filter((l: any) => l.details?.success === true);
+        if (statusFilter === "failed") filtered = filtered.filter((l: any) => l.details?.success === false);
+        setLogs(filtered);
       }
     } catch (err) {
       console.error("Failed to fetch audit logs", err);
@@ -150,7 +153,7 @@ export default function AuditLogPage() {
                     <td className="px-6 py-4">
                       <div className="flex flex-col gap-1.5 items-start">
                         <span className="font-medium text-gray-900">{log.action}</span>
-                        {getStatusBadge(log.status)}
+                        {log.details && log.details.success !== undefined && getStatusBadge(log.details.success ? "success" : "failed")}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -169,12 +172,12 @@ export default function AuditLogPage() {
                             Returned {log.details.row_count} rows
                           </div>
                         )}
-                        {log.status === 'failed' && log.details?.error && (
+                        {log.details && log.details.success === false && log.details.error && (
                           <div className="mt-1 text-xs text-red-600 line-clamp-1" title={log.details.error}>
                             Error: {log.details.error}
                           </div>
                         )}
-                        
+
                         <div className="mt-2">
                           <Dialog>
                             <DialogTrigger asChild>
@@ -193,7 +196,7 @@ export default function AuditLogPage() {
                                     <div><span className="font-medium text-gray-500">ID:</span> {log.id}</div>
                                     <div><span className="font-medium text-gray-500">Action:</span> {log.action}</div>
                                     <div><span className="font-medium text-gray-500">Resource Type:</span> {log.resource_type}</div>
-                                    <div><span className="font-medium text-gray-500">Status:</span> {log.status}</div>
+                                    <div><span className="font-medium text-gray-500">Status:</span> {log.details?.success !== undefined ? (log.details.success ? "success" : "failed") : "N/A"}</div>
                                   </div>
                                 </div>
                                 {log.details && (

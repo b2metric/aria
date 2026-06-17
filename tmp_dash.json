@@ -1,0 +1,28 @@
+{
+  chartConfig:
+  {
+    colors:
+    [
+      string
+    ]
+    title: string,
+    type: string,
+    xKey: string,
+    yKeys:
+    [
+      string
+    ]
+  }
+  chartData:
+  []
+  recentConversations:
+  []
+  savedQueries:
+  []
+  stats:
+  [{
+      icon: string,
+      label: string,
+      value: string
+    }] (4)
+}

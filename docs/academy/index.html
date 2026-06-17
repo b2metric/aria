@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>How ARIA Works | B2Metric Academy</title>
+  <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="#" class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      B2Metric Academy
+    </a>
+  </nav>
+
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <ul class="sidebar-menu">
+        <div class="sidebar-title">Getting Started</div>
+        <li><a href="index.html" class="sidebar-link active">How ARIA Works</a></li>
+        <li><a href="pages/chat-flow.html" class="sidebar-link">Chat Flow & Pipelines</a></li>
+        <li><a href="pages/why-aria.html" class="sidebar-link">Why ARIA? (Comparisons)</a></li>
+
+        <div class="sidebar-title">Security & Governance</div>
+        <li><a href="pages/vault-sync.html" class="sidebar-link">Vault Auto-Sync</a></li>
+        <li><a href="pages/row-limits.html" class="sidebar-link">Row Limits & Safeguards</a></li>
+        <li><a href="#" class="sidebar-link">Team Memory (Mem0)</a></li>
+
+        <div class="sidebar-title">Analytics & Artifacts</div>
+        <li><a href="#" class="sidebar-link">Chart Types</a></li>
+        <li><a href="#" class="sidebar-link">Data Exports (MinIO)</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="content-header">
+        <h1 class="content-title">How ARIA Works: Chat Flow & Capabilities</h1>
+        <p class="content-desc">Understand the step-by-step pipeline when you ask ARIA a question about your data.</p>
+      </header>
+
+      <div class="prose">
+        <p>ARIA is not just an LLM that blindly writes SQL. It is a highly governed, multi-stage pipeline designed to protect your database while delivering accurate insights and visualizations in seconds.</p>
+
+        <div class="admonition tip">
+          <div class="admonition-title">💡 Did you know?</div>
+          <p>ARIA uses <b>Qdrant</b> and <b>Mem0</b> to remember your previous questions, your team's business rules, and your preferred chart types. The more you use it, the smarter it gets.</p>
+        </div>
+
+        <h2>The Query Pipeline (Server-Sent Events)</h2>
+        <p>When you type a question like <code>"Show me monthly revenue by region"</code>, ARIA streams its progress back to your screen instantly. Here is what happens under the hood:</p>
+
+        <ol>
+          <li><strong>THINKING:</strong> ARIA analyzes your intent. Is it a new question, or are you correcting a previous chart?</li>
+          <li><strong>GENERATING_SQL:</strong> ARIA searches the <code>Vault</code> (Markdown documentation of your database) and <code>Team Memory</code>. If the question is simple, it uses a fast Rule-Based generator. If complex, it falls back to the LLM.</li>
+          <li><strong>SQL_READY:</strong> The SQL is generated. (Administrators can view the raw SQL code via the UI).</li>
+          <li><strong>EXECUTING:</strong>
+            <ul>
+              <li><strong>Guard:</strong> ARIA checks if the query is a safe <code>SELECT</code> statement.</li>
+              <li><strong>Dry-Run:</strong> ARIA estimates the row count (EXPLAIN). If it exceeds your Tenant's <code>Max Row Limit</code>, it blocks the query to save your database from crashing.</li>
+            </ul>
+          </li>
+          <li><strong>RENDERING_CHART:</strong> The data returns. ARIA automatically chooses the best chart (Bar, Line, Pie) or uses your preferred type. It also exports a CSV to <b>MinIO</b>.</li>
+          <li><strong>INSIGHT_GENERATION:</strong> The LLM reads the result table and generates an <b>Executive Summary</b> and 3 clickable <b>Follow-up Suggestions</b>.</li>
+        </ol>
+
+        <div class="admonition warning">
+          <div class="admonition-title">⚠️ Large Data Exports</div>
+          <p>If your query returns too many rows for the browser (e.g., &gt;5,000 rows), ARIA will not crash your tab. Instead, it offloads the process to a <b>Prefect Background Job</b> and provides you with a downloadable 3-day MinIO link.</p>
+        </div>
+
+        <h2>Vault Auto-Sync</h2>
+        <p>ARIA reads from your live database. If your data engineering team adds a new column to the PostgreSQL or Oracle database, ARIA won't fall behind.</p>
+        <ul>
+          <li>Navigate to <b>Admin &gt; Data Dictionary</b>.</li>
+          <li>Click the <code>Re-Sync</code> button.</li>
+          <li>ARIA will safely diff the live database schema against the Markdown vault, adding new columns without deleting your human-written business descriptions.</li>
+        </ul>
+
+      </div>
+    </main>
+  </div>
+
+</body>
+</html>

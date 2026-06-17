@@ -1,0 +1,77 @@
+Translating tables and columns...
+Translating DIM_PREP_PRODUCTS (1/9)...
+Translating DIM_PREP_STATE_SCD2 (2/9)...
+Translating FCT_PREP_MASTER (3/9)...
+Translating FCT_PREP_MASTER_HIST (4/9)...
+Translating FCT_PREP_PROVISION (5/9)...
+Translating FCT_PREP_RECHARGE (6/9)...
+Translating FCT_PREP_REV (7/9)...
+Translating FCT_PREP_ROAMING (8/9)...
+Translating FCT_PREP_USAGE (9/9)...
+
+Updated JSON file: tmp/schema_parsed.json
+Updating vault docs/vaults for workspace stc-kuwait...
+Update complete!
+{
+  "workspace_id": "stc-kuwait",
+  "source": "api",
+  "tables_processed": 9,
+  "success_count": 9,
+  "error_count": 0,
+  "results": [
+    {
+      "table": "DIM_PREP_PRODUCTS",
+      "status": "success",
+      "columns_enriched": 10,
+      "relationships_added": 0
+    },
+    {
+      "table": "DIM_PREP_STATE_SCD2",
+      "status": "success",
+      "columns_enriched": 15,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_MASTER",
+      "status": "success",
+      "columns_enriched": 91,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_MASTER_HIST",
+      "status": "success",
+      "columns_enriched": 18,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_PROVISION",
+      "status": "success",
+      "columns_enriched": 45,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_RECHARGE",
+      "status": "success",
+      "columns_enriched": 17,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_REV",
+      "status": "success",
+      "columns_enriched": 41,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_ROAMING",
+      "status": "success",
+      "columns_enriched": 16,
+      "relationships_added": 0
+    },
+    {
+      "table": "FCT_PREP_USAGE",
+      "status": "success",
+      "columns_enriched": 17,
+      "relationships_added": 0
+    }
+  ]
+}

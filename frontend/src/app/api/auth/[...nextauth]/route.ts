@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthOptions } from "next-auth";
 import KeycloakProvider from "next-auth/providers/keycloak";
+import CredentialsProvider from "next-auth/providers/credentials";
 
 const KEYCLOAK_ISSUER =
   process.env.KEYCLOAK_ISSUER || "http://auth.aria.localhost/auth/realms/aria";
@@ -52,52 +53,77 @@ async function refreshAccessToken(token: any) {
 export const authOptions: NextAuthOptions = {
   debug: true,
   providers: [
-    KeycloakProvider({
-      clientId: KEYCLOAK_CLIENT_ID,
-      clientSecret: KEYCLOAK_CLIENT_SECRET,
-      issuer: KEYCLOAK_ISSUER,
-      authorization: {
-        params: {
-          // The Keycloak `aria-web` client only has the `openid` scope assigned;
-          // requesting `profile`, `email`, or `offline_access` makes Keycloak
-          // reject the whole request with invalid_scope -> NextAuth error=Callback,
-          // which broke every login/logout round-trip (verified: only `openid`
-          // is accepted by this client). Roles come from the access-token JWT and
-          // a refresh_token is issued for the auth-code flow regardless of scope,
-          // so `openid` is sufficient. To request profile/email/offline_access,
-          // first add them as client scopes on aria-web in Keycloak admin.
-          scope: "openid",
-        },
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        username: { label: "Email/Username", type: "text" },
+        password: { label: "Password", type: "password" }
       },
-    }),
-  ],
-  callbacks: {
-    async jwt({ token, account, profile }) {
-      // 1) Initial sign-in — capture tokens + expiry + roles.
-      if (account) {
-        token.accessToken = account.access_token;
-        token.idToken = account.id_token;
-        token.refreshToken = account.refresh_token;
-        token.expiresAt = account.expires_at; // epoch seconds
-
-        if (profile) {
-          const profileRoles = (profile as any)?.realm_access?.roles || [];
-          token.roles = profileRoles;
-        }
-
-        if (token.accessToken) {
-          try {
-            const tokenBase64 = (token.accessToken as string).split(".")[1];
-            const decodedToken = JSON.parse(
-              Buffer.from(tokenBase64, "base64").toString()
-            );
-            if (decodedToken.role) {
-              token.roles = [decodedToken.role];
-            }
-          } catch (e) {
-            console.error("Could not parse JWT to extract role", e);
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) return null;
+        
+        try {
+          const body = new URLSearchParams({
+            grant_type: "password",
+            client_id: KEYCLOAK_CLIENT_ID,
+            username: credentials.username,
+            password: credentials.password,
+            scope: "openid",
+          });
+          
+          if (KEYCLOAK_CLIENT_SECRET) {
+             body.set("client_secret", KEYCLOAK_CLIENT_SECRET);
           }
+
+          const res = await fetch(`${KEYCLOAK_ISSUER}/protocol/openid-connect/token`, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body,
+          });
+          
+          const data = await res.json();
+          
+          if (!res.ok) {
+            console.error("Keycloak auth failed:", data);
+            throw new Error(data.error_description || "Invalid credentials");
+          }
+          
+          // Decode the token to extract user info (like email, roles)
+          const tokenBase64 = data.access_token.split(".")[1];
+          const decodedToken = JSON.parse(Buffer.from(tokenBase64, "base64").toString());
+
+          return {
+            id: decodedToken.sub,
+            name: decodedToken.name || decodedToken.preferred_username || credentials.username,
+            email: decodedToken.email || credentials.username,
+            accessToken: data.access_token,
+            idToken: data.id_token,
+            refreshToken: data.refresh_token,
+            expiresAt: Math.floor(Date.now() / 1000) + Number(data.expires_in ?? 300),
+            role: decodedToken.role || (decodedToken.realm_access?.roles || [])[0]
+          } as any;
+        } catch (e) {
+          console.error("Error in authorize:", e);
+          return null;
         }
+      }
+    })
+  ],
+  pages: {
+    signIn: '/login',
+  },
+  callbacks: {
+    async jwt({ token, user, account, profile }) {
+      // 1) Initial sign-in — capture tokens + expiry + roles.
+      // With CredentialsProvider, `user` contains the object returned from `authorize`
+      if (user) {
+        const u = user as any;
+        token.accessToken = u.accessToken;
+        token.idToken = u.idToken;
+        token.refreshToken = u.refreshToken;
+        token.expiresAt = u.expiresAt; // epoch seconds
+        
+        token.roles = u.role ? [u.role] : [];
         return token;
       }
 

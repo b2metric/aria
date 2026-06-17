@@ -1182,7 +1182,7 @@ class TestImports:
             VaultArchive,
             ChartConfig,
             ChartType,
-            render_html,
+            render_all,
             run_chart_pipeline_sync,
         )
         # If we got here without ImportError, exports work

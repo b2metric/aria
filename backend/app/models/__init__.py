@@ -21,3 +21,4 @@ from . import (  # noqa: F401  (imported for metadata registration, not direct u
 )
 
 __all__ = ["Base", "TimestampMixin", "UUIDMixin", "utcnow"]
+import backend.app.models.database_events

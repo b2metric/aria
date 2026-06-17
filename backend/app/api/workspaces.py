@@ -275,6 +275,77 @@ async def generate_vault_from_schema(
 
 
 @router.post(
+    "/vault/sync",
+    summary="Synchronize Vault Markdown files with live DB Schema",
+)
+async def sync_vault_with_db(
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+):
+    """Sync Vault Markdown schemas by introspecting the live DB.
+
+    Only available to admins. Uses the credentials saved in Tenant Config.
+    """
+    from backend.app.services.vault_sync import VaultSyncService
+    from backend.app.models.database import CustomerDBConfig
+    from backend.app.models.organization import Customer
+    from backend.app.db.session import get_sessionmaker
+    from sqlalchemy import select
+
+    if not user.can_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required to synchronize vault schemas"
+        )
+
+    try:
+        sessionmaker = get_sessionmaker()
+        async with sessionmaker() as session:
+            customer = (await session.execute(
+                select(Customer).where(Customer.slug == workspace_id)
+            )).scalar_one_or_none()
+
+            if not customer:
+                raise HTTPException(status_code=404, detail="Workspace/Customer not found in DB")
+
+            db_config = (await session.execute(
+                select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
+            )).scalar_one_or_none()
+
+            if not db_config:
+                raise HTTPException(
+                    status_code=400,
+                    detail="No database connection configured for this tenant. Please configure it in Tenant Settings first."
+                )
+
+            # We must decrypt the password before handing config to the executor
+            from backend.app.services.crypto import decrypt_password
+            from backend.app.db.models import DBConfig
+            db_type_val = db_config.db_type.value if hasattr(db_config.db_type, "value") else str(db_config.db_type)
+            safe_db_config = DBConfig(
+                db_type=db_type_val,
+                host=db_config.host,
+                port=db_config.port,
+                database=db_config.database,
+                username=db_config.username,
+                password=decrypt_password(db_config.encrypted_password),
+                options=db_config.extra_params,
+                max_row_limit=getattr(db_config, "max_row_limit", 1000)
+            )
+
+            sync_svc = VaultSyncService(workspace_id, safe_db_config)
+            stats = await sync_svc.sync()
+
+            return {
+                "message": "Vault synchronization complete.",
+                "stats": stats
+            }
+
+    except Exception as e:
+        logger.exception("Vault sync failed")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e}")
+
+@router.post(
     "/vault/discover-and-generate",
     response_model=GenerateVaultResponse,
     summary="One-shot: discover schema and generate vault",

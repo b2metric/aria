@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.models.base import Base, TimestampMixin, UUIDMixin
@@ -26,6 +27,7 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     teams: Mapped[list["Team"]] = relationship(back_populates="customer", lazy="selectin")
     users: Mapped[list["User"]] = relationship(back_populates="customer", lazy="selectin")
     db_configs: Mapped[list["CustomerDBConfig"]] = relationship(back_populates="customer", lazy="selectin")
+    llm_configs: Mapped[list["CustomerLLMConfig"]] = relationship(back_populates="customer", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Customer {self.slug}>"
@@ -62,7 +64,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(default=UserRole.MEMBER, server_default="member")
+    role: Mapped[UserRole] = mapped_column(postgresql.ENUM("admin", "member", "viewer", name="user_role", create_type=False), default=UserRole.MEMBER, server_default="member")
     external_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, comment="Keycloak user ID"
     )

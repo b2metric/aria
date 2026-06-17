@@ -165,7 +165,7 @@ function ChatPageContent() {
   // instead of landing on /chat with no token ("No authentication token available").
   useEffect(() => {
     if (status === "unauthenticated") {
-      signIn("keycloak");
+      router.push("/login");
     }
   }, [status]);
 
@@ -202,6 +202,8 @@ function ChatPageContent() {
                 sql: m.sql || null,
                 chartUrl: m.chart_url || null,
                 chartSpec,
+                summary: m.summary || null,
+                suggestions: m.suggestions || null,
                 id: m.id || `history-${m.role}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`,
               };
             });
@@ -260,7 +262,7 @@ function ChatPageContent() {
         if (!token) {
            // Session expired/missing — send the user to login instead of erroring.
            setIsStreaming(false);
-           signIn("keycloak");
+           router.push("/login");
            return;
         }
         
@@ -343,6 +345,21 @@ function ChatPageContent() {
                   );
                   // Auto-open the artifact panel on first render of a new chart.
                   setActiveArtifactMsgId(assistantMsg.id);
+                  break;
+                }
+
+                case "insight": {
+                  setMessages((prev) =>
+                    prev.map((m) =>
+                      m.id === assistantMsg.id
+                        ? {
+                            ...m,
+                            summary: payload.summary,
+                            suggestions: payload.suggestions,
+                          }
+                        : m,
+                    ),
+                  );
                   break;
                 }
 
@@ -644,6 +661,32 @@ function ChatPageContent() {
                       <span className="text-gray-400 truncate max-w-[12rem]">— {msg.chartSpec.title}</span>
                     ) : null}
                   </button>
+                )}
+
+                {/* Insight Summary & Suggestions */}
+                {msg.summary && (
+                  <div className="mt-3 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-sm text-gray-800">
+                    <strong className="text-blue-800 text-xs uppercase tracking-wider mb-1 block">💡 Insight</strong>
+                    {msg.summary}
+                  </div>
+                )}
+                {msg.suggestions && msg.suggestions.length > 0 && (
+                  <div className="mt-2 flex flex-col gap-1.5">
+                    {msg.suggestions.map((suggestion, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          setInputValue(suggestion);
+                          handleSubmit(suggestion);
+                        }}
+                        className="w-full px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 hover:border-blue-300 text-xs text-gray-700 rounded-lg transition-colors shadow-sm text-left flex items-start gap-2"
+                        title={suggestion}
+                      >
+                        <span className="text-blue-500 mt-0.5">✦</span>
+                        <span className="leading-snug">{suggestion}</span>
+                      </button>
+                    ))}
+                  </div>
                 )}
 
                 {/* Error */}

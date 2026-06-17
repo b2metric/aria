@@ -19,6 +19,12 @@ from backend.app.auth.jwt import (
     decode_token,
 )
 from backend.app.auth.models import Role, TokenPayload, UserContext
+import asyncio
+from functools import lru_cache
+
+# In-memory cache to avoid syncing the same user on every request
+_synced_users = set()
+
 
 logger = logging.getLogger(__name__)
 
@@ -98,10 +104,9 @@ async def get_current_user(
     try:
         role = Role.from_string(role_str)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        )
+        # Fallback to VIEWER if an invalid or unexpected role is provided from Keycloak
+        logger.warning("Invalid role '%s' received, falling back to viewer: %s", role_str, exc)
+        role = Role.VIEWER
 
     # ── Extract custom claims ───────────────────────────────────────
     # We only rely on Keycloak injecting these if the 'aria-claims' scope

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Flow & Pipelines | B2Metric Academy</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="../index.html" class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      B2Metric Academy
+    </a>
+  </nav>
+
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <ul class="sidebar-menu">
+        <div class="sidebar-title">Getting Started</div>
+        <li><a href="../index.html" class="sidebar-link">How ARIA Works</a></li>
+        <li><a href="chat-flow.html" class="sidebar-link active">Chat Flow & Pipelines</a></li>
+        <li><a href="why-aria.html" class="sidebar-link">Why ARIA? (Comparisons)</a></li>
+
+        <div class="sidebar-title">Security & Governance</div>
+        <li><a href="vault-sync.html" class="sidebar-link">Vault Auto-Sync</a></li>
+        <li><a href="row-limits.html" class="sidebar-link">Row Limits & Safeguards</a></li>
+        <li><a href="team-memory.html" class="sidebar-link">Team Memory (Mem0)</a></li>
+
+        <div class="sidebar-title">Analytics & Artifacts</div>
+        <li><a href="chart-types.html" class="sidebar-link">Chart Types</a></li>
+        <li><a href="data-exports.html" class="sidebar-link">Data Exports (MinIO)</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="content-header">
+        <h1 class="content-title">Chat Flow & Pipelines</h1>
+        <p class="content-desc">Deep dive into ARIA's Natural Language to SQL generation engine.</p>
+      </header>
+
+      <div class="prose">
+        <p>When interacting with ARIA, the system uses a heuristic rule engine supported by an LLM fallback. This hybrid approach guarantees 100% syntactic accuracy for standard queries while leveraging AI only for complex multi-table joins.</p>
+
+        <h2>1. The Heuristic Engine (Rule-based)</h2>
+        <p>ARIA scans your database Vault schemas (Data Dictionary) to find column names matching the keywords in your question.</p>
+
+        <pre><code>If User asks: "Show me total revenue"
+Rule Engine: Looks for columns containing 'revenue', 'amount', or 'total'
+Result: Executes SQL natively (0 Tokens Used)</code></pre>
+
+        <h2>2. LLM Fallback (Generative AI)</h2>
+        <p>If the rule engine fails to confidently match your question to a specific table (Score &lt; 15), ARIA sends your schema context and the question to an LLM (e.g., Claude or Gemini via LiteLLM proxy).</p>
+
+        <div class="admonition tip">
+          <div class="admonition-title">💡 Self-Correction</div>
+          <p>If the LLM generates a SQL query with a syntax error, ARIA does not show an error to the user immediately. It catches the error in the backend, sends the error message back to the LLM, and asks it to fix the SQL automatically.</p>
+        </div>
+
+        <h2>Understanding the SSE Stream</h2>
+        <p>ARIA utilizes Server-Sent Events (SSE) to update the chat interface. You will see these statuses:</p>
+        <ul>
+          <li><strong>Thinking:</strong> Parsing intent</li>
+          <li><strong>Generating SQL:</strong> Running rule engine or calling LLM</li>
+          <li><strong>Executing:</strong> Running the query against your Oracle/PostgreSQL DB</li>
+          <li><strong>Rendering Chart:</strong> Building UI configurations</li>
+          <li><strong>Generating Insight:</strong> Calling the LLM to write a summary and suggestions</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

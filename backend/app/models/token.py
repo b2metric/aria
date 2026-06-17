@@ -5,6 +5,7 @@ from datetime import date, datetime
 
 import sqlalchemy as sa
 from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, String
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -30,7 +31,11 @@ class TokenQuota(Base, UUIDMixin, TimestampMixin):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    period: Mapped[QuotaPeriod] = mapped_column(default=QuotaPeriod.DAILY, server_default="daily")
+    period: Mapped[QuotaPeriod] = mapped_column(
+        postgresql.ENUM("daily", "monthly", name="quota_period", create_type=False),
+        default=QuotaPeriod.DAILY,
+        server_default="daily",
+    )
     token_limit: Mapped[int] = mapped_column(BigInteger, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
@@ -42,6 +47,9 @@ class TokenUsageDaily(Base, UUIDMixin):
     """Daily aggregated token consumption per user."""
 
     __tablename__ = "token_usage_daily"
+    __table_args__ = (
+        sa.UniqueConstraint("customer_id", "user_id", "usage_date", name="uix_token_usage_customer_user_date"),
+    )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True

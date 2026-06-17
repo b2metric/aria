@@ -39,25 +39,33 @@ export default function MemoryManagerPage() {
   const [ttlValue, setTtlValue] = useState<string>("");
   const [stats, setStats] = useState<MemoryStats | null>(null);
 
+  // Pagination state
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const limit = 50;
+
   useEffect(() => {
     if (token) {
       fetchMemories();
       fetchStats();
     }
-  }, [token, filter]);
+  }, [token, filter, page]);
 
   const fetchMemories = async () => {
     try {
       setLoading(true);
       const res = await fetch(
-        `${API_BASE}/api/admin/memory?memory_type=${filter}`,
+        `${API_BASE}/api/admin/memory?memory_type=${filter}&page=${page}&limit=${limit}`,
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
       if (res.ok) {
         const data = await res.json();
-        setMemories(Array.isArray(data) ? data : []);
+        setMemories(data.items || []);
+        setTotalPages(data.total_pages || 1);
+        setTotalItems(data.total || 0);
       }
     } catch (err) {
       console.error("Failed to fetch memories", err);
@@ -241,7 +249,7 @@ export default function MemoryManagerPage() {
             {(["all", "user", "team", "cache"] as MemoryType[]).map((type) => (
               <button
                 key={type}
-                onClick={() => setFilter(type)}
+                onClick={() => { setFilter(type); setPage(1); }}
                 className={`px-3 py-1.5 text-sm font-medium rounded-lg border transition-all ${
                   filter === type
                     ? "bg-blue-50 text-blue-700 border-blue-200"
@@ -393,15 +401,34 @@ export default function MemoryManagerPage() {
       
       {/* Stats + Retention Info */}
       {!loading && memories.length > 0 && (
-        <div className="mt-4 flex justify-between text-sm text-gray-500">
-          <div className="flex gap-4">
-            <span>Total: {memories.length}</span>
-            <span>User: {memories.filter((m) => m.type === "user").length}</span>
-            <span>Team: {memories.filter((m) => m.type === "team").length}</span>
-            <span>Cache: {memories.filter((m) => m.type === "cache").length}</span>
+        <div className="mt-4 flex flex-col gap-4 text-sm text-gray-500">
+          <div className="flex justify-between items-center bg-white p-3 rounded-lg border border-gray-200">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1 bg-gray-100 rounded disabled:opacity-50 hover:bg-gray-200"
+              >
+                Previous
+              </button>
+              <span className="py-1 px-2">Page {page} of {totalPages}</span>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1 bg-gray-100 rounded disabled:opacity-50 hover:bg-gray-200"
+              >
+                Next
+              </button>
+            </div>
+            <span>Total Items: {totalItems}</span>
           </div>
-          <div className="text-xs text-gray-400">
-            Retention: Cache=7d, User=90d, Team=∞
+          <div className="flex justify-between">
+            <div className="flex gap-4">
+              <span>Displaying {memories.length} items</span>
+            </div>
+            <div className="text-xs text-gray-400">
+              Retention: Cache=7d, User=90d, Team=∞
+            </div>
           </div>
         </div>
       )}

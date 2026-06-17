@@ -116,6 +116,14 @@ export default function UsersTeamsPage() {
   const [editTeamId, setEditTeamId] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Create user dialog state
+  const [createUserDialogOpen, setCreateUserDialogOpen] = useState(false);
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserRole, setNewUserRole] = useState("member");
+  const [newUserTeamId, setNewUserTeamId] = useState("");
+  const [creatingUser, setCreatingUser] = useState(false);
+
   // Delete team state
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
 
@@ -238,6 +246,44 @@ export default function UsersTeamsPage() {
     setEditDialogOpen(true);
   };
 
+  // ── Create user ───────────────────────────────────────────────────
+
+  const handleCreateUser = async () => {
+    if (!token || !newUserName.trim() || !newUserEmail.trim()) return;
+    try {
+      setCreatingUser(true);
+      const res = await fetch(`${API_BASE}/api/admin/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          display_name: newUserName,
+          email: newUserEmail,
+          role: newUserRole,
+          team_id: newUserTeamId || null,
+        }),
+      });
+      if (res.ok) {
+        setNewUserName("");
+        setNewUserEmail("");
+        setNewUserRole("member");
+        setNewUserTeamId("");
+        setCreateUserDialogOpen(false);
+        await fetchUsers();
+      } else {
+        const errorData = await res.json();
+        alert(errorData.detail || "Failed to create user");
+        console.error("Failed to create user", res.status, errorData);
+      }
+    } catch (err) {
+      console.error("Failed to create user", err);
+    } finally {
+      setCreatingUser(false);
+    }
+  };
+
   // ── Save user edit ────────────────────────────────────────────────
 
   const handleSaveUser = async () => {
@@ -330,10 +376,85 @@ export default function UsersTeamsPage() {
             <h2 className="text-lg font-semibold text-gray-900">
               All Users
             </h2>
-            <Button variant="outline" size="sm" onClick={fetchUsers} disabled={usersLoading}>
-              <RefreshCw className={`w-4 h-4 mr-1 ${usersLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={fetchUsers} disabled={usersLoading}>
+                <RefreshCw className={`w-4 h-4 mr-1 ${usersLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                    <Plus className="w-4 h-4 mr-1" />
+                    Add User
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Add New User</DialogTitle>
+                    <DialogDescription>
+                      Create a new user account for your workspace.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Name</label>
+                      <Input
+                        placeholder="John Doe"
+                        value={newUserName}
+                        onChange={(e) => setNewUserName(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Email</label>
+                      <Input
+                        type="email"
+                        placeholder="john@example.com"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Role</label>
+                      <Select value={newUserRole} onValueChange={setNewUserRole}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="viewer">Viewer</SelectItem>
+                          <SelectItem value="analyst">Analyst</SelectItem>
+                          <SelectItem value="team_lead">Team Lead</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-gray-700">Team Assignment</label>
+                      <Select value={newUserTeamId} onValueChange={setNewUserTeamId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a team (optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">No Team</SelectItem>
+                          {teams.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                              {team.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setCreateUserDialogOpen(false)} disabled={creatingUser}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleCreateUser} disabled={creatingUser || !newUserName.trim() || !newUserEmail.trim()}>
+                      {creatingUser ? "Creating..." : "Create User"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
 
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">

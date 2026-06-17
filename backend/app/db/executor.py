@@ -112,6 +112,10 @@ class DatabaseExecutor:
         """Execute SQL and return results as list of dicts."""
         raise NotImplementedError
 
+    def explain(self, sql: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Explain SQL and return estimated rows and cost."""
+        return {"estimated_rows": 0, "estimated_cost": 0, "raw": None}
+
 
 class PostgreSQLExecutor(DatabaseExecutor):
     """PostgreSQL executor using psycopg2."""
@@ -119,7 +123,7 @@ class PostgreSQLExecutor(DatabaseExecutor):
     def execute(self, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         import psycopg2
         import psycopg2.extras
-        
+
         conn = psycopg2.connect(
             host=self.config.host,
             port=self.config.get_port(),
@@ -134,6 +138,35 @@ class PostgreSQLExecutor(DatabaseExecutor):
                 if cur.description:
                     return [dict(row) for row in cur.fetchall()]
                 return []
+        finally:
+            conn.close()
+
+    def explain(self, sql: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Explain PostgreSQL query to get row estimates."""
+        import psycopg2
+        import psycopg2.extras
+        import json
+
+        conn = psycopg2.connect(
+            host=self.config.host,
+            port=self.config.get_port(),
+            dbname=self.config.database,
+            user=self.config.username,
+            password=self.config.password,
+            **(self.config.options or {}),
+        )
+        try:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                # Use JSON format for reliable parsing
+                explain_sql = f"EXPLAIN (FORMAT JSON) {sql}"
+                cur.execute(explain_sql, params or {})
+                res = cur.fetchone()
+                if res and "QUERY PLAN" in res:
+                    plan = res["QUERY PLAN"][0]["Plan"]
+                    rows = plan.get("Plan Rows", 0)
+                    cost = plan.get("Total Cost", 0)
+                    return {"estimated_rows": rows, "estimated_cost": cost, "raw": plan}
+                return {"estimated_rows": 0, "estimated_cost": 0, "raw": None}
         finally:
             conn.close()
 
@@ -169,16 +202,16 @@ class OracleExecutor(DatabaseExecutor):
     
     def execute(self, sql: str, params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         import oracledb
-        
+
         # Try thick mode only if explicitly configured
         from backend.app.core.config import get_settings
         settings = get_settings()
         if settings.oracle_client_lib_dir:
             _init_oracle_thick_mode()
-        
+
         # Build DSN
         dsn = f"{self.config.host}:{self.config.get_port()}/{self.config.database}"
-        
+
         conn = oracledb.connect(
             user=self.config.username,
             password=self.config.password,
@@ -191,6 +224,46 @@ class OracleExecutor(DatabaseExecutor):
                     columns = [d[0] for d in cur.description]
                     return [dict(zip(columns, row)) for row in cur.fetchall()]
                 return []
+        finally:
+            conn.close()
+
+    def explain(self, sql: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Explain Oracle query to get row estimates."""
+        import oracledb
+        import re
+
+        from backend.app.core.config import get_settings
+        settings = get_settings()
+        if settings.oracle_client_lib_dir:
+            _init_oracle_thick_mode()
+
+        dsn = f"{self.config.host}:{self.config.get_port()}/{self.config.database}"
+        conn = oracledb.connect(
+            user=self.config.username,
+            password=self.config.password,
+            dsn=dsn,
+        )
+        try:
+            with conn.cursor() as cur:
+                # Oracle EXPLAIN PLAN puts results in PLAN_TABLE
+                import time
+                stmt_id = f"aria_explain_{int(time.time())}"
+                explain_sql = f"EXPLAIN PLAN SET STATEMENT_ID = '{stmt_id}' FOR {sql}"
+                cur.execute(explain_sql, params or {})
+
+                cur.execute(f"SELECT CARDINALITY, COST FROM PLAN_TABLE WHERE STATEMENT_ID = '{stmt_id}' AND ID = 0")
+                res = cur.fetchone()
+
+                # Clean up plan table
+                try:
+                    cur.execute(f"DELETE FROM PLAN_TABLE WHERE STATEMENT_ID = '{stmt_id}'")
+                    conn.commit()
+                except Exception:
+                    pass
+
+                if res:
+                    return {"estimated_rows": res[0] or 0, "estimated_cost": res[1] or 0, "raw": None}
+                return {"estimated_rows": 0, "estimated_cost": 0, "raw": None}
         finally:
             conn.close()
 
@@ -240,13 +313,53 @@ def get_executor(config: DBConfig) -> DatabaseExecutor:
     return executor_class(config)
 
 
+def explain_query_sync(
+    sql: str,
+    config: DBConfig,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Explain a SQL query synchronously.
+
+    Args:
+        sql: SQL query string
+        config: Database configuration
+        params: Query parameters (optional)
+
+    Returns:
+        Dict containing estimated_rows, estimated_cost
+    """
+    executor = get_executor(config)
+    return executor.explain(sql, params)
+
+async def explain_query(
+    sql: str,
+    config: DBConfig,
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Explain a SQL query asynchronously.
+
+    Args:
+        sql: SQL query string
+        config: Database configuration
+        params: Query parameters (optional)
+
+    Returns:
+        Dict containing estimated_rows, estimated_cost
+    """
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        None,
+        lambda: explain_query_sync(sql, config, params),
+    )
+
 def execute_query_sync(
     sql: str,
     config: DBConfig,
     params: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Execute a SQL query synchronously.
-    
+
     Args:
         sql: SQL query string
         config: Database configuration

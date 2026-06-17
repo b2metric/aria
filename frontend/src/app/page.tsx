@@ -10,7 +10,7 @@ import type {
   SavedQuery,
   FilterState,
 } from "@/lib/types";
-import { getMockDashboardData, fetchConversations } from "@/lib/api";
+import { fetchConversations } from "@/lib/api";
 import StatCard from "@/components/StatCard";
 import QuerySearch from "@/components/QuerySearch";
 import ChartArea from "@/components/ChartArea";
@@ -32,25 +32,28 @@ export default function DashboardPage() {
     }
 
     async function loadData() {
-      // Load mock stat data but real conversations
-      const dashboard = getMockDashboardData();
       try {
-        const realConversations = await fetchConversations();
-        // Conversation apiden donen tipler Conversation listesi olur. Mock verinin yapisina gore bagla.
+        const token = (session as any)?.accessToken;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/dashboard?workspace_id=stc-kuwait`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error("Failed to fetch dashboard data");
+        const dashboard: DashboardData = await res.json();
+
+        const realConversations = await fetchConversations(token);
         if (Array.isArray(realConversations)) {
-            // Su anlik id, query ve timestamp kisimlarini mocklayarak donusturuyoruz.
             dashboard.recentConversations = realConversations.map((c: any) => ({
                 id: c.id || c.conversation_id || Math.random().toString(),
-                query: c.question || c.title || "Unknown query",
+                query: c.title || "New Chat",
                 timestamp: c.created_at || new Date().toISOString(),
                 tables: [],
                 status: c.status || "completed",
             }));
         }
+        setData(dashboard);
       } catch(e) {
-        console.warn("Could not fetch real conversations", e);
+        console.warn("Could not fetch dashboard data", e);
       }
-      setData(dashboard);
     }
     
     loadData();
@@ -78,16 +81,11 @@ export default function DashboardPage() {
   );
 
   if (status === "unauthenticated") {
+    // Optionally redirect directly, but we can also just show a nice local link
+    router.push("/login");
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen space-y-4">
-        <h1 className="text-3xl font-bold text-gray-900">Welcome to ARIA</h1>
-        <p className="text-gray-500">Please sign in to access your dashboard.</p>
-        <button
-          onClick={() => signIn("keycloak")}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          Login with Keycloak
-        </button>
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-pulse text-gray-400">Redirecting to login...</div>
       </div>
     );
   }

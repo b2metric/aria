@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Search, Database, Table as TableIcon, Edit2, Check, X, FileText, Link as LinkIcon, Key, ChevronRight } from "lucide-react";
+import { Search, Database, Table as TableIcon, Edit2, Check, X, FileText, Link as LinkIcon, Key, ChevronRight, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,8 +47,8 @@ type TableDetail = {
 export default function SchemaPage() {
   const { data: session, status } = useSession();
   const token = (session as any)?.accessToken;
-  const isAdmin = true; // In a real app, check session.user.role or similar
-  const workspaceId = "default";
+  const isAdmin = (session as any)?.user?.roles?.includes("admin") || (session as any)?.user?.role === "admin";
+  const workspaceId = (session as any)?.user?.workspaceId || "default";
   const router = useRouter();
 
   useEffect(() => {
@@ -64,8 +64,13 @@ export default function SchemaPage() {
   const [searchQuery, setSearchQuery] = useState("");
   
   // Editing state
-  const [editingField, setEditingField] = useState<{ type: 'table' | 'column', name: string } | null>(null);
+  const [editingField, setEditingField] = useState<{ type: 'table' | 'column' | 'keywords', name: string } | null>(null);
   const [editValue, setEditValue] = useState("");
+
+  const [addingRel, setAddingRel] = useState(false);
+  const [relSourceCol, setRelSourceCol] = useState("");
+  const [relTargetTable, setRelTargetTable] = useState("");
+  const [relTargetCol, setRelTargetCol] = useState("");
 
   useEffect(() => {
     fetchTables();
@@ -106,6 +111,59 @@ export default function SchemaPage() {
     }
   };
 
+  const handleUpdateKeywords = async (tableName: string, newKeywordsStr: string) => {
+    if (!isAdmin) return;
+    try {
+      const keywordsArray = newKeywordsStr.split(",").map(k => k.trim()).filter(k => k);
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/tables/${tableName}?workspace_id=${workspaceId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          table_name: tableName,
+          keywords: keywordsArray,
+        }),
+      });
+
+      if (res.ok) {
+        if (selectedTable) {
+          setSelectedTable({ ...selectedTable, keywords: keywordsArray });
+        }
+        setTables(tables.map(t => t.table_name === tableName ? { ...t, keywords: keywordsArray } : t));
+        setEditingField(null);
+      }
+    } catch (err) {
+      console.error("Failed to update keywords", err);
+    }
+  };
+
+  const handleAddRelationship = async (sourceTable: string) => {
+    if (!isAdmin) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/enrich/relationship?source_table=${sourceTable}&source_column=${relSourceCol}&target_table=${relTargetTable}&target_column=${relTargetCol}&workspace_id=${workspaceId}`, {
+        method: 'POST',
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+      });
+
+      if (res.ok) {
+        // Optimistic UI update or re-fetch
+        fetchTableDetail(sourceTable);
+        setAddingRel(false);
+        setRelSourceCol("");
+        setRelTargetTable("");
+        setRelTargetCol("");
+      } else {
+        alert("Failed to add relationship");
+      }
+    } catch (err) {
+      console.error("Failed to add relationship", err);
+    }
+  };
+
   const handleUpdateTableDescription = async (tableName: string, newDescription: string) => {
     if (!isAdmin) return;
     try {
@@ -120,7 +178,7 @@ export default function SchemaPage() {
           description: newDescription,
         }),
       });
-      
+
       if (res.ok) {
         // Update local state
         if (selectedTable) {
@@ -175,10 +233,33 @@ export default function SchemaPage() {
         {/* Left Panel - Table List */}
         <div className={`w-full md:w-80 border-r border-gray-200 bg-white flex flex-col h-full z-10 flex-shrink-0 shadow-sm ${selectedTable ? 'hidden md:flex' : 'flex'}`}>
           <div className="p-4 border-b border-gray-200 bg-white sticky top-0 z-20">
-            <h1 className="text-xl font-semibold flex items-center gap-2 mb-4 text-gray-900">
-              <Database className="w-5 h-5 text-blue-600" />
-              Data Dictionary
-            </h1>
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-semibold flex items-center gap-2 text-gray-900">
+                <Database className="w-5 h-5 text-blue-600" />
+                Data Dictionary
+              </h1>
+              <Button size="sm" variant="outline" onClick={async () => {
+                if(!confirm("This will connect to the customer DB and re-synchronize the schema. Continue?")) return;
+                try {
+                  const res = await fetch(`${API_BASE}/api/workspaces/vault/sync?workspace_id=${workspaceId}`, {
+                    method: 'POST',
+                    headers: { Authorization: `Bearer ${token}` }
+                  });
+                  if(res.ok) {
+                    const data = await res.json();
+                    alert(`Sync complete! Added: ${data.stats.added}, Updated: ${data.stats.updated}, Unchanged: ${data.stats.unchanged}`);
+                    fetchTables();
+                  } else {
+                    const err = await res.json();
+                    alert(`Sync failed: ${err.detail || "Unknown error"}`);
+                  }
+                } catch(e) {
+                  alert("Failed to reach sync API");
+                }
+              }} className="h-8 text-xs px-2">
+                <RefreshCw className="w-3 h-3 mr-1" /> Re-Sync
+              </Button>
+            </div>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <Input 
@@ -301,14 +382,50 @@ export default function SchemaPage() {
                       </div>
                     )}
                   </div>
-                  
-                  {selectedTable.keywords && selectedTable.keywords.length > 0 && (
-                    <div className="mt-4 flex flex-wrap gap-1.5">
-                      {selectedTable.keywords.map((kw, i) => (
-                        <span key={i} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-md border border-gray-200">
-                          #{kw}
-                        </span>
-                      ))}
+
+                  {/* Keywords Editor */}
+                  {editingField?.type === 'keywords' && editingField.name === selectedTable.table_name ? (
+                    <div className="mt-4 flex flex-col gap-2">
+                      <Input
+                        value={editValue}
+                        onChange={(e) => setEditValue(e.target.value)}
+                        placeholder="Comma separated keywords..."
+                      />
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" onClick={() => handleUpdateKeywords(selectedTable.table_name, editValue)}>
+                          <Check className="w-4 h-4 mr-1" /> Save Keywords
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setEditingField(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 flex items-center justify-between group/kw">
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedTable.keywords && selectedTable.keywords.length > 0 ? (
+                          selectedTable.keywords.map((kw, i) => (
+                            <span key={i} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-md border border-gray-200">
+                              #{kw}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400 italic">No keywords</span>
+                        )}
+                      </div>
+                      {isAdmin && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 opacity-0 group-hover/kw:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                          onClick={() => {
+                            setEditingField({ type: 'keywords', name: selectedTable.table_name });
+                            setEditValue(selectedTable.keywords?.join(", ") || "");
+                          }}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -399,16 +516,18 @@ export default function SchemaPage() {
               </Card>
 
               {/* Relationships Section */}
-              {selectedTable.relationships && selectedTable.relationships.length > 0 && (
-                <Card className="border-gray-200 shadow-sm">
-                  <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
+              <Card className="border-gray-200 shadow-sm">
+                <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
+                  <div className="flex items-center justify-between">
                     <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                       <LinkIcon className="w-5 h-5 text-gray-500" />
                       Relationships
                     </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    <ul className="space-y-3">
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {selectedTable.relationships && selectedTable.relationships.length > 0 ? (
+                    <ul className="space-y-3 mb-4">
                       {selectedTable.relationships.map((rel, idx) => (
                         <li key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
                           <div className="mt-0.5 w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
@@ -420,9 +539,47 @@ export default function SchemaPage() {
                         </li>
                       ))}
                     </ul>
-                  </CardContent>
-                </Card>
-              )}
+                  ) : (
+                    <p className="text-sm text-gray-500 italic mb-4">No manual relationships defined.</p>
+                  )}
+
+                  {isAdmin && (
+                    <div className="mt-4 p-4 border border-dashed border-gray-300 rounded-lg">
+                      {addingRel ? (
+                        <div className="flex flex-col gap-3">
+                          <h4 className="text-sm font-semibold">Add Manual Relationship</h4>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Source Column</label>
+                              <Input value={relSourceCol} onChange={e => setRelSourceCol(e.target.value)} placeholder="e.g. USER_ID" />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-500 mb-1">Target Table</label>
+                              <Input value={relTargetTable} onChange={e => setRelTargetTable(e.target.value)} placeholder="e.g. DIM_USERS" />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs text-gray-500 mb-1">Target Column</label>
+                              <Input value={relTargetCol} onChange={e => setRelTargetCol(e.target.value)} placeholder="e.g. ID" />
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={() => handleAddRelationship(selectedTable.table_name)} disabled={!relSourceCol || !relTargetTable || !relTargetCol}>
+                              Save Relationship
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setAddingRel(false)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => setAddingRel(true)}>
+                          + Add Relationship
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           ) : (
             <div className="flex flex-col h-full items-center justify-center text-gray-500 space-y-4">

@@ -255,7 +255,7 @@ class TestChartGeneration:
     def test_chart_pipeline(self):
         """Test chart generation pipeline."""
         from agents.chart_builder import run_chart_pipeline_sync
-        from agents.chart_types import ChartConfig, ChartType
+        from agents.chart_types import ChartConfig, ChartType, AxisConfig
 
         # Sample data
         data = [
@@ -267,15 +267,15 @@ class TestChartGeneration:
         # Generate chart
         config = ChartConfig(
             chart_type=ChartType.BAR,
-            x_column="month",
-            y_columns=["revenue"],
+            x=AxisConfig(column="month"),
+            y=AxisConfig(column="revenue"),
             title="Monthly Revenue",
         )
 
-        result = run_chart_pipeline_sync(data, config)
+        result = run_chart_pipeline_sync(data, question="Monthly Revenue")
 
         assert result is not None
-        assert "plotly_json" in result or "html" in result or result.get("error") is None
+        assert result.json is not None or result.error is None
 
 
 class TestErrorHandling:
