@@ -11,8 +11,10 @@ class UserRole(str, enum.Enum):
     """Role within a customer tenant."""
 
     ADMIN = "admin"
-    MEMBER = "member"
+    TEAM_LEAD = "team_lead"
+    ANALYST = "analyst"
     VIEWER = "viewer"
+
 
 
 class TeamRole(str, enum.Enum):

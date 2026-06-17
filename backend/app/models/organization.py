@@ -64,7 +64,7 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(postgresql.ENUM("admin", "member", "viewer", name="user_role", create_type=False), default=UserRole.MEMBER, server_default="member")
+    role: Mapped[UserRole] = mapped_column(postgresql.ENUM("admin", "team_lead", "analyst", "viewer", name="user_role", create_type=False), default=UserRole.VIEWER, server_default="viewer")
     external_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, comment="Keycloak user ID"
     )
