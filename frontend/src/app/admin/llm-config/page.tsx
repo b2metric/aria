@@ -3,7 +3,7 @@
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { Cpu, Save } from "lucide-react";
-import { API_BASE } from "@/lib/constants";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface LLMConfig {
   provider: string;
