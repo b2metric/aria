@@ -235,8 +235,10 @@ export default function TeamSettings() {
                 onChange={(e) => setInviteRole(e.target.value)}
                 className="w-full px-3 py-2 border rounded-md"
               >
-                <option value="member">Member (Can run queries)</option>
-                <option value="admin">Admin (Can manage settings)</option>
+                <option value="viewer">Viewer</option>
+                <option value="analyst">Analyst</option>
+                <option value="team_lead">Team Lead</option>
+                <option value="admin">Admin</option>
               </select>
             </div>
 
