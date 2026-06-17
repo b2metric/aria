@@ -22,6 +22,7 @@ Kullanıcı sorusu
    │  (Frontend → /query/stream, Server-Sent Events)
    ▼
 1) THINKING          ✅  girdi doğrulama + niyet
+        ├─ BYOK LLM Resolver: Müşterinin kendi anahtarı (varsa) tahsis edilir. ✅
 2) GENERATING_SQL    ✅  memory lookup → vault eşleştirme → SQL üretimi
         ├─ Memory: user → team → cache (Mem0 + Qdrant)        ✅
         ├─ Vault:  docs/vaults/{workspace}/tables/*.md         ✅

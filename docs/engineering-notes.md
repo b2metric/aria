@@ -103,3 +103,8 @@ The full stack can run behind Traefik on port 80. macOS `.local` resolution is f
 - **`NEXTAUTH_SECRET`** must be set for the frontend (compose) — needs a `docker compose up -d frontend` restart to apply.
 - **Frontend dev target = `http://aria.localhost`** (dockerized, host `frontend/` bind-mounted → hot-reload). NOT `localhost:3000`. Do not start a second `npm run dev`.
 - **Mocked E2E ≠ real auth.** `e2e/utils/auth.ts` mocks the session; the real flow is only covered by `npm run test:e2e:auth` (real Keycloak). Run it before declaring any auth/login change done.
+
+## LLM Configuration & BYOK (Bring Your Own Key)
+- ARIA supports multi-tenant LLM keys (Phase 1). You can set custom keys in the Admin UI (`/admin/llm-config`).
+- Queries call `resolve_llm(workspace_id)` before hitting LiteLLM. If no active key is found for the customer, it falls back to the `litellm_api_key` env var.
+- DO NOT log API keys in transit. The `ResolvedLLM` class explicitly masks keys in `__repr__`.

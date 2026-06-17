@@ -179,3 +179,11 @@ The repo now follows the **engineering-core** discipline (hermes-toolkit `skills
 
 **Hybrid LLM routing** (`infra/llm/config.yaml`, LiteLLM behind Traefik at `llm.aria.localhost` / `langfuse.aria.localhost`):
 per-role aliases (`role-architect|lead-dev|backend-codegen|frontend-vision|debugger|reviewer|qa-gate|bulk-worker`), **reviewer ≠ author** via `review-of-<family>` chains, hybrid cloud + local **vLLM** (`local-thinking|vision|embed` via `LOCAL_LLM_BASE`, RTX 6000 — see `infra/llm/RUNBOOK-local-serving.md`), per-role `cost_per_token`, fallbacks crossing local↔cloud. Stack policy: **Python/FastAPI first; Go only for a measured hot path** (engineering-core:stack-decision).
+
+## 10. Multi-Tenant Security & BYOK
+
+ARIA implements a stringent security model designed for enterprises (like banking and health sectors):
+
+- **Read-Only SQL Guards:** `verify_read_only_sql` intercepts generated queries before execution to block DML/DDL (UPDATE, DROP, etc.) natively in python.
+- **BYOK (Bring Your Own Key):** Enterprise customers can provide their own OpenAI/Azure API keys (`CustomerLLMConfig`). ARIA routes queries using `llm_resolver.py` directly to the provided models, circumventing the shared platform key.
+- **Database Password Decryption:** Credentials stored in `CustomerDBConfig` are encrypted at rest via Fernet (`services/crypto.py`) and decrypted dynamically at runtime.
