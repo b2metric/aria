@@ -46,13 +46,19 @@ class KeycloakAdminService:
         """Create a user in Keycloak and return their Keycloak ID."""
         async with httpx.AsyncClient() as client:
             token = await self._get_admin_token(client)
-            
+
+            # Split display_name into firstName and lastName (Keycloak Profile requires lastName)
+            name_parts = display_name.strip().split(" ", 1)
+            first_name = name_parts[0]
+            last_name = name_parts[1] if len(name_parts) > 1 else "."
+
             # 1. Create user
             users_url = f"{self.base_url}/admin/realms/{self.realm}/users"
             user_data = {
                 "username": email, # Use email as username
                 "email": email,
-                "firstName": display_name,
+                "firstName": first_name,
+                "lastName": last_name,
                 "enabled": True,
                 "emailVerified": True,
                 "credentials": [{"type": "password", "value": password, "temporary": False}],
@@ -61,7 +67,7 @@ class KeycloakAdminService:
                     "role": [role]
                 }
             }
-            
+
             resp = await client.post(users_url, json=user_data, headers=self._auth_header(token))
             
             if resp.status_code == 409:
@@ -79,8 +85,14 @@ class KeycloakAdminService:
                 kc_user_id = users[0]["id"]
             else:
                 kc_user_id = location.split("/")[-1]
-                
-            return kc_user_id
+
+            # Generate the DB UUID ahead of time so it can be set as an attribute in Keycloak
+            import uuid
+            db_user_id = str(uuid.uuid4())
+            update_payload = {"attributes": {**user_data["attributes"], "user_id": [db_user_id]}}
+            await client.put(f"{users_url}/{kc_user_id}", json=update_payload, headers=self._auth_header(token))
+
+            return kc_user_id, db_user_id
 
     async def delete_user(self, kc_user_id: str):
         """Delete user from Keycloak."""

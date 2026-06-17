@@ -65,6 +65,31 @@ class VaultPolicyUpdate(BaseModel):
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
+async def resolve_customer_id(
+    current_user: UserContext, db: AsyncSession
+) -> uuid.UUID:
+    """Resolve the customer UUID from the workspace slug in the JWT."""
+    from backend.app.models.organization import Customer
+
+    workspace_slug = getattr(current_user, "workspace_id", None)
+    if workspace_slug:
+        result = await db.execute(
+            select(Customer.id).where(Customer.slug == workspace_slug)
+        )
+        customer_uuid = result.scalar_one_or_none()
+        if customer_uuid:
+            return customer_uuid
+
+        try:
+            return uuid.UUID(str(workspace_slug))
+        except (ValueError, AttributeError):
+            pass
+
+    raise HTTPException(
+        status_code=400,
+        detail="Cannot resolve customer from workspace context",
+    )
+
 @router.get("")
 async def get_team_policies(
     current_user: UserContext = Depends(get_current_user),
@@ -81,15 +106,7 @@ async def get_team_policies(
             detail="Admin role required",
         )
 
-    customer_id_raw = current_user.workspace_id or "stc-kuwait"
-
-    try:
-        customer_id = uuid.UUID(customer_id_raw)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid workspace UUID '{customer_id_raw}': {exc}",
-        ) from exc
+    customer_id = await resolve_customer_id(current_user, db)
 
     try:
         result = await db.execute(
@@ -135,15 +152,7 @@ async def update_team_policy(
             detail="Admin role required",
         )
 
-    customer_id_raw = current_user.workspace_id or "stc-kuwait"
-
-    try:
-        customer_id = uuid.UUID(customer_id_raw)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid workspace UUID '{customer_id_raw}': {exc}",
-        ) from exc
+    customer_id = await resolve_customer_id(current_user, db)
 
     # Resolve team_uuid: NULL for the "default" sentinel.
     team_uuid: uuid.UUID | None = None

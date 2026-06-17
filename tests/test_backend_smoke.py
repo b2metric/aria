@@ -189,7 +189,10 @@ class TestLiteLLMProxy:
         """Test embedding generation."""
         litellm_url = os.getenv("LITELLM_API_BASE", "http://localhost:4000")
         litellm_key = os.getenv("LITELLM_API_KEY", "")
-        
+
+        if not litellm_key:
+            pytest.skip("LITELLM_API_KEY is required for embedding test")
+
         with httpx.Client(timeout=30.0) as client:
             resp = client.post(
                 f"{litellm_url}/v1/embeddings",

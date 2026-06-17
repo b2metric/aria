@@ -10,7 +10,7 @@ import type {
   SavedQuery,
   FilterState,
 } from "@/lib/types";
-import { getMockDashboardData, fetchConversations } from "@/lib/api";
+import { fetchConversations } from "@/lib/api";
 import StatCard from "@/components/StatCard";
 import QuerySearch from "@/components/QuerySearch";
 import ChartArea from "@/components/ChartArea";
@@ -32,25 +32,28 @@ export default function DashboardPage() {
     }
 
     async function loadData() {
-      // Load mock stat data but real conversations
-      const dashboard = getMockDashboardData();
       try {
-        const realConversations = await fetchConversations();
-        // Conversation apiden donen tipler Conversation listesi olur. Mock verinin yapisina gore bagla.
+        const token = (session as any)?.accessToken;
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/dashboard?workspace_id=stc-kuwait`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error("Failed to fetch dashboard data");
+        const dashboard: DashboardData = await res.json();
+
+        const realConversations = await fetchConversations(token);
         if (Array.isArray(realConversations)) {
-            // Su anlik id, query ve timestamp kisimlarini mocklayarak donusturuyoruz.
             dashboard.recentConversations = realConversations.map((c: any) => ({
                 id: c.id || c.conversation_id || Math.random().toString(),
-                query: c.question || c.title || "Unknown query",
+                query: c.title || "New Chat",
                 timestamp: c.created_at || new Date().toISOString(),
                 tables: [],
                 status: c.status || "completed",
             }));
         }
+        setData(dashboard);
       } catch(e) {
-        console.warn("Could not fetch real conversations", e);
+        console.warn("Could not fetch dashboard data", e);
       }
-      setData(dashboard);
     }
     
     loadData();

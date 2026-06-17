@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vault Auto-Sync | B2Metric Academy</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="../index.html" class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      B2Metric Academy
+    </a>
+  </nav>
+
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <ul class="sidebar-menu">
+        <div class="sidebar-title">Getting Started</div>
+        <li><a href="../index.html" class="sidebar-link">How ARIA Works</a></li>
+        <li><a href="chat-flow.html" class="sidebar-link">Chat Flow & Pipelines</a></li>
+        <li><a href="why-aria.html" class="sidebar-link">Why ARIA? (Comparisons)</a></li>
+
+        <div class="sidebar-title">Security & Governance</div>
+        <li><a href="vault-sync.html" class="sidebar-link active">Vault Auto-Sync</a></li>
+        <li><a href="row-limits.html" class="sidebar-link">Row Limits & Safeguards</a></li>
+        <li><a href="team-memory.html" class="sidebar-link">Team Memory (Mem0)</a></li>
+
+        <div class="sidebar-title">Analytics & Artifacts</div>
+        <li><a href="chart-types.html" class="sidebar-link">Chart Types</a></li>
+        <li><a href="data-exports.html" class="sidebar-link">Data Exports (MinIO)</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="content-header">
+        <h1 class="content-title">Vault Auto-Sync</h1>
+        <p class="content-desc">Keep your Markdown schemas synchronized with live databases automatically.</p>
+      </header>
+
+      <div class="prose">
+        <p>ARIA reads schemas from local Markdown files stored in <code>docs/vaults/</code>. This gives you version control over descriptions, keywords, and manual relationships.</p>
+
+        <h2>How It Works</h2>
+        <p>The Auto-Sync engine connects to your live customer database (Oracle, PostgreSQL, MySQL) using credentials managed via the <strong>Tenant Config</strong>.</p>
+        <p>It reads <code>information_schema</code> and performs a smart diff against the local Markdown files. It then carefully merges new columns without overwriting your human-edited tags and descriptions.</p>
+
+        <div class="admonition warning">
+          <div class="admonition-title">⚠️ Decrypted Safely</div>
+          <p>Database passwords are saved using AES-256 (Fernet) encryption. During an auto-sync, ARIA decrypts the password securely in-memory to establish a temporary connection.</p>
+        </div>
+
+        <h2>Triggering a Sync</h2>
+        <ul>
+          <li><strong>Manually:</strong> Navigate to the <code>Data Dictionary</code> under the Admin panel and click the <code>Re-Sync</code> button.</li>
+          <li><strong>Cron / Background Task:</strong> (Coming Soon) ARIA can be scheduled to run the sync every night via Prefect.</li>
+        </ul>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

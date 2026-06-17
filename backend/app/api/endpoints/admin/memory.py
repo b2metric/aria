@@ -25,8 +25,10 @@ async def get_all_memories(
         default="all",
         description="Filter by memory type: all, user, team, or cache",
     ),
+    page: int = Query(1, ge=1),
+    limit: int = Query(50, ge=1, le=500),
     current_user: Any = Depends(get_current_user),
-) -> list[dict]:
+) -> dict:
     """List all memory entries for the workspace.
 
     Agent memory persistence lives in **Qdrant via Mem0** (LOCKED-DECISIONS #1).
@@ -104,8 +106,18 @@ async def get_all_memories(
 
     # Sort by created_at descending (newest first)
     all_memories.sort(key=lambda x: x.get("created_at") or "", reverse=True)
-    
-    return all_memories
+
+    total = len(all_memories)
+    start_idx = (page - 1) * limit
+    end_idx = start_idx + limit
+
+    return {
+        "items": all_memories[start_idx:end_idx],
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "total_pages": (total + limit - 1) // limit if limit > 0 else 1
+    }
 
 
 @router.delete("/{memory_id}")

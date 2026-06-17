@@ -19,7 +19,7 @@ class DatabaseType(str, Enum):
 @dataclass
 class DBConfig:
     """Database connection configuration.
-    
+
     Attributes:
         db_type: Database type (postgresql, mysql, oracle, mssql)
         host: Database host
@@ -28,8 +28,9 @@ class DBConfig:
         username: Connection username
         password: Connection password (decrypted)
         options: Additional connection options (SSL, timeout, etc.)
+        max_row_limit: Maximum allowed rows for this tenant
     """
-    
+
     db_type: DatabaseType
     host: str
     port: int
@@ -37,6 +38,7 @@ class DBConfig:
     username: str
     password: str
     options: dict[str, Any] | None = None
+    max_row_limit: int = 1000
     
     @property
     def default_port(self) -> int:

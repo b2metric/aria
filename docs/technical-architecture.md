@@ -117,7 +117,7 @@ Admin can change `show_sql_to_roles` per customer.
 | 1. Memory Lookup | Mem0 + Qdrant | User/team memories | MemoryContext |
 | 2. Vault Matching | SemanticMatcher | `docs/vaults/{workspace}/tables/*.md` | MatchedTables |
 | 3. SQL Generation | RuleBasedGen / LLMSQLGen | Vault schema + memory | SQL string |
-| 4. Query Execution | DatabaseExecutor | Customer DB (Oracle/PG/MySQL/MSSQL) | DataFrame |
+| 4. Query Execution | DatabaseExecutor | Customer DB (Oracle/PG/MySQL/MSSQL) | DataFrame (w/ Semantic Self-Correction on errors) |
 | 5. Chart Generation | ChartGenerator | Query result | Plotly spec |
 | 6. Insight Generation | InsightGenerator | Result + memory | Summary + suggestions |
 | 7. Memory Store | MemoryService | Successful query | Cached for future |

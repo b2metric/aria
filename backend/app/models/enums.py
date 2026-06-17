@@ -74,6 +74,7 @@ class DatabaseType(str, enum.Enum):
 
     POSTGRESQL = "postgresql"
     MYSQL = "mysql"
+    ORACLE = "oracle"
     BIGQUERY = "bigquery"
     SNOWFLAKE = "snowflake"
     REDSHIFT = "redshift"
@@ -94,3 +95,13 @@ class QuotaPeriod(str, enum.Enum):
 
     DAILY = "daily"
     MONTHLY = "monthly"
+
+
+class LLMProvider(str, enum.Enum):
+    """Supported LLM providers for BYOK."""
+
+    OPENAI = "openai"
+    AZURE = "azure"
+    ANTHROPIC = "anthropic"
+    GEMINI = "gemini"
+    LITELLM = "litellm"

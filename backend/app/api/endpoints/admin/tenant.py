@@ -13,6 +13,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.app.auth.dependencies import get_current_user
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.token import TokenQuota
+from backend.app.models.database import CustomerDBConfig
+from backend.app.models.enums import DatabaseType
+from backend.app.models.organization import Customer
+from backend.app.services.crypto import encrypt_password
 
 DEFAULT_DAILY_TOKEN_LIMIT = 50000
 DEFAULT_MAX_ROW_LIMIT = 1000
@@ -20,10 +24,17 @@ DEFAULT_MAX_ROW_LIMIT = 1000
 log = logging.getLogger("aria.admin")
 router = APIRouter()
 
+class DBConfigModel(BaseModel):
+    db_type: DatabaseType
+    host: str
+    port: int
+    database: str
+    username: str
+    password: str | None = None
 
 class TenantConfigUpdate(BaseModel):
     """Update tenant configuration."""
-    
+
     daily_token_limit: int | None = Field(
         default=None,
         ge=1000,
@@ -36,20 +47,22 @@ class TenantConfigUpdate(BaseModel):
         le=1_000_000,
         description="Max rows per query (100 - 1M)",
     )
+    db_config: DBConfigModel | None = None
 
 
 class TenantConfigResponse(BaseModel):
     """Tenant configuration response."""
-    
+
     daily_token_limit: int
     max_row_limit: int
     source: str  # "db" or "default"
+    db_config: dict | None = None
 
 
 @router.get("")
 async def get_tenant_config(
     current_user: Any = Depends(get_current_user),
-) -> TenantConfigResponse:
+) -> TenantConfigResponse | dict:
     """Get tenant limits.
     
     Daily token limit comes from the active TokenQuota (real);
@@ -60,6 +73,10 @@ async def get_tenant_config(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     quota = None
+    db_config_res = None
+    workspace_id = getattr(current_user, "workspace_id", None) or "default"
+    row_limit = DEFAULT_MAX_ROW_LIMIT
+
     try:
         async with get_sessionmaker()() as session:
             quota = (
@@ -70,13 +87,31 @@ async def get_tenant_config(
                     .limit(1)
                 )
             ).scalar_one_or_none()
+
+            customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
+            if customer:
+                db_config_res = (await session.execute(
+                    select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
+                )).scalar_one_or_none()
+
+                # Also fetch max_row_limit if it exists
+                if db_config_res:
+                    row_limit = db_config_res.max_row_limit
+
     except SQLAlchemyError as exc:
         log.warning("admin.tenant: query failed (table not migrated?): %s", exc)
 
     return TenantConfigResponse(
         daily_token_limit=quota.token_limit if quota else DEFAULT_DAILY_TOKEN_LIMIT,
-        max_row_limit=DEFAULT_MAX_ROW_LIMIT,  # TODO: Add per-tenant row limit to DB
+        max_row_limit=row_limit,
         source="db" if quota else "default",
+        db_config={
+            "db_type": db_config_res.db_type.value if hasattr(db_config_res.db_type, "value") else str(db_config_res.db_type),
+            "host": db_config_res.host,
+            "port": db_config_res.port,
+            "database": db_config_res.database,
+            "username": db_config_res.username,
+        } if db_config_res else None
     )
 
 
@@ -92,52 +127,99 @@ async def update_tenant_config(
     if not getattr(current_user, "can_admin", False):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
-    if body.daily_token_limit is None and body.max_row_limit is None:
+    if body.daily_token_limit is None and body.max_row_limit is None and body.db_config is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one field must be provided",
         )
 
+    workspace_id = getattr(current_user, "workspace_id", None) or "default"
+
     try:
         async with get_sessionmaker()() as session:
-            # Get or create active quota
-            quota = (
-                await session.execute(
-                    select(TokenQuota)
-                    .where(TokenQuota.is_active.is_(True))
-                    .order_by(TokenQuota.created_at.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            
-            if quota:
-                # Update existing quota
-                if body.daily_token_limit is not None:
-                    quota.token_limit = body.daily_token_limit
-                await session.commit()
-                log.info(
-                    "admin.tenant: Updated quota %s: token_limit=%d",
-                    quota.id,
-                    quota.token_limit,
-                )
-            else:
-                # Create new quota
-                new_quota = TokenQuota(
-                    token_limit=body.daily_token_limit or DEFAULT_DAILY_TOKEN_LIMIT,
-                    is_active=True,
-                )
-                session.add(new_quota)
-                await session.commit()
-                quota = new_quota
-                log.info(
-                    "admin.tenant: Created new quota: token_limit=%d",
-                    quota.token_limit,
-                )
+            # Handle Quotas
+            if body.daily_token_limit is not None:
+                quota = (
+                    await session.execute(
+                        select(TokenQuota)
+                        .where(TokenQuota.is_active.is_(True))
+                        .order_by(TokenQuota.created_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
 
+                if quota:
+                    quota.token_limit = body.daily_token_limit
+                    log.info("admin.tenant: Updated quota %s: token_limit=%d", quota.id, quota.token_limit)
+                else:
+                    new_quota = TokenQuota(
+                        token_limit=body.daily_token_limit,
+                        is_active=True,
+                    )
+                    session.add(new_quota)
+                    quota = new_quota
+                    log.info("admin.tenant: Created new quota: token_limit=%d", quota.token_limit)
+
+            # Handle DB Config
+            db_config_res = None
+            if body.db_config is not None:
+                customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
+                if not customer:
+                    raise HTTPException(status_code=404, detail="Customer workspace not found")
+
+                db_config_res = (await session.execute(
+                    select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
+                )).scalar_one_or_none()
+
+                if db_config_res:
+                    db_config_res.db_type = body.db_config.db_type
+                    db_config_res.host = body.db_config.host
+                    db_config_res.port = body.db_config.port
+                    db_config_res.database = body.db_config.database
+                    db_config_res.username = body.db_config.username
+                    if body.max_row_limit is not None:
+                        db_config_res.max_row_limit = body.max_row_limit
+                    if body.db_config.password:
+                        db_config_res.encrypted_password = encrypt_password(body.db_config.password)
+                else:
+                    db_config_res = CustomerDBConfig(
+                        customer_id=customer.id,
+                        name=f"{workspace_id} DB",
+                        db_type=body.db_config.db_type,
+                        host=body.db_config.host,
+                        port=body.db_config.port,
+                        database=body.db_config.database,
+                        username=body.db_config.username,
+                        max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
+                        encrypted_password=encrypt_password(body.db_config.password) if body.db_config.password else encrypt_password(""),
+                    )
+                    session.add(db_config_res)
+
+            elif body.max_row_limit is not None:
+                # If only max_row_limit is updated but db_config is empty
+                customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
+                if customer:
+                    db_config_res = (await session.execute(
+                        select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
+                    )).scalar_one_or_none()
+                    if db_config_res:
+                        db_config_res.max_row_limit = body.max_row_limit
+
+            await session.commit()
+
+        # For response
+        final_limit = body.daily_token_limit if body.daily_token_limit is not None else DEFAULT_DAILY_TOKEN_LIMIT
         return TenantConfigResponse(
-            daily_token_limit=quota.token_limit,
+            daily_token_limit=final_limit,
             max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
             source="db",
+            db_config={
+                "db_type": body.db_config.db_type.value if hasattr(body.db_config.db_type, "value") else str(body.db_config.db_type),
+                "host": body.db_config.host,
+                "port": body.db_config.port,
+                "database": body.db_config.database,
+                "username": body.db_config.username,
+            } if body.db_config else None
         )
 
     except SQLAlchemyError as exc:

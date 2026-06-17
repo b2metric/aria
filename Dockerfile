@@ -13,7 +13,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies (cache-friendly layer)
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --no-dev --no-editable
 
 # ── Oracle Instant Client Stage ───────────────────────────────────────
 FROM python:3.12-slim-bookworm AS oracle-client

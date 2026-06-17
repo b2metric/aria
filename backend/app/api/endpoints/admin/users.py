@@ -115,8 +115,8 @@ async def create_user(
     # 1. Create in Keycloak
     kc_service = KeycloakAdminService()
     workspace_slug = current_user.workspace_id or "default"
-    kc_user_id = await kc_service.create_user(
-        email=body.email, 
+    kc_user_id, db_user_id = await kc_service.create_user(
+        email=body.email,
         display_name=body.display_name,
         role=body.role,
         workspace_id=workspace_slug
@@ -124,7 +124,7 @@ async def create_user(
 
     # 2. Add to DB
     user = User(
-        id=uuid.UUID(kc_user_id) if len(kc_user_id) == 36 else uuid.uuid4(),
+        id=uuid.UUID(db_user_id),
         external_id=kc_user_id,
         customer_id=customer_id,
         email=body.email,

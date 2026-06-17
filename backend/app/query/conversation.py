@@ -92,5 +92,6 @@ async def delete_conversation(
     key = _conv_key(workspace_id, conversation_id)
     list_key = _list_key(workspace_id, user_id)
     deleted = await redis.delete(key)
-    await redis.zrem(list_key, conversation_id)
-    return deleted > 0
+    # Ensure zrem succeeds whether conversation_id is passed directly or needs decoding if fetched raw
+    zrem_res = await redis.zrem(list_key, conversation_id)
+    return deleted > 0 or zrem_res > 0

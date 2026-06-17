@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Memory | B2Metric Academy</title>
+  <link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a href="../index.html" class="navbar-brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+        <path d="M2 17l10 5 10-5"></path>
+        <path d="M2 12l10 5 10-5"></path>
+      </svg>
+      B2Metric Academy
+    </a>
+  </nav>
+
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <ul class="sidebar-menu">
+        <div class="sidebar-title">Getting Started</div>
+        <li><a href="../index.html" class="sidebar-link">How ARIA Works</a></li>
+        <li><a href="chat-flow.html" class="sidebar-link">Chat Flow & Pipelines</a></li>
+        <li><a href="why-aria.html" class="sidebar-link">Why ARIA? (Comparisons)</a></li>
+
+        <div class="sidebar-title">Security & Governance</div>
+        <li><a href="vault-sync.html" class="sidebar-link">Vault Auto-Sync</a></li>
+        <li><a href="row-limits.html" class="sidebar-link">Row Limits & Safeguards</a></li>
+        <li><a href="team-memory.html" class="sidebar-link active">Team Memory (Mem0)</a></li>
+
+        <div class="sidebar-title">Analytics & Artifacts</div>
+        <li><a href="chart-types.html" class="sidebar-link">Chart Types</a></li>
+        <li><a href="data-exports.html" class="sidebar-link">Data Exports (MinIO)</a></li>
+      </ul>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="content-header">
+        <h1 class="content-title">Team Memory (Mem0)</h1>
+        <p class="content-desc">How ARIA learns and retains your organization's unique business logic.</p>
+      </header>
+
+      <div class="prose">
+        <p>ARIA isn't just a stateless bot. It uses a vector database (<strong>Qdrant</strong>) combined with the <strong>Mem0</strong> framework to build a long-term memory of how your business operates.</p>
+
+        <h2>Types of Memory</h2>
+        <p>ARIA categorizes knowledge into three distinct scopes:</p>
+
+        <ol>
+          <li><strong>User Preferences:</strong> "I always want to see revenue grouped by month." ARIA learns your individual habits. (Decays after 6 months to stay fresh).</li>
+          <li><strong>Team Conventions:</strong> "In the Data Science team, active users are those who logged in within 30 days." Shared across all members of a department.</li>
+          <li><strong>Query Cache:</strong> Successful Natural Language to SQL mappings are saved. When someone asks a similar question, ARIA recalls the exact SQL without guessing.</li>
+        </ol>
+
+        <div class="admonition tip">
+          <div class="admonition-title">💡 Managing Team Conventions</div>
+          <p>Administrators and Team Leads can view, edit, or manually inject specific rules into ARIA's brain by navigating to <strong>Admin &gt; Team Conventions</strong> in the UI.</p>
+        </div>
+
+        <h2>How Memory Influences AI</h2>
+        <p>Before ARIA generates any SQL, it performs a semantic search against the Memory database using your question. The top rules and past query examples are silently injected into the LLM's prompt, effectively grounding the AI in your company's specific reality.</p>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>

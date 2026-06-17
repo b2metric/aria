@@ -579,11 +579,32 @@ class MemoryService:
                         if mem_id and self.delete_memory(mem_id):
                             deleted["cache"] += 1
 
-            # Clean up user memories (iterate all user patterns)
-            # Note: This is a simplified approach - in production you'd want
-            # to query Qdrant directly with a filter on metadata.created_at
-            # For now, we'll skip user cleanup as it requires iterating all users
-            # which needs the auth/user list integration
+            # Clean up user preferences (180 days hard decay per Task 4)
+            # Find all user IDs inside workspace_id
+            # Mem0 API currently doesn't allow fetching across all user_ids easily,
+            # so we fetch by the 'user' metadata marker if we can, or iterate known users.
+            # But get_all_memories without user_id might work or we use a fallback.
+            # We will use the base memory search to fetch all user memories in the workspace.
+            user_cutoff_180d = now - timedelta(days=180) # Force 6 months memory decay
+            all_user_mems = self._memory.get_all()
+            if all_user_mems and isinstance(all_user_mems, dict) and "results" in all_user_mems:
+                for mem in all_user_mems["results"]:
+                    mem_uid = mem.get("user_id", "")
+                    if mem_uid.startswith(f"{workspace_id}:") and ":team:" not in mem_uid and ":query_cache" not in mem_uid:
+                        created_at = mem.get("created_at")
+                        if created_at:
+                            try:
+                                if isinstance(created_at, str):
+                                    mem_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                                else:
+                                    mem_time = datetime.fromtimestamp(created_at, tz=timezone.utc)
+
+                                if mem_time < user_cutoff_180d:
+                                    mem_id = mem.get("id")
+                                    if mem_id and self.delete_memory(mem_id):
+                                        deleted["user"] += 1
+                            except (ValueError, TypeError):
+                                continue
 
             logger.info(
                 "Memory cleanup for workspace=%s: cache=%d deleted (>%dd)",

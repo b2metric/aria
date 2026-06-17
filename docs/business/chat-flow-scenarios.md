@@ -26,11 +26,12 @@ Kullanıcı sorusu
         ├─ Memory: user → team → cache (Mem0 + Qdrant)        ✅
         ├─ Vault:  docs/vaults/{workspace}/tables/*.md         ✅
         ├─ SQL:    rule-based  ──(düşük güven)──▶ LLM fallback ✅
-        ├─ Guard:  SELECT-only / DDL-DML reddi                 🔜
+        ├─ Guard:  SELECT-only / DDL-DML reddi                 ✅
         └─ Dry-run: EXPLAIN + satır tahmini                    🔜
 3) SQL_READY         ✅  SQL önizleme (role'e göre görünür)
 4) SQL_EXECUTING     ✅  customer DB'de çalıştır
-        ├─ DB parolası decrypt                                 🔜
+        ├─ DB parolası decrypt                                 ✅
+        ├─ Execution Hata (ORA-00904 vs) → Akıllı Self-Correction (Sütun uydurmayı düzelt) ✅
         └─ Yüksek satır → Prefect arka plan → MinIO link       🔜
 5) RENDERING_CHART   ✅  Recharts (JSON) çizim · MinIO artifact: CSV (+ PNG 🔜 kaleido)
 6) COMPLETE          ✅  cevap + grafik + iş yorumu (insight)
@@ -74,11 +75,11 @@ Kullanıcı sorusu
 | 2 | **Memory lookup**: user → team → cache; cache MISS (benzer sorgu yok) | ✅ |
 | 3 | `GENERATING_SQL` — **Vault eşleştirme**: `docs/vaults/{ws}/tables/*.md` taranır; keyword + öncelik (`order`) ile en uygun tablo seçilir (ör. `fct_prep_master`) | ✅ |
 | 4 | Tek tablo + basit agregasyon → **rule-based generator** (`COUNT`), LLM'e gerek yok | ✅ |
-| 5 | **SQL guard** — DDL/DML reddi, sadece SELECT'e izin | 🔜 |
+| 5 | **SQL guard** — DDL/DML reddi, sadece SELECT'e izin | ✅ |
 | 6 | **Dry-run** — `EXPLAIN` + satır sayısı tahmini | 🔜 |
 | 7 | `SQL_READY` — SQL önizleme (yetkili role görünür) | ✅ |
-| 8 | `SQL_EXECUTING` → dialect transform (Oracle/PG/…) → customer DB | ✅ |
-| 8a | DB parolası **decrypt** (şu an düz metin kullanılıyor) | 🔜 |
+| 8 | `SQL_EXECUTING` → dialect transform (Oracle/PG/…) → customer DB (Hata durumunda Self-Correction devreye girer) | ✅ |
+| 8a | DB parolası **decrypt** (şu an düz metin kullanılıyor) | ✅ |
 | 9 | `RENDERING_CHART` → tek değer/küçük tablo → uygun görsel | ✅ |
 | 10 | `COMPLETE` → cevap + grafik + yorum | ✅ |
 
@@ -95,7 +96,7 @@ Kullanıcı sorusu
 | 3 | **Vault eşleştirme**: kural-tabanlı eşleşme güveni düşük (karmaşık çapraz sorgu) | ✅ |
 | 4 | Güven eşiğin altında → iş **LLM SQL generator**'a devredilir (schema + memory context ile prompt) | ✅ |
 | 5 | LLM doğru **JOIN** + `GROUP BY` + NULL yönetimi ile SQL üretir; sözdizimi doğrulanır | ✅ |
-| 6 | SQL guard (SELECT-only) | 🔜 |
+| 6 | SQL guard (SELECT-only) | ✅ |
 | 7 | Dry-run (EXPLAIN + satır tahmini) | 🔜 |
 | 8 | `SQL_EXECUTING` → customer DB | ✅ |
 | 9 | `RENDERING_CHART` → karşılaştırmalı bar/grafik + MinIO | ✅ |
@@ -114,7 +115,7 @@ Kullanıcı sorusu
 | 1 | `THINKING` | ✅ |
 | 2 | **Memory lookup** → **Team memory**'de "ARPU = ortalama gelir / abone" tanımı bulunur | ✅ |
 | 3 | Bu tanım vault eşleştirmeyi + SQL üretimini yönlendirir (doğru ölçü/tablo) | ✅ |
-| 4 | SQL üretimi (rule veya LLM) → guard 🔜 → dry-run 🔜 → execute | ✅ / 🔜 |
+| 4 | SQL üretimi (rule veya LLM) → guard ✅ → dry-run 🔜 → execute | ✅ / 🔜 |
 | 5 | `COMPLETE` → trend grafiği + yorum | ✅ |
 
 > Team memory tanımları **admin/team_lead** tarafından yönetilir (insanlı onay; admin CRUD paneli). Onay akışı kısmen canlı, genişletme 🔜.
@@ -178,7 +179,7 @@ Kullanıcı sorusu
 |---|------|-------|
 | 1 | SQL üretilir; sözdizimi doğrulama | ✅ |
 | 2 | Çalıştırmada hata → **self-correction**: hata mesajıyla SQL yeniden üretilir (sınırlı tur) | ✅ (temel) |
-| 3 | Guard (SELECT-only) + dry-run ile hatadan **önce** yakalama | 🔜 |
+| 3 | Guard (SELECT-only) + dry-run ile hatadan **önce** yakalama | ✅ / 🔜 |
 | 4 | Başarısızsa kullanıcıya anlaşılır hata + öneri | ✅ |
 
 ---
@@ -203,10 +204,16 @@ Kullanıcı beyaz ekran görmez; her aşama SSE ile akar:
 | Yetenek | Durum |
 |---------|-------|
 | Memory (user→team→cache), vault eşleştirme, rule+LLM SQL, dialect, execute, chart+MinIO, insight, streaming, correction/preference, SQL görünürlüğü, self-correction (temel) | ✅ Canlı |
-| **SELECT-only / read-only SQL guard** (DDL/DML reddi) | 🔜 Gelecek sprint (HIGH güvenlik) |
-| **DB parolası decrypt** (şu an düz metin) | 🔜 Gelecek sprint (HIGH güvenlik) |
+| **SELECT-only / read-only SQL guard** (DDL/DML reddi) | ✅ Canlı |
+| **DB parolası decrypt** (şu an düz metin) | ✅ Canlı |
 | **EXPLAIN dry-run + satır tahmini** doğrulaması | 🔜 Gelecek sprint |
 | **Yüksek-satır → Prefect arka plan → MinIO süreli link** | 🔜 Gelecek sprint |
+
+## 2. Vault Re-Sync (Yaşayan Müşteri Veritabanına Adaptasyon)
+Müşteri veritabanlarındaki yapı değiştiğinde (yeni tablo eklendiğinde, kolon eklendiğinde veya değiştiğinde) `docs/vaults` klasörü altındaki verinin **otomatik olarak senkronize edilmesi (Re-sync)** gerekir. Bu süreç için planlanan akış (🔜):
+1. **Zamanlanmış Görev (Cron/Prefect):** Sistem, belirlenen saatlerde (örneğin her gece 03:00) müşteri DB'sine readonly bağlanıp şema dökümünü (`information_schema` vb.) alır.
+2. **Diff (Fark) Algılama:** Mevcut vault `.md` dosyaları ile yeni gelen schema karşılaştırılır. Yeni eklenen kolonlar md tablolarına otomatik işlenir. 
+3. **Manuel "Sync Schema" Tetikleme:** `/admin/schema` UI ekranına eklenecek olan bir "Re-Sync Now" butonuyla backend'deki schema discovery modülü `BackgroundTasks` (FastAPI) veya Celery/Prefect üzerinden asenkron tetiklenerek anında güncelleme sağlanacaktır.
 
 > Yol haritası önceliği ve tarihler GTM/sprint planında tutulur; bu doküman yalnızca akışı ve
 > mevcut/planlı durumu gösterir. Yeni iddia eklemeden önce kodla doğrulayın.

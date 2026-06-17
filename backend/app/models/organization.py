@@ -27,6 +27,7 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     teams: Mapped[list["Team"]] = relationship(back_populates="customer", lazy="selectin")
     users: Mapped[list["User"]] = relationship(back_populates="customer", lazy="selectin")
     db_configs: Mapped[list["CustomerDBConfig"]] = relationship(back_populates="customer", lazy="selectin")
+    llm_configs: Mapped[list["CustomerLLMConfig"]] = relationship(back_populates="customer", lazy="selectin")
 
     def __repr__(self) -> str:
         return f"<Customer {self.slug}>"

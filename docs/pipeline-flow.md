@@ -221,6 +221,15 @@ QueryResult {
 }
 ```
 
+
+### Stage 4.1: Semantic Self-Correction (Error Handling)
+If the query execution fails with a database schema error (e.g., Oracle ORA-00904 Invalid Identifier due to LLM hallucination):
+1. The error is caught by the pipeline.
+2. The invalid column is extracted from the error message.
+3. A Semantic Matcher (`_get_relevant_columns`) performs fuzzy string matching and checks a hardcoded semantic dictionary (e.g. mapping "region" to "nationality") against the *actual* table schema.
+4. The LLM is re-prompted with the exact error and a precise hint: `"The column 'REGION' does not exist. Did you mean 'NATIONALITY'?"`.
+5. The corrected SQL is executed again.
+
 ### Stage 5: Chart Generation
 
 ```

@@ -26,6 +26,7 @@ from backend.app.query.conversation import (
     list_conversations,
 )
 from backend.app.query.pipeline import process_query
+from backend.app.services.rate_limit import check_rate_limit, RateLimitExceeded
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,18 @@ async def query(
     the conversation_id from the last received ``done`` event.
     """
     redis = await _get_redis()
+    
+    # Check rate limit before proceeding (e.g. 20 queries per minute)
+    try:
+        await check_rate_limit(redis, user.user_id, limit=20, window=60)
+    except RateLimitExceeded as e:
+        await redis.aclose()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={"error": e.message, "retry_after": e.retry_after},
+            headers={"Retry-After": str(e.retry_after)}
+        )
+
     engine = await _get_engine()
 
     async def event_generator():

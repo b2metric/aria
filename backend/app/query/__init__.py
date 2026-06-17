@@ -46,6 +46,8 @@ class ConversationMessage(BaseModel):
     # Chart DATA points (JSON rows) for client-side recharts rendering.
     # Preferred over chart_html: avoids persisting multi-MB inline Plotly HTML.
     chart_data: list[dict[str, Any]] | None = None
+    summary: str | None = None
+    suggestions: list[str] | None = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
