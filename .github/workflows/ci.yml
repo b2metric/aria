@@ -230,3 +230,27 @@ jobs:
           name: code-knowledge-graph
           path: codegraph/graph.html
           retention-days: 14
+
+  docs-build:
+    # Dual-audience docs portal (docs-site/, Docusaurus) must build — keeps developer +
+    # end-user (Academy) docs from rotting. Screenshots are committed artifacts; refresh
+    # them with the `aria-docs` skill (frontend e2e/docs-screenshots.spec.ts).
+    name: "Docs Build (Docusaurus)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Install docs dependencies
+        working-directory: docs-site
+        run: npm ci
+      - name: Build docs portal
+        working-directory: docs-site
+        run: npm run build
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: docs-build
+          path: docs-site/build/
+          retention-days: 7

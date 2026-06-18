@@ -62,6 +62,18 @@ else
   note "smoke/check.sh not found"
 fi
 
+echo "[5] Docs portal build (docs-site/)"
+if [ -d docs-site ] && [ -f docs-site/package.json ]; then
+  if [ -d docs-site/node_modules ]; then
+    if ( cd docs-site && npm run build --silent >/tmp/doneck-docs.log 2>&1 ); then pass "docs build green"
+    else note "docs build failed (/tmp/doneck-docs.log) — refresh via the aria-docs skill"; fi
+  else
+    note "docs-site deps not installed (cd docs-site && npm install) — docs build skipped"
+  fi
+else
+  pass "no docs-site/ (skip)"
+fi
+
 echo ""
 if [ "$hard" -eq 0 ]; then
   echo -e "${GRN}━━━ ✓ Definition of Done met ($warn warn) ━━━${NC}"; exit 0
