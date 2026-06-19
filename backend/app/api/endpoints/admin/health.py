@@ -77,7 +77,8 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
                         await loop.run_in_executor(None, lambda conf=c_config: get_executor(conf).execute("SELECT 1" if db_type_val != "oracle" else "SELECT 1 FROM DUAL"))
                         db_success += 1
                     except Exception as e:
-                        db_errors.append(f"DB {c.id} ({c.host}) failed: {e}")
+                        log.warning("Customer DB %s (%s) unreachable: %s", c.id, c.host, e)
+                        db_errors.append(f"DB config {c.id} unreachable")
 
                 latency = round((asyncio.get_event_loop().time() - start) * 1000)
                 if db_success == len(conf_rows):
@@ -88,8 +89,9 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
                         "latency_ms": latency,
                         "error": " | ".join(db_errors)
                     }
-    except Exception as e:
-        results["customer_dbs"] = {"status": "unhealthy", "error": str(e)}
+    except Exception:
+        log.exception("Customer DB health check failed")
+        results["customer_dbs"] = {"status": "unhealthy", "error": "health check setup failed"}
     
     # 1. Postgres
     try:

@@ -254,8 +254,8 @@ async def update_tenant_config(
         )
 
     except SQLAlchemyError as exc:
-        log.error("admin.tenant: Failed to update config: %s", exc)
+        log.error("admin.tenant: Failed to update config: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update tenant config: {exc}",
+            detail="Failed to update tenant config. Check server logs.",
         ) from exc
