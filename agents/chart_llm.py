@@ -1,31 +1,32 @@
-"""LLM-based chart proposer powered by Pydantic AI.
+"""LLM-based chart proposer.
 
 Translates a natural-language question + data preview into a
 structured ``ChartConfig``, selecting the best chart type and
 axis mappings.
 
-Architecture (mirrors ``agents/sql_generator.py``):
-  1. ``LlmChartChoice`` — Pydantic BaseModel for structured output
+Architecture:
+  1. ``LlmChartChoice`` — Pydantic BaseModel for the structured output
      (chart_type, x_column, y_column, title, labels, reasoning).
-  2. ``build_agent()`` — factory that constructs a fresh
-     ``Agent[None, LlmChartChoice]`` with a data-aware system prompt.
-  3. ``propose_chart_llm()`` — async wrapper: build agent, run, return
-     ChartConfig.
-  4. ``propose_chart_llm_with_heuristic()`` — hybrid: LLM takes
-     heuristic suggestion as prior and may override.
+  2. ``_run_chart_llm()`` — calls the LiteLLM proxy in JSON mode and
+     validates the response into an ``LlmChartChoice``.
+  3. ``propose_chart_llm()`` — async wrapper: build the prompt, run the
+     LLM, return a ``ChartConfig``.
+  4. ``propose_chart_llm_with_heuristic()`` — hybrid: LLM takes the
+     heuristic suggestion as a prior and may override.
 
-The LLM receives a data preview (first N rows + column metadata) and
-the original question, then returns a confident chart recommendation.
+The LLM call goes through the same LiteLLM proxy as the rest of the
+backend (``llm_insight``/``llm_sql``); we ask for a JSON object and
+validate it with Pydantic rather than pulling in a separate agent
+framework.
 """
 
 from __future__ import annotations
 
 import json
-from typing import Any
 
+import litellm
 import structlog
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
 
 from agents.chart_heuristic import (
     _cardinality,
@@ -218,36 +219,44 @@ def _resolve_model(model_name: str | None = None) -> str:
     return "gpt-4o"
 
 
-# ── Agent factory ──────────────────────────────────────────────────────────
+# ── LLM call ─────────────────────────────────────────────────────────────
 
 
-def build_agent(
+async def _run_chart_llm(
+    prompt: str,
     *,
     model_name: str | None = None,
     llm_base_url: str = "http://localhost:4000/v1",
     llm_api_key: str = "",
-) -> Agent[None, LlmChartChoice]:
-    """Construct a fresh chart-proposer agent.
+) -> LlmChartChoice:
+    """Call the LiteLLM proxy in JSON mode and validate the chart choice.
 
-    Each call produces a new agent instance — the system prompt is
-    static but the user prompt carries the data-specific context.
+    Returns a default (table) ``LlmChartChoice`` if the call or the
+    validation fails, so chart proposal degrades gracefully instead of
+    raising.
     """
-    from pydantic_ai.models.openai import OpenAIModel
-    from pydantic_ai.providers.openai import OpenAIProvider
-
-    model = OpenAIModel(
-        _resolve_model(model_name),
-        provider=OpenAIProvider(
-            base_url=llm_base_url,
-            api_key=llm_api_key,
-        ),
-    )
-
-    return Agent(
-        model=model,
-        output_type=LlmChartChoice,
-        system_prompt=_SYSTEM_PROMPT,
-    )
+    try:
+        response = await litellm.acompletion(
+            model=_resolve_model(model_name),
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            response_format={"type": "json_object"},
+            timeout=30.0,
+            api_base=llm_base_url,
+            api_key=llm_api_key or "sk-dummy",
+            custom_llm_provider="openai",
+        )
+        content = response.choices[0].message.content
+        return LlmChartChoice.model_validate(json.loads(content))
+    except Exception as exc:  # noqa: BLE001 — degrade to table on any LLM/parse error
+        log.warning("chart_llm.failed", error=str(exc))
+        return LlmChartChoice(
+            chart_type="table",
+            confidence=0.0,
+            reasoning="LLM call failed — table fallback.",
+        )
 
 
 # ── Public API ─────────────────────────────────────────────────────────────
@@ -301,14 +310,12 @@ async def propose_chart_llm(
         model=_resolve_model(model_name),
     )
 
-    agent = build_agent(
+    choice = await _run_chart_llm(
+        prompt,
         model_name=model_name,
         llm_base_url=llm_base_url,
         llm_api_key=llm_api_key,
     )
-
-    result = await agent.run(prompt)
-    choice = result.data
 
     # Map LLM output → ChartConfig
     try:

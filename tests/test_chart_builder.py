@@ -461,7 +461,6 @@ class TestPublicAPI:
             propose_chart_llm,
             propose_chart_llm_with_heuristic,
             LlmChartChoice,
-            build_chart_agent,
             render_json,
             render_csv,
             render_all,
