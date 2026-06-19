@@ -73,6 +73,26 @@ class CustomerLLMConfig(Base, UUIDMixin, TimestampMixin):
         return f"<CustomerLLMConfig {self.provider.value} | {self.model_name}>"
 
 
+
+class CustomerKeyConfig(Base, UUIDMixin, TimestampMixin):
+    """Customer Managed Encryption Key (CMEK) configuration."""
+
+    __tablename__ = "customer_key_configs"
+
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    provider: Mapped[str] = mapped_column(String(50), default="app", server_default="app", comment="app, aws, gcp, azure")
+    key_uri: Mapped[str | None] = mapped_column(String(512), nullable=True, comment="URI to the KEK in the provider")
+    encrypted_dek: Mapped[str] = mapped_column(Text, nullable=False, comment="Data Encryption Key encrypted by KEK")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+    # relationships
+    customer: Mapped["Customer"] = relationship(back_populates="key_configs")
+
+    def __repr__(self) -> str:
+        return f"<CustomerKeyConfig {self.provider}>"
+
 class SchemaRelationship(Base, UUIDMixin):
     """Discovered or manually defined relationship between external-DB tables."""
 

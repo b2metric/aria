@@ -9,7 +9,7 @@ from backend.app.db.session import get_sessionmaker
 from backend.app.models.database import CustomerLLMConfig
 from backend.app.models.enums import LLMProvider
 from backend.app.models.organization import Customer
-from backend.app.services.crypto import encrypt_password
+from backend.app.services.crypto import encrypt_password, async_encrypt_password
 
 log = logging.getLogger("aria.admin.llm_config")
 router = APIRouter()
@@ -91,9 +91,9 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                 if body.upstream_api_base is not None:
                     llm_config.upstream_api_base = body.upstream_api_base
                 if body.upstream_api_key:
-                    llm_config.encrypted_upstream_api_key = encrypt_password(body.upstream_api_key)
+                    llm_config.encrypted_upstream_api_key = await async_encrypt_password(body.upstream_api_key, customer.id, session)
                     # For phase 1, virtual key is just the upstream key passed through
-                    llm_config.encrypted_virtual_key = encrypt_password(body.upstream_api_key)
+                    llm_config.encrypted_virtual_key = await async_encrypt_password(body.upstream_api_key, customer.id, session)
                 llm_config.model_name = body.model_name
                 llm_config.deployment_or_version = body.deployment_or_version
                 llm_config.enabled = body.enabled
@@ -102,8 +102,8 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                     customer_id=customer.id,
                     provider=body.provider,
                     upstream_api_base=body.upstream_api_base,
-                    encrypted_upstream_api_key=encrypt_password(body.upstream_api_key or ""),
-                    encrypted_virtual_key=encrypt_password(body.upstream_api_key or ""),
+                    encrypted_upstream_api_key=await async_encrypt_password(body.upstream_api_key or "", customer.id, session),
+                    encrypted_virtual_key=await async_encrypt_password(body.upstream_api_key or "", customer.id, session),
                     model_name=body.model_name,
                     deployment_or_version=body.deployment_or_version,
                     enabled=body.enabled

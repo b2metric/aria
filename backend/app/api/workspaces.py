@@ -22,6 +22,8 @@ from backend.app.core.config import get_settings
 from backend.app.db.models import DatabaseType, DBConfig
 from backend.app.schema_discovery.cache import set_schema
 from backend.app.schema_discovery.discovery import discover_schema_async
+import asyncio
+from backend.app.schema_discovery.suggestions import generate_vault_suggestions
 from backend.app.schema_discovery.enrichment import (
     ColumnEnrichment,
     ExcelImportConfig,
@@ -257,6 +259,9 @@ async def generate_vault_from_schema(
             vault_base_path=vault_base_path,
             overwrite=request.overwrite,
         )
+        
+        # Background task to generate dynamic suggestions for the frontend
+        asyncio.create_task(generate_vault_suggestions(snapshot, vault_base_path))
     except Exception as e:
         logger.exception("Vault generation failed for workspace %s", workspace_id)
         raise HTTPException(
@@ -319,7 +324,7 @@ async def sync_vault_with_db(
                 )
 
             # We must decrypt the password before handing config to the executor
-            from backend.app.services.crypto import decrypt_password
+            from backend.app.services.crypto import async_decrypt_password
             from backend.app.db.models import DBConfig
             db_type_val = db_config.db_type.value if hasattr(db_config.db_type, "value") else str(db_config.db_type)
             safe_db_config = DBConfig(
@@ -328,7 +333,7 @@ async def sync_vault_with_db(
                 port=db_config.port,
                 database=db_config.database,
                 username=db_config.username,
-                password=decrypt_password(db_config.encrypted_password),
+                password=await async_decrypt_password(db_config.encrypted_password, db_config.customer_id, session),
                 options=db_config.extra_params,
                 max_row_limit=getattr(db_config, "max_row_limit", 1000)
             )
@@ -816,3 +821,30 @@ async def update_column_description(
         "column": column_name,
         "description": update.description,
     }
+
+@router.get(
+    "/{workspace_id}/suggestions",
+    summary="Get dynamic chat suggestions",
+)
+async def get_workspace_suggestions(
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+) -> list[str]:
+    """Return auto-generated sample questions for the workspace schema."""
+    settings = get_settings()
+    suggestions_file = Path(settings.vault_base_path) / workspace_id / "suggestions.json"
+    
+    if suggestions_file.exists():
+        try:
+            import json
+            with open(suggestions_file, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+            
+    # Fallback if not generated yet
+    return [
+        "Show monthly revenue by region",
+        "Top 10 customers by volume",
+        "Daily active users trend"
+    ]

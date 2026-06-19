@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ChevronLeft, ChevronRight, Users, LayoutDashboard } from "lucide-react";
+import { Database, Settings, ChevronLeft, ChevronRight, Users, LayoutDashboard, ShieldAlert } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -75,6 +75,18 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
             {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Database Connection</span>}
           </Link>
 
+          <Link 
+            href="/settings/encryption" 
+            className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+              ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+              ${pathname?.includes("/settings/encryption") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+            `}
+            title="Encryption (CMEK)"
+          >
+            <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+            {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Encryption</span>}
+          </Link>
+          
           <Link 
             href="/settings/general" 
             className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
