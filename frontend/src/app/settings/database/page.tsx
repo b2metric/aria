@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import { Database, Save, Loader2 } from "lucide-react";
+import { useSession } from "next-auth/react";
+import { useEffect } from "react";
 
 export default function DatabaseSettings() {
+  const { data: session } = useSession();
+  const token = (session as any)?.accessToken;
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{type: "success" | "error", text: string} | null>(null);
   
-  // This would fetch the real config from /api/settings/database
   const [dbConfig, setDbConfig] = useState({
     db_type: "postgresql",
     host: "db.example.com",
@@ -17,14 +22,63 @@ export default function DatabaseSettings() {
     password: "", // Kept empty for security
   });
 
-  const handleSave = (e: React.FormEvent) => {
+  useEffect(() => {
+    if (!token) return;
+    const fetchConfig = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/tenant`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.db_config) {
+            setDbConfig({
+              ...data.db_config,
+              password: ""
+            });
+          }
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchConfig();
+  }, [token]);
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token) return;
+    
     setLoading(true);
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
+    setMessage(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/tenant`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({ db_config: dbConfig })
+      });
+      
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to update database connection");
+      }
+      
       setMessage({ type: "success", text: "Database connection updated successfully" });
-    }, 1000);
+      
+      // Also trigger a schema sync automatically in the background
+      fetch(`${API_BASE}/api/workspaces/vault/sync`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(console.error);
+      
+    } catch (err: any) {
+      setMessage({ type: "error", text: err.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

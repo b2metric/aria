@@ -96,8 +96,9 @@ export default function VaultAccessPage() {
 
   const handleToggleTable = (tableName: string) => {
     const next = new Set(allowedTables);
-    if (next.has(tableName)) {
-      next.delete(tableName);
+    const existing = Array.from(next).find(t => t.toLowerCase() === tableName.toLowerCase());
+    if (existing) {
+      next.delete(existing);
     } else {
       next.add(tableName);
     }
@@ -240,7 +241,7 @@ export default function VaultAccessPage() {
                   >
                     <Checkbox
                       className="mt-1"
-                      checked={allowedTables.has(table.table_name)}
+                      checked={Array.from(allowedTables).some(t => t.toLowerCase() === table.table_name.toLowerCase())}
                       onCheckedChange={() => handleToggleTable(table.table_name)}
                     />
                     <div className="flex-1">

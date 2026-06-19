@@ -186,4 +186,5 @@ ARIA implements a stringent security model designed for enterprises (like bankin
 
 - **Read-Only SQL Guards:** `verify_read_only_sql` intercepts generated queries before execution to block DML/DDL (UPDATE, DROP, etc.) natively in python.
 - **BYOK (Bring Your Own Key):** Enterprise customers can provide their own OpenAI/Azure API keys (`CustomerLLMConfig`). ARIA routes queries using `llm_resolver.py` directly to the provided models, circumventing the shared platform key.
-- **Database Password Decryption:** Credentials stored in `CustomerDBConfig` are encrypted at rest via Fernet (`services/crypto.py`) and decrypted dynamically at runtime.
+- **CMEK (Customer Managed Encryption Keys):** To support enterprise compliance, ARIA implements Envelope Encryption. Each tenant is assigned a unique Data Encryption Key (DEK). This DEK is then wrapped/encrypted by a Key Encryption Key (KEK) which can be the default application key (App KEK) or a customer-provided KMS key (AWS KMS, GCP KMS, Azure Key Vault) via `CustomerKeyConfig`.
+- **Database Password Decryption:** Credentials stored in `CustomerDBConfig` (as well as LLM API Keys) are encrypted at rest using the tenant's DEK (`services/crypto.py`) and decrypted dynamically at runtime during the pipeline execution.

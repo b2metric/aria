@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.core.config import get_settings
 from backend.app.models.database import CustomerLLMConfig
 from backend.app.models.organization import Customer
-from backend.app.services.crypto import decrypt_password
+from backend.app.services.crypto import async_decrypt_password
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +62,7 @@ async def resolve_llm(workspace_id: str, session: AsyncSession) -> ResolvedLLM:
             if llm_config:
                 # Decrypt their virtual key (using the global decrypt_password for Phase 1)
                 # In Phase 2, this will use decrypt_for_customer
-                virtual_key = decrypt_password(llm_config.encrypted_virtual_key) if llm_config.encrypted_virtual_key else ""
+                virtual_key = await async_decrypt_password(llm_config.encrypted_virtual_key, llm_config.customer_id, session) if llm_config.encrypted_virtual_key else ""
                 
                 return ResolvedLLM(
                     api_base=settings.litellm_api_base, # We route everything through our LiteLLM proxy
