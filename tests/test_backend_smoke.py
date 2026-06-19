@@ -14,8 +14,13 @@ API_BASE = os.getenv("ARIA_API_BASE", "http://localhost:8000")
 WORKSPACE_ID = "stc-kuwait"
 
 
+@pytest.mark.integration
 class TestHealthEndpoints:
-    """Health check endpoint tests."""
+    """Health check endpoint tests.
+
+    Hits a live backend at ``API_BASE`` — runs only in the live-stack
+    (integration) context, not the unit pytest gate.
+    """
 
     def test_health_check(self):
         """Test /health endpoint."""
@@ -34,8 +39,13 @@ class TestHealthEndpoints:
             assert resp.status_code in [200, 307, 308, 404]
 
 
+@pytest.mark.integration
 class TestAPIEndpoints:
-    """API endpoint tests."""
+    """API endpoint tests.
+
+    Hits a live backend at ``API_BASE`` — runs only in the live-stack
+    (integration) context, not the unit pytest gate.
+    """
 
     def test_query_endpoint_exists(self):
         """Test /api/query endpoint exists."""

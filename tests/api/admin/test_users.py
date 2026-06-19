@@ -75,7 +75,7 @@ def mock_db():
 def make_user(
     email: str = "user@test.com",
     display_name: str = "Test User",
-    role: UserRole = UserRole.MEMBER,
+    role: UserRole = UserRole.VIEWER,
     id: uuid.UUID | None = None,
     customer_id: uuid.UUID | None = None,
     team_id: uuid.UUID | None = None,
@@ -139,7 +139,7 @@ class TestListUsers:
     def setup(self, admin_user, mock_db):
         now = datetime.now(timezone.utc)
         self.user1 = make_user("alice@test.com", "Alice", UserRole.ADMIN, DEFAULT_USER_ID, DEFAULT_CUSTOMER_ID, DEFAULT_TEAM_ID, now, now)
-        self.user2 = make_user("bob@test.com", "Bob", UserRole.MEMBER, SECOND_USER_ID, DEFAULT_CUSTOMER_ID, None, now, now)
+        self.user2 = make_user("bob@test.com", "Bob", UserRole.VIEWER, SECOND_USER_ID, DEFAULT_CUSTOMER_ID, None, now, now)
 
         async def execute_side_effect(stmt, *args, **kwargs):
             result = MagicMock()
@@ -203,7 +203,7 @@ class TestUpdateUser:
     def setup(self, admin_user, mock_db):
         self.admin_user = admin_user
         self.mock_db = mock_db
-        self.user = make_user("alice@test.com", "Alice", UserRole.MEMBER, DEFAULT_USER_ID, DEFAULT_CUSTOMER_ID, DEFAULT_TEAM_ID)
+        self.user = make_user("alice@test.com", "Alice", UserRole.VIEWER, DEFAULT_USER_ID, DEFAULT_CUSTOMER_ID, DEFAULT_TEAM_ID)
         yield
         clear_overrides()
 

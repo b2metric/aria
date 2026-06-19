@@ -76,7 +76,7 @@ SAMPLE_CHART_HTML = """<!DOCTYPE html>
 </body></html>"""
 
 
-async def _mock_process_query(redis, engine, request, workspace_id, user_id):
+async def _mock_process_query(redis, engine, request, workspace_id, user_id, team_id=None):
     """Mock pipeline that yields SSE events with chart_html."""
     cid = "conv-test-123"
     yield {"event": "status", "data": json.dumps({"status": "thinking", "message": "Analyzing..."})}
@@ -135,6 +135,11 @@ def client(jwks):
     """Create a test client with mocked pipeline and auth."""
     mock_redis = AsyncMock()
     mock_redis.aclose.return_value = None
+    # Rate limiter does numeric comparisons on these (count > limit), so the
+    # mock must return ints rather than bare AsyncMock sentinels.
+    mock_redis.incr = AsyncMock(return_value=1)
+    mock_redis.expire = AsyncMock(return_value=True)
+    mock_redis.ttl = AsyncMock(return_value=60)
     mock_engine = AsyncMock()
     mock_engine.dispose.return_value = None
 
