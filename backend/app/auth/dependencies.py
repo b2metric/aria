@@ -97,26 +97,32 @@ async def get_current_user(
         role_str = payload.model_extra.get("aria_role")
         
     if not role_str:
-        # Fallback to a default role if no claim is found for local dev
-        role_str = "admin"
-        logger.warning("Token missing 'role' claim — defaulting to admin")
+        # Deny by default — never assume admin when the token carries no role claim.
+        logger.warning("Token missing 'role' claim — rejecting")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Missing 'role' claim"
+        )
 
     try:
         role = Role.from_string(role_str)
     except ValueError as exc:
-        # Fallback to VIEWER if an invalid or unexpected role is provided from Keycloak
-        logger.warning("Invalid role '%s' received, falling back to viewer: %s", role_str, exc)
-        role = Role.VIEWER
+        # Reject an unknown role rather than silently downgrading.
+        logger.warning("Invalid role '%s' received — rejecting: %s", role_str, exc)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail=f"Invalid role: {role_str}"
+        ) from exc
 
     # ── Extract custom claims ───────────────────────────────────────
     # We only rely on Keycloak injecting these if the 'aria-claims' scope
     # was requested. If missing, we apply safe defaults.
 
-    # Force stc-kuwait for dev testing until Admin UI allows setting it
     workspace_id = getattr(payload, "workspace_id", None)
     if not workspace_id or workspace_id == "default":
-        workspace_id = "stc-kuwait"
-        logger.warning("Token missing 'workspace_id' claim or is default — forcing 'stc-kuwait' for dev")
+        # Deny by default — a token with no real workspace must not be silently scoped.
+        logger.warning("Token missing 'workspace_id' claim — rejecting")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Missing 'workspace_id' claim"
+        )
 
     user_id = getattr(payload, "user_id", None) or payload.sub
     team_id = getattr(payload, "team_id", None) or ""
