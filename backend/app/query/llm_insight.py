@@ -1,18 +1,23 @@
 import json
 import logging
 from typing import Any
+
 import litellm
+
 from backend.app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
 from backend.app.services.llm_resolver import ResolvedLLM
+from backend.app.services.workspace_language import language_directive
+
 
 async def generate_insight_and_suggestions(
     question: str,
     sql: str,
     data_rows: list[dict[str, Any]],
     llm: ResolvedLLM | None = None,
+    language: str = "en",
 ) -> dict:
     """Generate executive summary and follow-up suggestions from query results.
     
@@ -27,6 +32,9 @@ async def generate_insight_and_suggestions(
     settings = get_settings()
     
     prompt = f"""You are an executive data analyst. You are provided with a user's question, the SQL query used to fetch data, and a sample of the results (up to 10 rows).
+
+{language_directive(language)}
+
 Your task is to provide:
 1. A brief executive summary (max 2 sentences) interpreting the results.
 2. 3 insightful follow-up questions the user might want to ask next to drill down or pivot.

@@ -7,16 +7,17 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.app.auth.dependencies import get_current_user
 from backend.app.db.session import get_sessionmaker
-from backend.app.models.token import TokenQuota
 from backend.app.models.database import CustomerDBConfig
 from backend.app.models.enums import DatabaseType
 from backend.app.models.organization import Customer
-from backend.app.services.crypto import encrypt_password
+from backend.app.models.token import TokenQuota
+from backend.app.services.crypto import async_encrypt_password
+from backend.app.services.workspace_language import get_workspace_language
 
 DEFAULT_DAILY_TOKEN_LIMIT = 50000
 DEFAULT_MAX_ROW_LIMIT = 1000
@@ -48,6 +49,11 @@ class TenantConfigUpdate(BaseModel):
         description="Max rows per query (100 - 1M)",
     )
     db_config: DBConfigModel | None = None
+    language: str | None = Field(
+        default=None,
+        pattern="^(en|tr)$",
+        description="Customer response language: 'en' or 'tr' (forces all chat/insight/suggestions)",
+    )
 
 
 class TenantConfigResponse(BaseModel):
@@ -57,6 +63,7 @@ class TenantConfigResponse(BaseModel):
     max_row_limit: int
     source: str  # "db" or "default"
     db_config: dict | None = None
+    language: str = "en"
 
 
 @router.get("")
@@ -105,6 +112,7 @@ async def get_tenant_config(
         daily_token_limit=quota.token_limit if quota else DEFAULT_DAILY_TOKEN_LIMIT,
         max_row_limit=row_limit,
         source="db" if quota else "default",
+        language=await get_workspace_language(workspace_id),
         db_config={
             "db_type": db_config_res.db_type.value if hasattr(db_config_res.db_type, "value") else str(db_config_res.db_type),
             "host": db_config_res.host,
@@ -127,7 +135,12 @@ async def update_tenant_config(
     if not getattr(current_user, "can_admin", False):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
-    if body.daily_token_limit is None and body.max_row_limit is None and body.db_config is None:
+    if (
+        body.daily_token_limit is None
+        and body.max_row_limit is None
+        and body.db_config is None
+        and body.language is None
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="At least one field must be provided",
@@ -160,6 +173,16 @@ async def update_tenant_config(
                     quota = new_quota
                     log.info("admin.tenant: Created new quota: token_limit=%d", quota.token_limit)
 
+            # Handle language (stored on Customer.settings JSONB)
+            if body.language is not None:
+                customer_l = (
+                    await session.execute(select(Customer).where(Customer.slug == workspace_id))
+                ).scalar_one_or_none()
+                if not customer_l:
+                    raise HTTPException(status_code=404, detail="Customer workspace not found")
+                customer_l.settings = {**(customer_l.settings or {}), "language": body.language}
+                log.info("admin.tenant: set language=%s for %s", body.language, workspace_id)
+
             # Handle DB Config
             db_config_res = None
             if body.db_config is not None:
@@ -180,7 +203,7 @@ async def update_tenant_config(
                     if body.max_row_limit is not None:
                         db_config_res.max_row_limit = body.max_row_limit
                     if body.db_config.password:
-                        db_config_res.encrypted_password = encrypt_password(body.db_config.password)
+                        db_config_res.encrypted_password = await async_encrypt_password(body.db_config.password, customer.id, session)
                 else:
                     db_config_res = CustomerDBConfig(
                         customer_id=customer.id,
@@ -191,7 +214,7 @@ async def update_tenant_config(
                         database=body.db_config.database,
                         username=body.db_config.username,
                         max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
-                        encrypted_password=encrypt_password(body.db_config.password) if body.db_config.password else encrypt_password(""),
+                        encrypted_password=await async_encrypt_password(body.db_config.password, customer.id, session) if body.db_config.password else await async_encrypt_password("", customer.id, session),
                     )
                     session.add(db_config_res)
 
@@ -213,6 +236,7 @@ async def update_tenant_config(
             daily_token_limit=final_limit,
             max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
             source="db",
+            language=await get_workspace_language(workspace_id),
             db_config={
                 "db_type": body.db_config.db_type.value if hasattr(body.db_config.db_type, "value") else str(body.db_config.db_type),
                 "host": body.db_config.host,

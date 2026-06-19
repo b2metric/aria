@@ -6,12 +6,12 @@ keywords: [1 minute, aggregate, bandwidth, cache hit ratio, country, data, date,
   geography, internet, latency, lifecycle, metrics, metrik, nationality, rollup, state,
   status, temporal, time, traffic, usage, özet]
 generated_at: 2026-06-19 08:10:39.175188+00:00
-description: Per-minute aggregate of CDN traffic, grouped by org/server/host/account/country/server_role/datacenter/cache_status/status/asn.
-  The go-to table for traffic, bandwidth, cache-hit-ratio, latency and RTT trends.
-  ~91.6k rows.
-business_name: CDN Metrics — 1-Minute Rollup
-data_domain: CDN Delivery
-enriched_at: '2026-06-19T08:13:29.274374+00:00'
+description: CDN trafiğinin dakika başına toplamı, org/sunucu/sunucuadı/hesap/ülke/sunucurolü/verimerkezi/önbellekdurumu/durum/asn'e
+  göre gruplandırılmıştır. Trafik, bant genişliği, önbellek isabet oranı, gecikme
+  ve RTT trendleri için başvurulan tablo. ~91.6k satır.
+business_name: CDN Metrikleri — 1 Dakikalık Özet
+data_domain: CDN Dağıtımı
+enriched_at: '2026-06-19T09:35:41.379056+00:00'
 ---
 
 # DS_BASE_1M
@@ -22,41 +22,32 @@ enriched_at: '2026-06-19T08:13:29.274374+00:00'
 
 | Column | Type | Nullable | PK | Description |
 |--------|------|----------|----|-----------—|
- | START_DATE | TIMESTAMP(6) | ✓ |  | Start of the 1-minute bucket (use for time series). | 
- | ORG_NAME | VARCHAR2 | ✓ |  | Organization / tenant. | 
- | SERVER_NAME | VARCHAR2 | ✓ |  | Edge server FQDN. | 
- | HTTP_HOST | VARCHAR2 | ✓ |  | Delivered host. | 
- | ACCOUNT_TYPE | VARCHAR2 | ✓ |  | Customer account tier. | 
- | COUNTRY_CODE | VARCHAR2 | ✓ |  | Client country (ISO-2). | 
- | SERVER_ROLE | VARCHAR2 | ✓ |  | Cache tier (Node/Mcache/Feda). | 
- | DATACENTER | VARCHAR2 | ✓ |  | PoP that served the traffic (city.provider). | 
- | PROXY_CACHE_STATUS | VARCHAR2 | ✓ |  | Cache outcome for the grouped rows (HIT/MISS/EXPIRED/empty). Used for Cache Hit Ratio. | 
- | STATUS | VARCHAR2 | ✓ |  | HTTP status code grouping (200/410/304/...). | 
- | ASN | VARCHAR2 | ✓ |  | Client network ASN. | 
- | REQUEST_NUMBER | NUMBER | ✓ |  | Number of requests in the bucket — the Requests volume metric. | 
- | BYTES_SENT | NUMBER | ✓ |  | Total bytes delivered in the bucket — Bandwidth / data transfer. | 
- | AVG_REQUEST_TIME | NUMBER | ✓ |  | Average request latency (seconds) for the bucket. | 
- | AVG_TCPINFO_RTT | NUMBER | ✓ |  | Average TCP round-trip time (microseconds) — network distance. | 
+ | START_DATE | TIMESTAMP(6) | ✓ |  | 1 dakikalık kovanın başlangıcı (zaman serisi için kullanın). | 
+ | ORG_NAME | VARCHAR2 | ✓ |  | Kuruluş / kiracı. | 
+ | SERVER_NAME | VARCHAR2 | ✓ |  | Edge sunucu FQDN'si. | 
+ | HTTP_HOST | VARCHAR2 | ✓ |  | Teslim edilen sunucu adı. | 
+ | ACCOUNT_TYPE | VARCHAR2 | ✓ |  | Müşteri hesap katmanı. | 
+ | COUNTRY_CODE | VARCHAR2 | ✓ |  | İstemci ülkesi (ISO-2). | 
+ | SERVER_ROLE | VARCHAR2 | ✓ |  | Önbellek katmanı (Node/Mcache/Feda). | 
+ | DATACENTER | VARCHAR2 | ✓ |  | Trafiği sunan PoP (şehir.sağlayıcı). | 
+ | PROXY_CACHE_STATUS | VARCHAR2 | ✓ |  | Gruplandırılmış satırlar için önbellek sonucu (HIT/MISS/EXPIRED/boş). Önbellek İsabet Oranı için kullanılır. | 
+ | STATUS | VARCHAR2 | ✓ |  | HTTP durum kodu gruplaması (200/410/304/...). | 
+ | ASN | VARCHAR2 | ✓ |  | İstemci ağ ASN'si. | 
+ | REQUEST_NUMBER | NUMBER | ✓ |  | Kovadaki istek sayısı — İstek hacmi metriği. | 
+ | BYTES_SENT | NUMBER | ✓ |  | Kovada teslim edilen toplam bayt — Bant genişliği / veri aktarımı. | 
+ | AVG_REQUEST_TIME | NUMBER | ✓ |  | Kova için ortalama istek gecikmesi (saniye). | 
+ | AVG_TCPINFO_RTT | NUMBER | ✓ |  | Ortalama TCP gidiş-dönüş süresi (mikrosaniye) — ağ mesafesi. | 
 | REQUEST_TIME_QUANTILES_P25 | NUMBER | ✓ |  | Request Time Quantiles P25 |
- | REQUEST_TIME_QUANTILES_P50 | NUMBER | ✓ |  | Median request latency (p50), seconds. | 
+ | REQUEST_TIME_QUANTILES_P50 | NUMBER | ✓ |  | Medyan istek gecikmesi (p50), saniye. | 
 | REQUEST_TIME_QUANTILES_P75 | NUMBER | ✓ |  | Request Time Quantiles P75 |
 | REQUEST_TIME_QUANTILES_P90 | NUMBER | ✓ |  | Request Time Quantiles P90 |
- | REQUEST_TIME_QUANTILES_P95 | NUMBER | ✓ |  | 95th percentile request latency (tail latency). | 
- | REQUEST_TIME_QUANTILES_P99 | NUMBER | ✓ |  | 99th percentile request latency (worst-case tail). | 
+ | REQUEST_TIME_QUANTILES_P95 | NUMBER | ✓ |  | %95. yüzdelik istek gecikmesi (kuyruk gecikmesi). | 
+ | REQUEST_TIME_QUANTILES_P99 | NUMBER | ✓ |  | %99. yüzdelik istek gecikmesi (en kötü durum kuyruğu). | 
 
 ## Keywords
 
 bandwidth, country, data, date, demographic, geography, internet, lifecycle, nationality, state, status, temporal, time, usage
-## Business Metadata
-
-**Business Name:** CDN Metrics — 1-Minute Rollup
-**Description:** Per-minute aggregate of CDN traffic, grouped by org/server/host/account/country/server_role/datacenter/cache_status/status/asn. The go-to table for traffic, bandwidth, cache-hit-ratio, latency and RTT trends. ~91.6k rows.
-**Data Domain:** CDN Delivery
-**Business Owner:** Analytics
-**Update Frequency:** 1-minute batches
-**Notes:** Latency stored both as an average (AVG_REQUEST_TIME) and tDigest quantiles (p25..p99). Cache Hit Ratio = SUM(REQUEST_NUMBER) where PROXY_CACHE_STATUS='HIT' / SUM(REQUEST_NUMBER).
-
-### Column Descriptions
+## Column Descriptions
 
 - **START_DATE**: Start of the 1-minute bucket (use for time series).
 - **REQUEST_NUMBER**: Number of requests in the bucket — the Requests volume metric.
@@ -76,6 +67,39 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 - **SERVER_NAME**: Edge server FQDN.
 - **HTTP_HOST**: Delivered host.
 - **ACCOUNT_TYPE**: Customer account tier.
+
+### Manual Relationships
+
+- `DATACENTER` → `ALL_RAW.DATACENTER` (lookup) — Aggregated from the raw request log.
+## Business Metadata
+
+**Business Name:** CDN Metrikleri — 1 Dakikalık Özet
+**Description:** CDN trafiğinin dakika başına toplamı, org/sunucu/sunucuadı/hesap/ülke/sunucurolü/verimerkezi/önbellekdurumu/durum/asn'e göre gruplandırılmıştır. Trafik, bant genişliği, önbellek isabet oranı, gecikme ve RTT trendleri için başvurulan tablo. ~91.6k satır.
+**Data Domain:** CDN Dağıtımı
+**Business Owner:** Analytics
+**Update Frequency:** 1-minute batches
+**Notes:** Gecikme hem ortalama (AVG_REQUEST_TIME) hem de tDigest nicelikleri (p25..p99) olarak saklanır. Önbellek İsabet Oranı = PROXY_CACHE_STATUS='HIT' olan SUM(REQUEST_NUMBER) / SUM(REQUEST_NUMBER).
+
+### Column Descriptions
+
+- **START_DATE**: 1 dakikalık kovanın başlangıcı (zaman serisi için kullanın).
+- **REQUEST_NUMBER**: Kovadaki istek sayısı — İstek hacmi metriği.
+- **BYTES_SENT**: Kovada teslim edilen toplam bayt — Bant genişliği / veri aktarımı.
+- **AVG_REQUEST_TIME**: Kova için ortalama istek gecikmesi (saniye).
+- **AVG_TCPINFO_RTT**: Ortalama TCP gidiş-dönüş süresi (mikrosaniye) — ağ mesafesi.
+- **REQUEST_TIME_QUANTILES_P50**: Medyan istek gecikmesi (p50), saniye.
+- **REQUEST_TIME_QUANTILES_P95**: %95. yüzdelik istek gecikmesi (kuyruk gecikmesi).
+- **REQUEST_TIME_QUANTILES_P99**: %99. yüzdelik istek gecikmesi (en kötü durum kuyruğu).
+- **PROXY_CACHE_STATUS**: Gruplandırılmış satırlar için önbellek sonucu (HIT/MISS/EXPIRED/boş). Önbellek İsabet Oranı için kullanılır.
+- **SERVER_ROLE**: Önbellek katmanı (Node/Mcache/Feda).
+- **DATACENTER**: Trafiği sunan PoP (şehir.sağlayıcı).
+- **COUNTRY_CODE**: İstemci ülkesi (ISO-2).
+- **STATUS**: HTTP durum kodu gruplaması (200/410/304/...).
+- **ASN**: İstemci ağ ASN'si.
+- **ORG_NAME**: Kuruluş / kiracı.
+- **SERVER_NAME**: Edge sunucu FQDN'si.
+- **HTTP_HOST**: Teslim edilen sunucu adı.
+- **ACCOUNT_TYPE**: Müşteri hesap katmanı.
 
 ### Manual Relationships
 
