@@ -47,7 +47,7 @@ async def get_workspace_language(workspace_id: str | None) -> str:
                     select(Customer.settings).where(Customer.slug == workspace_id)
                 )
             ).scalar_one_or_none()
-        lang = (settings or {}).get("language") if settings else None
+        lang = (settings or {}).get("language")
         return lang if lang in SUPPORTED_LANGUAGES else DEFAULT_LANGUAGE
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("get_workspace_language failed for %s: %s", workspace_id, exc)
