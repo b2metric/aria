@@ -31,33 +31,48 @@ RULES:
 1. Use Oracle SQL syntax (TRUNC for dates, FETCH FIRST N ROWS ONLY for limits, NVL for null handling)
 2. Always include reasonable limits (default: FETCH FIRST 100 ROWS ONLY)
 3. Use proper date truncation: TRUNC(date_col, 'MM') for monthly, TRUNC(date_col) for daily
-4. For aggregations, always include GROUP BY
+4. Add GROUP BY / date bucketing ONLY when the user asks for a breakdown or a trend
+   (over time, by month, daily, per X, "trend"). For a single aggregate — a ratio,
+   total, count, or average with no breakdown requested — return a SCALAR: no GROUP BY
+   and no TRUNC(date) bucketing.
 5. Order results logically (by date ASC for time series, by metric DESC for rankings)
 6. Use table aliases for readability in JOINs
 7. NEVER use semicolons at the end
 8. Return ONLY the SQL, no markdown, no explanations
 9. Use ONLY tables and columns that appear in the provided schema. NEVER invent,
    assume, or guess a table/column that is not explicitly listed — querying a
-   non-existent object fails with ORA-00942.
+   non-existent object fails with ORA-00942. Likewise, use ONLY the column VALUES /
+   enums shown in the column descriptions — never invent status codes or category
+   values (e.g. cache statuses, role names) that are not documented there.
 10. For metrics/aggregations (revenue, amount, balance, counts, totals, trends),
     the source MUST be a FACT table (name starting with 'fct_'). Use dimension
     tables ('dim_*') ONLY to look up descriptive attributes via a JOIN, never as
-    the sole source of a numeric metric. (e.g. revenue -> fct_prep_rev, not dim_*.)"""
+    the sole source of a numeric metric.
+11. If the question names a specific tier/segment/category/label, you MUST filter on
+    it. Map the natural-language label to the documented coded column value from the
+    schema descriptions (e.g. an "Edge tier" → the matching SERVER_ROLE value)."""
 
 
 def _build_schema_context(tables: list[dict], table_columns: dict[str, list[dict]]) -> str:
-    """Build schema context string for LLM prompt."""
+    """Build schema context string for the LLM prompt.
+
+    Includes each column's description (which carries the documented enum values and
+    coded categories, e.g. SERVER_ROLE = Node/Mcache/Feda) so the model can scope
+    filters to a named segment and never has to guess a value.
+    """
     parts = ["Available tables and columns:"]
     for tbl in tables[:10]:  # Limit to 10 tables
         name = tbl["name"]
         cols = table_columns.get(name, [])
-        col_str = ", ".join(
-            f"{c['name']} ({c['type']})"
-            for c in cols[:20]  # Limit columns
-        )
-        parts.append(f"\n{name}: {col_str}")
+        parts.append(f"\n{name}:")
         if tbl.get("description"):
-            parts.append(f"  Description: {tbl['description'][:100]}")
+            parts.append(f"  Description: {tbl['description'][:200]}")
+        for c in cols[:20]:  # Limit columns
+            desc = (c.get("description") or "").strip()
+            line = f"  - {c['name']} ({c['type']})"
+            if desc:
+                line += f" — {desc}"
+            parts.append(line)
         if tbl.get("keywords"):
             parts.append(f"  Keywords: {tbl['keywords'][:100]}")
     return "\n".join(parts)

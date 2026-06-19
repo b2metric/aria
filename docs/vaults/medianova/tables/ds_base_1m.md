@@ -2,16 +2,17 @@
 table: DS_BASE_1M
 database: oracle
 workspace: medianova
-keywords: [1 minute, aggregate, bandwidth, cache hit ratio, country, data, date, demographic,
-  geography, internet, latency, lifecycle, metrics, metrik, nationality, rollup, state,
-  status, temporal, time, traffic, usage, özet]
+keywords: [1 minute, aggregate, bandwidth, cache hit ratio, cache tier, country, data,
+  date, demographic, edge, feda, geography, internet, latency, lifecycle, mcache,
+  metrics, metrik, nationality, node, rollup, state, status, temporal, time, traffic,
+  usage, uç, önbellek isabet oranı, önbellek katmanı, özet]
 generated_at: 2026-06-19 08:10:39.175188+00:00
 description: CDN trafiğinin dakika başına toplamı, org/sunucu/sunucuadı/hesap/ülke/sunucurolü/verimerkezi/önbellekdurumu/durum/asn'e
   göre gruplandırılmıştır. Trafik, bant genişliği, önbellek isabet oranı, gecikme
   ve RTT trendleri için başvurulan tablo. ~91.6k satır.
 business_name: CDN Metrikleri — 1 Dakikalık Özet
 data_domain: CDN Dağıtımı
-enriched_at: '2026-06-19T09:35:41.379056+00:00'
+enriched_at: '2026-06-19T13:10:53.228380+00:00'
 ---
 
 # DS_BASE_1M
@@ -28,9 +29,9 @@ enriched_at: '2026-06-19T09:35:41.379056+00:00'
  | HTTP_HOST | VARCHAR2 | ✓ |  | Teslim edilen sunucu adı. | 
  | ACCOUNT_TYPE | VARCHAR2 | ✓ |  | Müşteri hesap katmanı. | 
  | COUNTRY_CODE | VARCHAR2 | ✓ |  | İstemci ülkesi (ISO-2). | 
- | SERVER_ROLE | VARCHAR2 | ✓ |  | Önbellek katmanı (Node/Mcache/Feda). | 
+ | SERVER_ROLE | VARCHAR2 | ✓ |  | Önbellek katmanı (cache tier). Değerler SADECE: 'Node' (= Edge / uç katman), 'Mcache' (orta katman), 'Feda' (origin-fetch). Edge/uç katmanı sorulduğunda SERVER_ROLE='Node' ile filtrele. | 
  | DATACENTER | VARCHAR2 | ✓ |  | Trafiği sunan PoP (şehir.sağlayıcı). | 
- | PROXY_CACHE_STATUS | VARCHAR2 | ✓ |  | Gruplandırılmış satırlar için önbellek sonucu (HIT/MISS/EXPIRED/boş). Önbellek İsabet Oranı için kullanılır. | 
+ | PROXY_CACHE_STATUS | VARCHAR2 | ✓ |  | Önbellek sonucu. Değerler SADECE: 'HIT', 'MISS', 'EXPIRED', '' (boş = önbelleklenemez). Başka değer YOKTUR (STALE_HIT yoktur). İsabet = PROXY_CACHE_STATUS='HIT'. | 
  | STATUS | VARCHAR2 | ✓ |  | HTTP durum kodu gruplaması (200/410/304/...). | 
  | ASN | VARCHAR2 | ✓ |  | İstemci ağ ASN'si. | 
  | REQUEST_NUMBER | NUMBER | ✓ |  | Kovadaki istek sayısı — İstek hacmi metriği. | 
@@ -71,16 +72,7 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 ### Manual Relationships
 
 - `DATACENTER` → `ALL_RAW.DATACENTER` (lookup) — Aggregated from the raw request log.
-## Business Metadata
-
-**Business Name:** CDN Metrikleri — 1 Dakikalık Özet
-**Description:** CDN trafiğinin dakika başına toplamı, org/sunucu/sunucuadı/hesap/ülke/sunucurolü/verimerkezi/önbellekdurumu/durum/asn'e göre gruplandırılmıştır. Trafik, bant genişliği, önbellek isabet oranı, gecikme ve RTT trendleri için başvurulan tablo. ~91.6k satır.
-**Data Domain:** CDN Dağıtımı
-**Business Owner:** Analytics
-**Update Frequency:** 1-minute batches
-**Notes:** Gecikme hem ortalama (AVG_REQUEST_TIME) hem de tDigest nicelikleri (p25..p99) olarak saklanır. Önbellek İsabet Oranı = PROXY_CACHE_STATUS='HIT' olan SUM(REQUEST_NUMBER) / SUM(REQUEST_NUMBER).
-
-### Column Descriptions
+## Column Descriptions
 
 - **START_DATE**: 1 dakikalık kovanın başlangıcı (zaman serisi için kullanın).
 - **REQUEST_NUMBER**: Kovadaki istek sayısı — İstek hacmi metriği.
@@ -104,3 +96,11 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 ### Manual Relationships
 
 - `DATACENTER` → `ALL_RAW.DATACENTER` (lookup) — Aggregated from the raw request log.
+## Business Metadata
+
+**Notes:** Önbellek İsabet Oranı = SUM(REQUEST_NUMBER) WHERE PROXY_CACHE_STATUS='HIT' / SUM(REQUEST_NUMBER). Edge/uç katmanı = SERVER_ROLE='Node'.
+
+### Column Descriptions
+
+- **SERVER_ROLE**: Önbellek katmanı (cache tier). Değerler SADECE: 'Node' (= Edge / uç katman), 'Mcache' (orta katman), 'Feda' (origin-fetch). Edge/uç katmanı sorulduğunda SERVER_ROLE='Node' ile filtrele.
+- **PROXY_CACHE_STATUS**: Önbellek sonucu. Değerler SADECE: 'HIT', 'MISS', 'EXPIRED', '' (boş = önbelleklenemez). Başka değer YOKTUR (STALE_HIT yoktur). İsabet = PROXY_CACHE_STATUS='HIT'.

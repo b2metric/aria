@@ -367,8 +367,8 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
             r"-\s*\*\*([A-Z_][A-Z0-9_]*)\*\*:\s*(.+?)(?:\n|$)", content, re.IGNORECASE
         ):
             desc_map[match.group(1).upper()] = match.group(2).strip()[
-                :100
-            ]  # Truncate long descriptions
+                :200
+            ]  # Truncate long descriptions (keep enum lists / formulas)
 
         # Enrich columns with descriptions
         for col in cols:
