@@ -273,6 +273,7 @@ async def _get_available_tables(
                 from sqlalchemy import select as sa_select
 
                 from backend.app.models.governance import TeamVaultPolicy
+                from backend.app.models.organization import Customer
 
                 # Accept team_id as either a UUID string or a raw UUID
                 if isinstance(team_id, str):
@@ -283,8 +284,15 @@ async def _get_available_tables(
                 else:
                     team_uuid = team_id
 
+                # Scope policy lookup to THIS customer — otherwise another tenant's
+                # default (team_id IS NULL) policy would prune this workspace's tables.
+                cust_id = (
+                    await db.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
+                ).scalar_one_or_none()
+
                 result = await db.execute(
                     sa_select(TeamVaultPolicy).where(
+                        TeamVaultPolicy.customer_id == cust_id,
                         TeamVaultPolicy.team_id.in_([team_uuid, None]) if team_uuid else TeamVaultPolicy.team_id.is_(None),
                         TeamVaultPolicy.is_active == True,  # noqa: E712
                     )
@@ -822,12 +830,12 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     from sqlalchemy import text as sa_text
 
     from backend.app.db import DatabaseType, DBConfig
-    from backend.app.services.crypto import decrypt_password
+    from backend.app.services.crypto import async_decrypt_password
 
     async with engine.connect() as conn:
         result = await conn.execute(
             sa_text("""
-                SELECT db_type, host, port, database, username, encrypted_password, max_row_limit
+                SELECT c.id as customer_id, db_type, host, port, database, username, encrypted_password, max_row_limit
                 FROM customer_db_configs cdc
                 JOIN customers c ON cdc.customer_id = c.id
                 WHERE c.slug = :workspace_id
@@ -837,24 +845,25 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
         )
         row = result.fetchone()
 
-    if not row:
-        # Fallback to defaults or dummy connection for local dev if customer is not found
-        import os
+        if not row:
+            # Fallback to defaults or dummy connection for local dev if customer is not found
+            import os
 
-        env = os.getenv("APP_ENV", "development")
-        if env != "production":
-            return DBConfig(
-                db_type=DatabaseType.ORACLE,
-                host="localhost",
-                port=1521,
-                database="FREEPDB1",
-                username="stc",
-                password="stc123",
-                max_row_limit=1000,
-            )
-        raise ValueError(f"No DB config found for workspace: {workspace_id}")
+            env = os.getenv("APP_ENV", "development")
+            if env != "production":
+                return DBConfig(
+                    db_type=DatabaseType.ORACLE,
+                    host="localhost",
+                    port=1521,
+                    database="FREEPDB1",
+                    username="stc",
+                    password="stc123",
+                    max_row_limit=1000,
+                )
+            raise ValueError(f"No DB config found for workspace: {workspace_id}")
 
-    db_type_str, host, port, database, username, password, max_row_limit = row
+        customer_id, db_type_str, host, port, database, username, encrypted_password, max_row_limit = row
+        decrypted_password = await async_decrypt_password(encrypted_password, str(customer_id), conn)
 
     # Map string to enum
     db_type_map = {
@@ -873,7 +882,7 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
         port=port,
         database=database,
         username=username,
-        password=decrypt_password(password),
+        password=decrypted_password,
         max_row_limit=max_row_limit if max_row_limit is not None else 1000,
     )
 
@@ -884,6 +893,29 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     wait=wait_exponential(multiplier=1, min=2, max=10),
     reraise=True
 )
+
+async def verify_sql_security(sql: str, engine, workspace_id: str, db, team_id: str | None = None) -> None:
+    from backend.app.query.guards import verify_read_only_sql
+    import re
+    
+    # 1. Read-only guard
+    verify_read_only_sql(sql)
+    
+    # 2. App-Level Table RLS guard
+    if workspace_id and db:
+        all_tables = await _get_available_tables(engine, workspace_id, db=db, team_id=None)
+        allowed_tables = await _get_available_tables(engine, workspace_id, db=db, team_id=team_id)
+        
+        allowed_names = {t["name"].lower() for t in allowed_tables}
+        blocked_names = {t["name"].lower() for t in all_tables if t["name"].lower() not in allowed_names}
+        
+        sql_clean = re.sub(r"'[^']*'", "", sql).lower()
+        words = set(re.findall(r'[a-z_][a-z0-9_]*', sql_clean))
+        
+        for b_table in blocked_names:
+            if b_table in words:
+                raise ValueError(f"Security Exception: You do not have permission to query the table '{b_table}'.")
+
 async def _execute_sql(
     sql: str,
     engine: AsyncEngine,
@@ -893,6 +925,7 @@ async def _execute_sql(
     question: str | None = None,
     explanation: str | None = None,
     mem_trace: dict | None = None,
+    team_id: str | None = None,
 ) -> list[dict]:
     """Execute a generated SQL query against the customer's database.
 
@@ -916,9 +949,8 @@ async def _execute_sql(
         ValueError: If no DB config found or unsupported DB type
     """
 
-    # Security: Verify query is read-only before doing anything
-    from backend.app.query.guards import verify_read_only_sql
-    verify_read_only_sql(sql)
+    await verify_sql_security(sql, engine, workspace_id, db, team_id)
+
 
     from backend.app.db import execute_query
 
@@ -1697,6 +1729,9 @@ async def process_query(
         **gen_kwargs,
     )
 
+            # Run security checks *before* exposing the SQL to the user
+            await verify_sql_security(sql, engine, workspace_id, sess, team_id)
+
             # ── Record token usage ─────────────────────────────────────────
             if token_svc and token_usage and customer_uuid and user_uuid:
                 total = token_usage.get("prompt_tokens", 0) + token_usage.get(
@@ -1764,6 +1799,7 @@ async def process_query(
                 question=request.question,
                 explanation=explanation,
                 mem_trace=mem_trace,
+                team_id=team_id,
             )
     except Exception as e:
         logger.warning("SQL execution failed. Attempting LLM self-correction. Error: %s", e)
@@ -1797,6 +1833,9 @@ async def process_query(
                 llm=resolved_llm,
         **gen_kwargs,
     )
+
+            # Run security checks *before* exposing the SQL to the user
+            await verify_sql_security(sql, engine, workspace_id, sess, team_id)
             yield {
                 "event": "sql",
                 "data": json.dumps({"sql": sql, "explanation": explanation + "\n\n(Self-corrected)"}),
@@ -1812,6 +1851,7 @@ async def process_query(
                     question=request.question,
                     explanation=explanation,
                     mem_trace=mem_trace,
+                    team_id=team_id,
                 )
         except Exception as retry_e:
             logger.exception("SQL self-correction failed")
