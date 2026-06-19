@@ -93,8 +93,10 @@ jobs:
           ENVIRONMENT: test
           SECRET_KEY: ci-test-secret-not-for-production
         # BLOCKING gate (was `--suppress-no-test-exit-code || true` = no-op → zero TDD pressure).
-        # Backend tests now fail CI. coverage.xml comes from pyproject/pytest addopts.
-        run: uv run pytest
+        # Unit gate only: `-m "not integration"` excludes live-stack tests (they hit a
+        # running backend / external services and are covered by the separate "Smoke: boot"
+        # job). Collects both `tests/` and `backend/tests/` per pytest.ini.
+        run: uv run pytest -m "not integration" --cov=backend/app --cov-report=xml
       - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v7

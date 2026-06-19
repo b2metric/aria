@@ -27,6 +27,7 @@ def mock_session() -> AsyncMock:
     """Return an AsyncMock wrapping an AsyncSession."""
     session = AsyncMock(spec=AsyncSession)
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.execute = AsyncMock()
     session.add = MagicMock()
     return session
@@ -103,7 +104,7 @@ class TestLogEvent:
         assert entry.ip_address is None
 
         mock_session.add.assert_called_once()
-        mock_session.flush.assert_awaited_once()
+        mock_session.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_log_event_full(
@@ -134,7 +135,7 @@ class TestLogEvent:
         assert entry.ip_address == "192.168.1.1"
 
         mock_session.add.assert_called_once()
-        mock_session.flush.assert_awaited_once()
+        mock_session.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_log_event_flush_sets_id(
@@ -431,7 +432,7 @@ class TestAuditEdgeCases:
         )
 
         assert mock_session.add.call_count == 2
-        assert mock_session.flush.await_count == 2
+        assert mock_session.commit.await_count == 2
 
     @pytest.mark.asyncio
     async def test_details_with_empty_dict(

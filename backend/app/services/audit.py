@@ -77,7 +77,7 @@ class AuditService:
     ) -> DataAuditLog:
         """Persist a single audit-log entry.
 
-        Returns the newly created ``DataAuditLog`` instance (already flushed,
+        Returns the newly created ``DataAuditLog`` instance (already committed,
         so ``.id`` is populated).
         """
         entry = DataAuditLog(
