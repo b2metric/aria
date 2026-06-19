@@ -28,17 +28,19 @@ export default function SyncOnboarding() {
         // For the UI wizard, we simulate this async process.
         
         const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-        // Attempt a mock sync API call
-        const res = await fetch(`${API_URL}/api/admin/health`, {
+        
+        // Call the real sync endpoint
+        const res = await fetch(`${API_URL}/api/workspaces/vault/sync`, {
+          method: "POST",
           headers: { Authorization: `Bearer ${token}` }
         });
         
-        if (!res.ok) throw new Error("Could not reach backend services");
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || "Could not reach backend services");
+        }
         
-        // Simulate a delay for the "syncing" experience
-        setTimeout(() => {
-          if (mounted) setStatus("success");
-        }, 3000);
+        if (mounted) setStatus("success");
         
       } catch (err: any) {
         if (mounted) {

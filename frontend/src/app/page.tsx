@@ -80,9 +80,14 @@ export default function DashboardPage() {
     [handleSearch],
   );
 
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.push("/login");
+    }
+  }, [status, router]);
+
   if (status === "unauthenticated") {
-    // Optionally redirect directly, but we can also just show a nice local link
-    router.push("/login");
+    // We render a fallback until the useEffect redirects
     return (
       <div className="flex items-center justify-center h-screen">
         <div className="animate-pulse text-gray-400">Redirecting to login...</div>

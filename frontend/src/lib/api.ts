@@ -298,3 +298,21 @@ export async function fetchVaultTableDetails(tableName: string, workspaceId: str
   }
   return res.json();
 }
+
+export async function fetchWorkspaceSuggestions(workspaceId: string, tokenOverride?: string): Promise<string[]> {
+  const token = tokenOverride || (typeof window !== "undefined" ? localStorage.getItem("token") : null);
+  const res = await fetch(`${API_BASE}/api/workspaces/${workspaceId}/suggestions`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    return [
+      "Show monthly revenue by region",
+      "Top 10 customers by volume",
+      "Daily active users trend"
+    ];
+  }
+  return res.json();
+}

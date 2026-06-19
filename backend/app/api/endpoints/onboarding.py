@@ -88,7 +88,7 @@ async def register_account(body: RegisterRequest):
                 external_id=kc_user_id,
                 customer_id=new_customer.id,
                 email=body.email,
-                name=body.name,
+                display_name=body.name,
                 role=UserRole.ADMIN,
                 is_active=True
             )

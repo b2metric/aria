@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { streamQuery, fetchConversations, fetchConversation, deleteConversation } from "@/lib/api";
+import { streamQuery, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions } from "@/lib/api";
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
@@ -122,6 +122,7 @@ export default function ChatPage() {
 function ChatPageContent() {
   const { data: session, status } = useSession();
   const token = (session as any)?.accessToken;
+  const workspaceId = (session as any)?.user?.workspaceId || "stc-kuwait";
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialQuery = searchParams.get("q") || "";
@@ -137,10 +138,25 @@ function ChatPageContent() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([
+    "Show monthly revenue by region",
+    "Top 10 customers by volume",
+    "Daily active users trend"
+  ]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
+
+
+  // Load workspace suggestions
+  useEffect(() => {
+    if (token && workspaceId) {
+      fetchWorkspaceSuggestions(workspaceId, token)
+        .then((data) => setSuggestions(data))
+        .catch(() => {});
+    }
+  }, [token, workspaceId]);
 
   // Load conversations list
   const loadConversations = useCallback(async () => {
@@ -266,7 +282,7 @@ function ChatPageContent() {
            return;
         }
         
-        const { reader, abort } = streamQuery(q, conversationId || undefined, "stc-kuwait", token);
+        const { reader, abort } = streamQuery(q, conversationId || undefined, workspaceId, token);
         abortRef.current = abort;
 
         const decoder = new TextDecoder();
@@ -573,16 +589,10 @@ function ChatPageContent() {
                 Start a conversation
               </h3>
               <p className="text-sm text-gray-500 max-w-md">
-                Ask anything about your data. For example: &ldquo;Show me
-                monthly revenue by region&rdquo; or &ldquo;Top 10 customers by
-                purchase amount&rdquo;
+                Ask anything about your data. Choose one of the examples below or type your own question.
               </p>
               <div className="mt-4 flex flex-wrap gap-2 justify-center">
-                {[
-                  "Show monthly revenue by region",
-                  "Top 10 customers by volume",
-                  "Daily active users trend",
-                ].map((example) => (
+                {suggestions.map((example) => (
                   <button
                     key={example}
                     onClick={() => {

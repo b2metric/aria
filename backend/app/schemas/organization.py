@@ -44,7 +44,7 @@ class UserCreate(BaseModel):
     
     email: str = Field(..., description="User's email address")
     display_name: str = Field(..., description="User's full name")
-    role: UserRole = Field(default=UserRole.MEMBER, description="User's role")
+    role: UserRole = Field(default=UserRole.VIEWER, description="User's role")
     team_id: uuid.UUID | None = Field(
         default=None, description="Assign to a team (None to remove from team)"
     )
