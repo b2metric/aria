@@ -25,23 +25,23 @@ from typing import TYPE_CHECKING
 
 from redis.asyncio import Redis
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.exc import OperationalError
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from sqlalchemy.ext.asyncio import AsyncEngine
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.artifact_store import ArtifactStore
 from agents.chart_builder import run_chart_pipeline_sync
+from backend.app.db import DatabaseType, DBConfig
+from backend.app.memory.service import MemoryService
 from backend.app.query import (
     Conversation,
     ConversationMessage,
     QueryRequest,
     QueryStatus,
 )
-from backend.app.db import DBConfig, DatabaseType
-from backend.app.memory.service import MemoryService
 from backend.app.services.audit import AuditService
 
 logger = logging.getLogger(__name__)
@@ -168,7 +168,7 @@ def _extract_preference_from_successful_query(
 async def _get_available_tables(
     engine: AsyncEngine,
     workspace_id: str,
-    db: "AsyncSession | None" = None,
+    db: AsyncSession | None = None,
     team_id: str | None = None,
 ) -> list[dict]:
     """Discover available tables from Obsidian vault (multi-tenant).
@@ -392,13 +392,14 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
 
 from backend.app.services.llm_resolver import ResolvedLLM
 
+
 async def _generate_sql(
     question: str,
     engine: AsyncEngine,
     workspace_id: str,
     memory_context=None,
     history: list[dict] | None = None,
-    db: "AsyncSession | None" = None,
+    db: AsyncSession | None = None,
     team_id: str | None = None,
     llm: ResolvedLLM | None = None,
 ) -> tuple[str, str, bool, dict]:
@@ -895,8 +896,9 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
 )
 
 async def verify_sql_security(sql: str, engine, workspace_id: str, db, team_id: str | None = None) -> None:
-    from backend.app.query.guards import verify_read_only_sql
     import re
+
+    from backend.app.query.guards import verify_read_only_sql
     
     # 1. Read-only guard
     verify_read_only_sql(sql)
@@ -920,7 +922,7 @@ async def _execute_sql(
     sql: str,
     engine: AsyncEngine,
     workspace_id: str | None = None,
-    db: "AsyncSession | None" = None,
+    db: AsyncSession | None = None,
     user_id: str | None = None,
     question: str | None = None,
     explanation: str | None = None,
@@ -955,8 +957,8 @@ async def _execute_sql(
     from backend.app.db import execute_query
 
     # ── Resolve customer UUID for audit logging ──────────────────────────
-    _customer_uuid: "_uuid.UUID | None" = None
-    _user_uuid: "_uuid.UUID | None" = None
+    _customer_uuid: _uuid.UUID | None = None
+    _user_uuid: _uuid.UUID | None = None
 
     if db is not None and workspace_id:
         try:
@@ -1084,9 +1086,10 @@ async def _execute_sql(
     )
 
     try:
+        import uuid
+
         from backend.app.db import explain_query
         from backend.app.worker.tasks import export_massive_query_to_minio
-        import uuid
 
         # Sprint 14 Task 1: EXPLAIN Guard
         row_limit = getattr(config, "max_row_limit", 1000)
@@ -1913,9 +1916,13 @@ async def process_query(
     suggestions = []
     if len(rows) > 0 and sql != "SELECT 'no_tables_found' AS info":
         from backend.app.query.llm_insight import generate_insight_and_suggestions
+        from backend.app.services.workspace_language import get_workspace_language
         # Pass a sample of rows to the insight generator to avoid massive prompt context
         sample_rows = _json_safe_rows(rows[:10])
-        insight_res = await generate_insight_and_suggestions(request.question, sql, sample_rows)
+        language = await get_workspace_language(workspace_id)
+        insight_res = await generate_insight_and_suggestions(
+            request.question, sql, sample_rows, language=language
+        )
         summary = insight_res.get("summary", "")
         suggestions = insight_res.get("suggestions", [])
 

@@ -5,20 +5,24 @@ from pathlib import Path
 
 import litellm
 
-from backend.app.schema_discovery.models import SchemaSnapshot
 from backend.app.core.config import get_settings
+from backend.app.schema_discovery.models import SchemaSnapshot
+from backend.app.services.workspace_language import get_workspace_language, language_directive
 
 logger = logging.getLogger(__name__)
 
 async def generate_vault_suggestions(snapshot: SchemaSnapshot, vault_base_path: str | Path) -> None:
     settings = get_settings()
     workspace_id = snapshot.workspace_id
-    
+    language = await get_workspace_language(workspace_id)
+
     tables_info = "\n".join(
         [f"- {t.name}: {getattr(t, 'description', None) or 'No description'}" for t in snapshot.tables]
     )
-    
+
     prompt = f"""
+{language_directive(language)}
+
 Given the following database tables for workspace '{workspace_id}', generate exactly 3 distinct, practical, and business-focused analytical questions that a user might ask in a natural language interface.
 Do not ask for SQL. Just provide the natural language questions.
 Return ONLY a JSON array of strings, like ["question 1", "question 2", "question 3"].
