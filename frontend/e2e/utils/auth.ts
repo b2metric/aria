@@ -11,7 +11,9 @@ export const test = base.extend({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          user: { name: "Admin", email: "admin@aria.localhost" },
+          // `roles: ["admin"]` is required by <AdminGuard> and the admin pages'
+          // `isAdmin` check; without it the app redirects away from /admin/*.
+          user: { name: "Admin", email: "admin@aria.localhost", roles: ["admin"], role: "admin" },
           accessToken: "mock-valid-token",
           expires: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString()
         })
@@ -37,6 +39,36 @@ export const test = base.extend({
         body: JSON.stringify([
           { table_name: "DIM_PREP_PRODUCTS", description: "Products", business_name: "Products" }
         ])
+      });
+    });
+
+    // The dashboard ("/") fetches GET /api/dashboard then awaits
+    // fetchConversations() (GET /api/conversations) BEFORE rendering, so both
+    // must be stubbed or the page stays stuck on "Loading dashboard...".
+    await page.route('**/api/dashboard**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          stats: [
+            { label: "Total Queries", value: "12.4K", change: "+14%", changeType: "up" },
+            { label: "Accuracy", value: "94.2%", change: "+2.1%", changeType: "up" },
+            { label: "Avg Response", value: "1.8s", change: "-0.3s", changeType: "down" },
+            { label: "Active Users", value: "342", change: "+8%", changeType: "up" },
+          ],
+          recentConversations: [],
+          savedQueries: [],
+          chartData: [{ month: "Jan", revenue: 2400 }, { month: "Feb", revenue: 1398 }],
+          chartConfig: { type: "bar", xKey: "month", yKeys: ["revenue"], title: "Monthly Revenue" },
+        })
+      });
+    });
+
+    await page.route('**/api/conversations**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([])
       });
     });
 

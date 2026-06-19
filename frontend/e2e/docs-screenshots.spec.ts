@@ -44,6 +44,14 @@ async function shoot(page: Page, name: string) {
   await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true });
 }
 
+// Screenshot-capture utility for the Academy docs — needs a live, logged-in
+// stack (it drives real login + authenticated pages). Gated out of the
+// frontend-only CI gate; run it with E2E_TEST_USER / E2E_TEST_PASS set.
+test.skip(
+  !process.env.E2E_TEST_USER || !process.env.E2E_TEST_PASS,
+  "set E2E_TEST_USER / E2E_TEST_PASS (+ live stack) to capture Academy screenshots",
+);
+
 test("capture Academy screenshots", async ({ page }) => {
   test.setTimeout(300000);
 
