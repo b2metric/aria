@@ -54,12 +54,6 @@ export default function TokenManagementPage() {
     if (status === "unauthenticated") router.push("/api/auth/signin");
   }, [status, router]);
 
-  useEffect(() => {
-    if (token) {
-      fetchData();
-    }
-  }, [token]);
-
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -85,13 +79,19 @@ export default function TokenManagementPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (userRes.ok) setUsers(await userRes.json());
-      
+
     } catch (err) {
       console.error("Failed fetching data", err);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (token) {
+      void (async () => { await fetchData(); })();
+    }
+  }, [token]);
 
   const handleCreateQuota = async () => {
     if (!token) return;

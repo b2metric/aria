@@ -61,7 +61,9 @@ export default function TeamSettings() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    void (async () => {
+      await fetchUsers();
+    })();
   }, [token]);
 
   const handleInvite = async (e: React.FormEvent) => {

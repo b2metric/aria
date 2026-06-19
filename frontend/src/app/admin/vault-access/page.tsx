@@ -90,8 +90,10 @@ export default function VaultAccessPage() {
 
   // When team selection changes (future proofing for multi-team UI)
   useEffect(() => {
-    const policy = policies.find((p) => p.team_id === selectedTeam);
-    setAllowedTables(new Set(policy?.allowed_tables || []));
+    void (async () => {
+      const policy = policies.find((p) => p.team_id === selectedTeam);
+      setAllowedTables(new Set(policy?.allowed_tables || []));
+    })();
   }, [selectedTeam, policies]);
 
   const handleToggleTable = (tableName: string) => {

@@ -13,7 +13,9 @@ vi.mock("next-auth/react", () => ({
   useSession: vi.fn(),
   signIn: vi.fn(),
 }));
-import { signIn } from "next-auth/react";
+// The dashboard page fetches GET /api/dashboard directly; pull the same mock
+// shape the @/lib/api mock exposes so we can stub `fetch` with it.
+import { getMockDashboardData } from "@/lib/api";
 
 // ── Mock next/navigation ─────────────────────────────────────────────
 const mockPush = vi.fn();
@@ -85,15 +87,19 @@ vi.mock("recharts", () => ({
 }));
 
 const mockUseSession = vi.mocked(useSession);
-const mockSignIn = vi.mocked(signIn);
 
 describe("DashboardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchConversations.mockResolvedValue([]);
+    // The page loads dashboard data via `fetch(GET /api/dashboard)`; stub it.
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => getMockDashboardData(),
+    })) as unknown as typeof fetch;
   });
 
-  it("redirects to Keycloak when unauthenticated", () => {
+  it("redirects to /login when unauthenticated", () => {
     mockUseSession.mockReturnValue({
       data: null,
       status: "unauthenticated",
@@ -102,7 +108,7 @@ describe("DashboardPage", () => {
 
     render(<DashboardPage />);
 
-    expect(mockSignIn).toHaveBeenCalledWith("keycloak");
+    expect(mockPush).toHaveBeenCalledWith("/login");
   });
 
   it("renders loading indicator while session is loading", () => {

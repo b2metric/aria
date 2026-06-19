@@ -45,13 +45,6 @@ export default function MemoryManagerPage() {
   const [totalItems, setTotalItems] = useState(0);
   const limit = 50;
 
-  useEffect(() => {
-    if (token) {
-      fetchMemories();
-      fetchStats();
-    }
-  }, [token, filter, page]);
-
   const fetchMemories = async () => {
     try {
       setLoading(true);
@@ -87,6 +80,15 @@ export default function MemoryManagerPage() {
       console.error("Failed to fetch stats", err);
     }
   };
+
+  useEffect(() => {
+    if (token) {
+      void (async () => {
+        await fetchMemories();
+        await fetchStats();
+      })();
+    }
+  }, [token, filter, page]);
 
   const handleDelete = async (memoryId: string) => {
     if (!confirm("Are you sure you want to delete this memory entry?")) {

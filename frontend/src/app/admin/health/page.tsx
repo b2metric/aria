@@ -38,7 +38,7 @@ export default function HealthDashboardPage() {
   };
 
   useEffect(() => {
-    if (token) fetchHealth();
+    if (token) void (async () => { await fetchHealth(); })();
   }, [token]);
 
   const renderStatusIcon = (status: string) => {

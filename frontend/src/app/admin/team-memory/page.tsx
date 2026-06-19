@@ -31,18 +31,6 @@ export default function TeamMemoryPage() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(true);
 
-  useEffect(() => {
-    if (token) {
-      fetchMemories();
-    }
-  }, [token, teamId]);
-
-  useEffect(() => {
-    if (token) {
-      fetchTeams();
-    }
-  }, [token]);
-
   const fetchTeams = async () => {
     try {
       setTeamsLoading(true);
@@ -82,6 +70,18 @@ export default function TeamMemoryPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (token) {
+      void (async () => { await fetchMemories(); })();
+    }
+  }, [token, teamId]);
+
+  useEffect(() => {
+    if (token) {
+      void (async () => { await fetchTeams(); })();
+    }
+  }, [token]);
 
   const handleCreate = async () => {
     if (!newContent.trim()) return;

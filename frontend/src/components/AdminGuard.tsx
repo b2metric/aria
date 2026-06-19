@@ -18,7 +18,7 @@ export function AdminGuard({ children }: { children: ReactNode }) {
     if (!session || !roles.includes("admin")) {
       router.replace("/");
     } else {
-      setIsAuthorized(true);
+      void (async () => { setIsAuthorized(true); })();
     }
   }, [session, status, router]);
 

@@ -72,10 +72,6 @@ export default function SchemaPage() {
   const [relTargetTable, setRelTargetTable] = useState("");
   const [relTargetCol, setRelTargetCol] = useState("");
 
-  useEffect(() => {
-    fetchTables();
-  }, [token]);
-
   const fetchTables = async () => {
     try {
       setLoading(true);
@@ -92,6 +88,12 @@ export default function SchemaPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    void (async () => {
+      await fetchTables();
+    })();
+  }, [token]);
 
   const fetchTableDetail = async (tableName: string) => {
     try {
