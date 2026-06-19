@@ -101,7 +101,7 @@ export default function EncryptionSettings() {
           </h2>
           <p className="text-sm text-gray-500 mt-1">
             By default, ARIA secures your data using an application-level key (App KEK).
-            You can configure a cloud provider KMS to wrap your tenant's Data Encryption Key (DEK).
+            You can configure a cloud provider KMS to wrap your tenant&apos;s Data Encryption Key (DEK).
           </p>
         </div>
 

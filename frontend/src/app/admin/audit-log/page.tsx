@@ -70,7 +70,9 @@ export default function AuditLogPage() {
   };
 
   useEffect(() => {
-    fetchLogs();
+    void (async () => {
+      await fetchLogs();
+    })();
   }, [token, statusFilter, actionFilter]);
 
   const getStatusBadge = (logStatus: string) => {

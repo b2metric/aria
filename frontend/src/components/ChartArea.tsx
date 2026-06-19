@@ -147,7 +147,7 @@ export default function ChartArea({
 
   const [zoom, setZoom] = useState<ZoomState>({ startIndex: 0, endIndex: data.length });
   useEffect(() => {
-    setZoom({ startIndex: 0, endIndex: data.length });
+    void (async () => { setZoom({ startIndex: 0, endIndex: data.length }); })();
   }, [data.length]);
 
   const zoomedData = data.slice(zoom.startIndex, zoom.endIndex);

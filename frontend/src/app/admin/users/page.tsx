@@ -181,8 +181,10 @@ export default function UsersTeamsPage() {
 
   useEffect(() => {
     if (token) {
-      fetchTeams();
-      fetchUsers();
+      void (async () => {
+        await fetchTeams();
+        await fetchUsers();
+      })();
     }
   }, [token, fetchTeams, fetchUsers]);
 

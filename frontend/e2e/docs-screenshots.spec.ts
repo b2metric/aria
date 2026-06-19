@@ -1,4 +1,4 @@
-import { test } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
 import path from "path";
 
 // Drives the live app to capture screenshots for the end-user "Academy" docs.
@@ -38,7 +38,7 @@ const AUTHED: { name: string; path: string }[] = [
   { name: "admin-schema", path: "/admin/schema" },
 ];
 
-async function shoot(page, name: string) {
+async function shoot(page: Page, name: string) {
   await page.waitForLoadState("networkidle").catch(() => {});
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true });

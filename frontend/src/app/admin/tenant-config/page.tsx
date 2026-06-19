@@ -43,12 +43,6 @@ export default function TenantConfigPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  useEffect(() => {
-    if (token) {
-      fetchConfig();
-    }
-  }, [token]);
-
   const fetchConfig = async () => {
     try {
       setLoading(true);
@@ -76,6 +70,12 @@ export default function TenantConfigPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (token) {
+      void (async () => { await fetchConfig(); })();
+    }
+  }, [token]);
 
   const handleSave = async () => {
     setSaving(true);

@@ -173,7 +173,7 @@ function ChatPageContent() {
 
   useEffect(() => {
     if (status === "authenticated" && token) {
-        loadConversations();
+      void (async () => { await loadConversations(); })();
     }
   }, [status, token, loadConversations]);
 
@@ -187,7 +187,7 @@ function ChatPageContent() {
 
   // Reset the artifact panel's date filter when switching between artifacts.
   useEffect(() => {
-    setPanelFilters({});
+    void (async () => { setPanelFilters({}); })();
   }, [activeArtifactMsgId]);
 
   // Auto-scroll to bottom
@@ -238,14 +238,6 @@ function ChatPageContent() {
     }
   }, [conversationId, token]);
 
-  // Submit initial query from URL
-  useEffect(() => {
-    if (initialQuery) {
-      handleSubmit(initialQuery);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialQuery]);
-
   const handleSubmit = useCallback(
     async (question?: string) => {
       const q = question || inputValue.trim();
@@ -281,7 +273,7 @@ function ChatPageContent() {
            router.push("/login");
            return;
         }
-        
+
         const { reader, abort } = streamQuery(q, conversationId || undefined, workspaceId, token);
         abortRef.current = abort;
 
@@ -445,6 +437,14 @@ function ChatPageContent() {
     },
     [inputValue, isStreaming, conversationId, router, token],
   );
+
+  // Submit initial query from URL
+  useEffect(() => {
+    if (initialQuery) {
+      void (async () => { await handleSubmit(initialQuery); })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery]);
   const handleNewChat = useCallback(() => {
     abortRef.current?.();
     setMessages([]);
