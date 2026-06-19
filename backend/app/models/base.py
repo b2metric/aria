@@ -1,7 +1,7 @@
 """SQLAlchemy declarative base and common mixins for ARIA."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -10,7 +10,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 def utcnow() -> datetime:
     """Timezone-aware UTC now."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):

@@ -1,13 +1,14 @@
-import os
 import base64
-from sqlalchemy.ext.asyncio import AsyncSession
-import uuid
 import logging
+import os
+import uuid
+
 from cachetools import TTLCache
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
 
@@ -15,9 +16,10 @@ log = logging.getLogger(__name__)
 # TTL = 300 seconds (5 mins)
 _dek_cache = TTLCache(maxsize=1000, ttl=300)
 
+
 class AppKEKProvider:
     """App-level KEK (Key Encryption Key) using the system ARIA_SECRET_KEY."""
-    
+
     @classmethod
     def get_kek_fernet(cls) -> Fernet:
         secret_key = os.getenv("ARIA_SECRET_KEY", "fallback_secret_key_for_dev_only_change_in_prod")
@@ -33,7 +35,7 @@ class AppKEKProvider:
     @classmethod
     def unwrap_dek(cls, encrypted_dek: str, key_uri: str = None) -> bytes:
         return cls.get_kek_fernet().decrypt(encrypted_dek.encode())
-        
+
     @classmethod
     def wrap_dek(cls, raw_dek: bytes, key_uri: str = None) -> str:
         return cls.get_kek_fernet().encrypt(raw_dek).decode()
@@ -50,14 +52,18 @@ def get_fernet_for_customer(customer_id: uuid.UUID | str = None, connection=None
 
     if not connection:
         # If no DB connection provided, fallback to global KEK
-        log.warning("No connection provided to fetch DEK for %s, falling back to global KEK", cust_id_str)
+        log.warning(
+            "No connection provided to fetch DEK for %s, falling back to global KEK", cust_id_str
+        )
         return AppKEKProvider.get_kek_fernet()
 
     try:
         # Fetch DEK from DB synchronously using the provided connection
         result = connection.execute(
-            text("SELECT provider, key_uri, encrypted_dek FROM customer_key_configs WHERE customer_id = :cid AND is_active = true"),
-            {"cid": cust_id_str}
+            text(
+                "SELECT provider, key_uri, encrypted_dek FROM customer_key_configs WHERE customer_id = :cid AND is_active = true"
+            ),
+            {"cid": cust_id_str},
         ).fetchone()
 
         if result:
@@ -96,7 +102,9 @@ def decrypt_password(encrypted_password: str, customer_id=None, connection=None)
         return encrypted_password
 
 
-async def async_get_fernet_for_customer(customer_id: uuid.UUID | str = None, session: AsyncSession = None) -> Fernet:
+async def async_get_fernet_for_customer(
+    customer_id: uuid.UUID | str = None, session: AsyncSession = None
+) -> Fernet:
     if not customer_id:
         return AppKEKProvider.get_kek_fernet()
 
@@ -105,13 +113,17 @@ async def async_get_fernet_for_customer(customer_id: uuid.UUID | str = None, ses
         return _dek_cache[cust_id_str]
 
     if not session:
-        log.warning("No session provided to fetch DEK for %s, falling back to global KEK", cust_id_str)
+        log.warning(
+            "No session provided to fetch DEK for %s, falling back to global KEK", cust_id_str
+        )
         return AppKEKProvider.get_kek_fernet()
 
     try:
         result = await session.execute(
-            text("SELECT provider, key_uri, encrypted_dek FROM customer_key_configs WHERE customer_id = :cid AND is_active = true"),
-            {"cid": cust_id_str}
+            text(
+                "SELECT provider, key_uri, encrypted_dek FROM customer_key_configs WHERE customer_id = :cid AND is_active = true"
+            ),
+            {"cid": cust_id_str},
         )
         row = result.fetchone()
 
@@ -129,13 +141,19 @@ async def async_get_fernet_for_customer(customer_id: uuid.UUID | str = None, ses
 
     return AppKEKProvider.get_kek_fernet()
 
-async def async_encrypt_password(password: str, customer_id=None, session: AsyncSession = None) -> str:
+
+async def async_encrypt_password(
+    password: str, customer_id=None, session: AsyncSession = None
+) -> str:
     if not password:
         return ""
     f = await async_get_fernet_for_customer(customer_id, session)
     return f.encrypt(password.encode()).decode()
 
-async def async_decrypt_password(encrypted_password: str, customer_id=None, session: AsyncSession = None) -> str:
+
+async def async_decrypt_password(
+    encrypted_password: str, customer_id=None, session: AsyncSession = None
+) -> str:
     if not encrypted_password:
         return ""
     try:

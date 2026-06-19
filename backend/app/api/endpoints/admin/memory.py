@@ -5,8 +5,9 @@ Supports viewing all memory types:
 - TEAM: Team conventions/business rules
 - QUERY_CACHE: Cached NL→SQL mappings
 """
+
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -32,10 +33,10 @@ async def get_all_memories(
     """List all memory entries for the workspace.
 
     Agent memory persistence lives in **Qdrant via Mem0** (LOCKED-DECISIONS #1).
-    
+
     Args:
         memory_type: Filter memories by type (all, user, team, cache)
-    
+
     Returns:
         List of memory entries with id, entity_id, content, type, created_at
     """
@@ -44,10 +45,10 @@ async def get_all_memories(
 
     workspace_id = getattr(current_user, "workspace_id", None) or "default"
     user_id = getattr(current_user, "user_id", None) or ""
-    
+
     svc = MemoryService.get_instance()
     all_memories: list[dict] = []
-    
+
     try:
         # Fetch user memories
         if memory_type in ("all", "user"):
@@ -57,15 +58,17 @@ async def get_all_memories(
                 memory_type=MemoryType.USER,
             )
             for m in user_mems:
-                all_memories.append({
-                    "id": m.get("id"),
-                    "entity_id": f"{workspace_id}:{user_id}",
-                    "content": m.get("memory") or m.get("data") or "",
-                    "type": "user",
-                    "created_at": m.get("created_at"),
-                    "metadata": m.get("metadata"),
-                })
-        
+                all_memories.append(
+                    {
+                        "id": m.get("id"),
+                        "entity_id": f"{workspace_id}:{user_id}",
+                        "content": m.get("memory") or m.get("data") or "",
+                        "type": "user",
+                        "created_at": m.get("created_at"),
+                        "metadata": m.get("metadata"),
+                    }
+                )
+
         # Fetch team memories (default team)
         if memory_type in ("all", "team"):
             team_mems = svc.get_all_memories(
@@ -74,15 +77,17 @@ async def get_all_memories(
                 memory_type=MemoryType.TEAM,
             )
             for m in team_mems:
-                all_memories.append({
-                    "id": m.get("id"),
-                    "entity_id": f"{workspace_id}:team:default",
-                    "content": m.get("memory") or m.get("data") or "",
-                    "type": "team",
-                    "created_at": m.get("created_at"),
-                    "metadata": m.get("metadata"),
-                })
-        
+                all_memories.append(
+                    {
+                        "id": m.get("id"),
+                        "entity_id": f"{workspace_id}:team:default",
+                        "content": m.get("memory") or m.get("data") or "",
+                        "type": "team",
+                        "created_at": m.get("created_at"),
+                        "metadata": m.get("metadata"),
+                    }
+                )
+
         # Fetch query cache
         if memory_type in ("all", "cache"):
             cache_mems = svc.get_all_memories(
@@ -91,15 +96,17 @@ async def get_all_memories(
                 memory_type=MemoryType.QUERY_CACHE,
             )
             for m in cache_mems:
-                all_memories.append({
-                    "id": m.get("id"),
-                    "entity_id": f"{workspace_id}:query_cache",
-                    "content": m.get("memory") or m.get("data") or "",
-                    "type": "cache",
-                    "created_at": m.get("created_at"),
-                    "metadata": m.get("metadata"),
-                })
-                
+                all_memories.append(
+                    {
+                        "id": m.get("id"),
+                        "entity_id": f"{workspace_id}:query_cache",
+                        "content": m.get("memory") or m.get("data") or "",
+                        "type": "cache",
+                        "created_at": m.get("created_at"),
+                        "metadata": m.get("metadata"),
+                    }
+                )
+
     except Exception as exc:
         log.warning("admin.memory: Mem0/Qdrant lookup failed: %s", exc)
         return []
@@ -116,7 +123,7 @@ async def get_all_memories(
         "total": total,
         "page": page,
         "limit": limit,
-        "total_pages": (total + limit - 1) // limit if limit > 0 else 1
+        "total_pages": (total + limit - 1) // limit if limit > 0 else 1,
     }
 
 
@@ -126,7 +133,7 @@ async def delete_memory(
     current_user: Any = Depends(get_current_user),
 ) -> dict:
     """Delete a specific memory entry.
-    
+
     Only admin can delete memories.
     """
     if not getattr(current_user, "can_admin", False):
@@ -135,7 +142,7 @@ async def delete_memory(
     try:
         svc = MemoryService.get_instance()
         success = svc.delete_memory(memory_id)
-        
+
         if success:
             log.info("admin.memory: Deleted memory %s", memory_id)
             return {"deleted": True, "id": memory_id}
@@ -144,7 +151,7 @@ async def delete_memory(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Memory {memory_id} not found or already deleted",
             )
-            
+
     except HTTPException:
         raise
     except Exception as exc:
@@ -162,19 +169,19 @@ async def cleanup_expired_memories(
     current_user: Any = Depends(get_current_user),
 ) -> dict:
     """Trigger memory cleanup based on retention policy.
-    
+
     Retention policy:
     - QUERY_CACHE: 7 days (default) - stale SQL mappings
     - USER: 90 days (default) - old preferences
     - TEAM: ∞ (never expires) - institutional knowledge
-    
+
     Only admin can trigger cleanup.
     """
     if not getattr(current_user, "can_admin", False):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     workspace_id = getattr(current_user, "workspace_id", None) or "default"
-    
+
     try:
         svc = MemoryService.get_instance()
         result = svc.cleanup_expired_memories(
@@ -182,7 +189,7 @@ async def cleanup_expired_memories(
             cache_ttl_days=cache_ttl_days,
             user_ttl_days=user_ttl_days,
         )
-        
+
         log.info(
             "admin.memory: Cleanup completed for workspace=%s: %s",
             workspace_id,
@@ -197,7 +204,7 @@ async def cleanup_expired_memories(
                 "team_ttl": "never",
             },
         }
-        
+
     except Exception as exc:
         log.error("admin.memory: Cleanup failed: %s", exc)
         raise HTTPException(
@@ -234,10 +241,15 @@ async def update_memory_ttl(
         if success:
             expires_at = None
             if update.ttl_days:
-                expires_at = (datetime.now(timezone.utc) + timedelta(days=update.ttl_days)).isoformat()
+                expires_at = (datetime.now(UTC) + timedelta(days=update.ttl_days)).isoformat()
 
             log.info("admin.memory: Updated TTL for %s to %s days", memory_id, update.ttl_days)
-            return {"updated": True, "id": memory_id, "ttl_days": update.ttl_days, "expires_at": expires_at}
+            return {
+                "updated": True,
+                "id": memory_id,
+                "ttl_days": update.ttl_days,
+                "expires_at": expires_at,
+            }
         else:
             raise HTTPException(status_code=404, detail="Memory not found or update failed")
 

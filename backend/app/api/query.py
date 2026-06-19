@@ -8,11 +8,10 @@ DELETE /api/conversations/{id} — delete a conversation.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sse_starlette.sse import EventSourceResponse
@@ -26,7 +25,7 @@ from backend.app.query.conversation import (
     list_conversations,
 )
 from backend.app.query.pipeline import process_query
-from backend.app.services.rate_limit import check_rate_limit, RateLimitExceeded
+from backend.app.services.rate_limit import RateLimitExceeded, check_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +69,7 @@ async def query(
     the conversation_id from the last received ``done`` event.
     """
     redis = await _get_redis()
-    
+
     # Check rate limit before proceeding (e.g. 20 queries per minute)
     try:
         await check_rate_limit(redis, user.user_id, limit=20, window=60)
@@ -79,8 +78,8 @@ async def query(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={"error": e.message, "retry_after": e.retry_after},
-            headers={"Retry-After": str(e.retry_after)}
-        )
+            headers={"Retry-After": str(e.retry_after)},
+        ) from e
 
     engine = await _get_engine()
 

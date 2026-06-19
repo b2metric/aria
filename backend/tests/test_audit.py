@@ -7,7 +7,7 @@ database connection required.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,7 +18,6 @@ from backend.app.services.audit import (
     AuditResourceType,
     AuditService,
 )
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
 

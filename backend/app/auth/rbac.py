@@ -9,12 +9,12 @@ Usage::
     from backend.app.auth.rbac import require_role
     from backend.app.auth.models import Role
 
+
     @router.get("/admin/dashboard")
     async def admin_dashboard(
         user: CurrentUser,
         _: None = Depends(require_role(Role.ADMIN)),
-    ):
-        ...
+    ): ...
 """
 
 from __future__ import annotations
@@ -32,12 +32,13 @@ CurrentUser = Annotated[UserContext, Depends(get_current_user)]
 # ── Role guards ──────────────────────────────────────────────────────────
 
 
-def require_role(minimum: Role) -> "RoleGuard":
+def require_role(minimum: Role) -> RoleGuard:
     """Require the user to have at least *minimum* role.
 
     Returns a FastAPI dependency that raises 403 if the user's role is
     insufficient.
     """
+
     async def guard(user: CurrentUser) -> None:
         if not user.role.can(minimum):
             raise HTTPException(
@@ -47,6 +48,7 @@ def require_role(minimum: Role) -> "RoleGuard":
                     f"(requires at least '{minimum.value}')"
                 ),
             )
+
     # Tag the guard so route introspection tools can see the required role.
     guard.__name__ = f"require_{minimum.value}"
     guard.__qualname__ = f"RoleGuard.require_{minimum.value}"

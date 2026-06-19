@@ -5,11 +5,10 @@ from typing import Any
 import litellm
 
 from backend.app.core.config import get_settings
-
-logger = logging.getLogger(__name__)
-
 from backend.app.services.llm_resolver import ResolvedLLM
 from backend.app.services.workspace_language import language_directive
+
+logger = logging.getLogger(__name__)
 
 
 async def generate_insight_and_suggestions(
@@ -20,17 +19,17 @@ async def generate_insight_and_suggestions(
     language: str = "en",
 ) -> dict:
     """Generate executive summary and follow-up suggestions from query results.
-    
+
     Args:
         question: Original user question
         sql: The SQL that was executed
         data_rows: Up to 10 rows of data from the result
-        
+
     Returns:
         dict: {"summary": "str", "suggestions": ["Q1", "Q2", "Q3"]}
     """
     settings = get_settings()
-    
+
     prompt = f"""You are an executive data analyst. You are provided with a user's question, the SQL query used to fetch data, and a sample of the results (up to 10 rows).
 
 {language_directive(language)}
@@ -52,11 +51,10 @@ Result Sample:
 """
 
     try:
-        
         model_name = llm.model if llm else settings.llm_model
         api_base = llm.api_base if llm else settings.litellm_api_base
         api_key = llm.api_key if llm else (settings.litellm_api_key or "sk-dummy")
-        
+
         response = await litellm.acompletion(
             model=model_name,
             messages=[{"role": "user", "content": prompt}],
@@ -66,23 +64,17 @@ Result Sample:
             api_key=api_key,
             custom_llm_provider="openai",
         )
-        
+
         content = response.choices[0].message.content
         result = json.loads(content)
-        
+
         # Ensure correct structure
         summary = result.get("summary", "Query executed successfully.")
         suggestions = result.get("suggestions", [])
         if not isinstance(suggestions, list):
             suggestions = []
-            
-        return {
-            "summary": summary,
-            "suggestions": suggestions[:3]
-        }
+
+        return {"summary": summary, "suggestions": suggestions[:3]}
     except Exception as e:
         logger.warning(f"Failed to generate insights: {e}")
-        return {
-            "summary": "Data retrieved successfully.",
-            "suggestions": []
-        }
+        return {"summary": "Data retrieved successfully.", "suggestions": []}

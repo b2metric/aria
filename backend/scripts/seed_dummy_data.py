@@ -17,6 +17,7 @@ Usage:
 Connection (env-overridable; defaults match docker-compose.dev.yml mock):
     ORACLE_USER (stc) / ORACLE_PASSWORD (stc123) / ORACLE_DSN (localhost:1521/FREEPDB1)
 """
+
 from __future__ import annotations
 
 import glob
@@ -35,8 +36,14 @@ VAULT_DIR = os.path.join(
 )
 
 NATIONALITIES = [
-    "KUWAITI", "INDIAN", "EGYPTIAN", "FILIPINO",
-    "BANGLADESHI", "SYRIAN", "PAKISTANI", "SAUDI",
+    "KUWAITI",
+    "INDIAN",
+    "EGYPTIAN",
+    "FILIPINO",
+    "BANGLADESHI",
+    "SYRIAN",
+    "PAKISTANI",
+    "SAUDI",
 ]
 REGIONS = ["Al Asimah", "Hawalli", "Farwaniya", "Ahmadi", "Jahra", "Mubarak Al-Kabeer"]
 CATEGORIES = ["Consumer", "Business", "VIP"]
@@ -61,7 +68,8 @@ PRODUCTS = [
 
 def parse_vault_columns(md_path: str) -> tuple[str, list[tuple[str, str]]]:
     """Return (table_name, [(column, type)]) parsed from a vault .md file."""
-    txt = open(md_path).read()
+    with open(md_path) as _fh:
+        txt = _fh.read()
     m = re.search(r"^table:\s*(\S+)", txt, re.M)
     name = (m.group(1) if m else os.path.basename(md_path)[:-3]).lower()
     cols: list[tuple[str, str]] = []
@@ -140,104 +148,240 @@ def main() -> int:
     subs = []
     for i in range(80):
         nat = rng.choice(NATIONALITIES)
-        subs.append({
-            "CONTRNO": f"C{100000 + i}",
-            "SUBNO": f"9656{rng.randint(1000000, 9999999)}",
-            "NATIONALITY": nat,
-            "REGION": rng.choice(REGIONS),
-            "APPDATE": days_back(rng, 540, 20),
-            "PREPOST_PAID": rng.choices(["PREPAID", "POSTPAID"], [0.85, 0.15])[0],
-            "CONTRACT_CATEGORY": rng.choice(CATEGORIES),
-            "PLAN_ID": rng.randint(2001, 2006),
-            "PLAN_NAME": rng.choice(PLANS),
-            "NAT_GROUP": "GCC" if nat in ("KUWAITI", "SAUDI") else "EXPAT",
-        })
+        subs.append(
+            {
+                "CONTRNO": f"C{100000 + i}",
+                "SUBNO": f"9656{rng.randint(1000000, 9999999)}",
+                "NATIONALITY": nat,
+                "REGION": rng.choice(REGIONS),
+                "APPDATE": days_back(rng, 540, 20),
+                "PREPOST_PAID": rng.choices(["PREPAID", "POSTPAID"], [0.85, 0.15])[0],
+                "CONTRACT_CATEGORY": rng.choice(CATEGORIES),
+                "PLAN_ID": rng.randint(2001, 2006),
+                "PLAN_NAME": rng.choice(PLANS),
+                "NAT_GROUP": "GCC" if nat in ("KUWAITI", "SAUDI") else "EXPAT",
+            }
+        )
 
     counts = {}
 
-    counts["fct_prep_master"] = seed("fct_prep_master", [{
-        "EXEC_DATE": TODAY, "SNAPSHOT_DATE": TODAY, "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "APPDATE": s["APPDATE"], "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
-        "NATIONALITY": s["NATIONALITY"], "NATIONALITY_GROUP": s["NAT_GROUP"], "REGION": s["REGION"],
-        "MAIN_PLAN_NAME": s["PLAN_NAME"], "MAIN_PLAN_RENTAL": rng.choice([2, 5, 7.5, 10]),
-        "ACTIVITY_STATUS": rng.choices(["ACTIVE", "DORMANT", "INACTIVE"], [0.7, 0.2, 0.1])[0],
-        "L30D_IS_REVENUE_ACTIVE_BASE": rng.choice([0, 1]), "L30D_IS_ACTIVE_BASE": rng.choice(["Y", "N"]),
-    } for s in subs])
+    counts["fct_prep_master"] = seed(
+        "fct_prep_master",
+        [
+            {
+                "EXEC_DATE": TODAY,
+                "SNAPSHOT_DATE": TODAY,
+                "CONTRNO": s["CONTRNO"],
+                "SUBNO": s["SUBNO"],
+                "PREPOST_PAID": s["PREPOST_PAID"],
+                "APPDATE": s["APPDATE"],
+                "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                "NATIONALITY": s["NATIONALITY"],
+                "NATIONALITY_GROUP": s["NAT_GROUP"],
+                "REGION": s["REGION"],
+                "MAIN_PLAN_NAME": s["PLAN_NAME"],
+                "MAIN_PLAN_RENTAL": rng.choice([2, 5, 7.5, 10]),
+                "ACTIVITY_STATUS": rng.choices(["ACTIVE", "DORMANT", "INACTIVE"], [0.7, 0.2, 0.1])[
+                    0
+                ],
+                "L30D_IS_REVENUE_ACTIVE_BASE": rng.choice([0, 1]),
+                "L30D_IS_ACTIVE_BASE": rng.choice(["Y", "N"]),
+            }
+            for s in subs
+        ],
+    )
 
-    counts["fct_prep_master_hist"] = seed("fct_prep_master_hist", [{
-        "EXEC_DATE": TODAY - timedelta(days=30 * mb), "SNAPSHOT_DATE": TODAY - timedelta(days=30 * mb),
-        "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "PREPOST_PAID": s["PREPOST_PAID"],
-        "APPDATE": s["APPDATE"], "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "NATIONALITY_GROUP": s["NAT_GROUP"], "REGION": s["REGION"],
-        "ACTIVITY_STATUS": rng.choices(["ACTIVE", "DORMANT", "INACTIVE"], [0.7, 0.2, 0.1])[0],
-        "L30D_IS_REVENUE_ACTIVE_BASE": rng.choice([0, 1]),
-    } for s in subs for mb in range(6)])
+    counts["fct_prep_master_hist"] = seed(
+        "fct_prep_master_hist",
+        [
+            {
+                "EXEC_DATE": TODAY - timedelta(days=30 * mb),
+                "SNAPSHOT_DATE": TODAY - timedelta(days=30 * mb),
+                "CONTRNO": s["CONTRNO"],
+                "SUBNO": s["SUBNO"],
+                "PREPOST_PAID": s["PREPOST_PAID"],
+                "APPDATE": s["APPDATE"],
+                "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                "NATIONALITY": s["NATIONALITY"],
+                "NATIONALITY_GROUP": s["NAT_GROUP"],
+                "REGION": s["REGION"],
+                "ACTIVITY_STATUS": rng.choices(["ACTIVE", "DORMANT", "INACTIVE"], [0.7, 0.2, 0.1])[
+                    0
+                ],
+                "L30D_IS_REVENUE_ACTIVE_BASE": rng.choice([0, 1]),
+            }
+            for s in subs
+            for mb in range(6)
+        ],
+    )
 
     # PLAN_ID MUST be a real dim_prep_products.OFFER_ID and EXEC_DATE MUST span several
     # months, or "monthly revenue by region" (GROUP BY month, dp.BUSINESS via the
     # PLAN_ID=OFFER_ID join) collapses to a single NULL-region row. (Both were broken:
     # PLAN_ID was never inserted -> NULL join; EXEC_DATE was always TODAY -> one month.)
-    counts["fct_prep_rev"] = seed("fct_prep_rev", [(lambda s, p: {
-        "EXEC_DATE": TODAY - timedelta(days=30 * rng.randint(0, 11)),
-        "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
-        "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "PREPOST_PAID": s["PREPOST_PAID"],
-        "PLAN_ID": p[0],            # -> dim_prep_products.OFFER_ID (join key)
-        "PLAN_NAME": p[3],          # matching product name (consistent with PLAN_ID)
-        "BS_TYPE": rng.choice(["GSM", "DATA"]),
-        "CDR_TYPE": rng.choice(CALL_TYPES), "CHARGINGTYPE": rng.choice(["PREPAID", "HYBRID"]),
-        "BILLAMOUNT": round(rng.uniform(0.05, 45.0), 3), "LOGDATE": days_back(rng, 360),
-        "CALLTYPE": rng.choice(CALL_TYPES),
-    })(rng.choice(subs), rng.choice(PRODUCTS)) for _ in range(1600)])
+    counts["fct_prep_rev"] = seed(
+        "fct_prep_rev",
+        [
+            (
+                lambda s, p: {
+                    "EXEC_DATE": TODAY - timedelta(days=30 * rng.randint(0, 11)),
+                    "CONTRNO": s["CONTRNO"],
+                    "SUBNO": s["SUBNO"],
+                    "APPDATE": s["APPDATE"],
+                    "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                    "NATIONALITY": s["NATIONALITY"],
+                    "PREPOST_PAID": s["PREPOST_PAID"],
+                    "PLAN_ID": p[0],  # -> dim_prep_products.OFFER_ID (join key)
+                    "PLAN_NAME": p[3],  # matching product name (consistent with PLAN_ID)
+                    "BS_TYPE": rng.choice(["GSM", "DATA"]),
+                    "CDR_TYPE": rng.choice(CALL_TYPES),
+                    "CHARGINGTYPE": rng.choice(["PREPAID", "HYBRID"]),
+                    "BILLAMOUNT": round(rng.uniform(0.05, 45.0), 3),
+                    "LOGDATE": days_back(rng, 360),
+                    "CALLTYPE": rng.choice(CALL_TYPES),
+                }
+            )(rng.choice(subs), rng.choice(PRODUCTS))
+            for _ in range(1600)
+        ],
+    )
 
-    counts["dim_prep_products"] = seed("dim_prep_products", [{
-        "OFFER_ID": p[0], "PROD_OFFERING_ID": p[1], "BUSINESS": p[2], "PRODUCT_OFFER_NAME": p[3],
-        "PRODUCT_VALIDITY": p[4], "PRODUCT_TYPE": p[5], "SUB_PRODUCT_TYPE": p[2],
-        "PRODUCT_PRICE": p[7], "EQUIPID": f"EQ{p[0]}",
-    } for p in PRODUCTS])
+    counts["dim_prep_products"] = seed(
+        "dim_prep_products",
+        [
+            {
+                "OFFER_ID": p[0],
+                "PROD_OFFERING_ID": p[1],
+                "BUSINESS": p[2],
+                "PRODUCT_OFFER_NAME": p[3],
+                "PRODUCT_VALIDITY": p[4],
+                "PRODUCT_TYPE": p[5],
+                "SUB_PRODUCT_TYPE": p[2],
+                "PRODUCT_PRICE": p[7],
+                "EQUIPID": f"EQ{p[0]}",
+            }
+            for p in PRODUCTS
+        ],
+    )
 
-    counts["dim_prep_state_scd2"] = seed("dim_prep_state_scd2", [{
-        "EXEC_DATE": TODAY, "SNAPSHOT_DATE": TODAY, "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "EFFECTIVE_START_DATE": s["APPDATE"], "EFFECTIVE_END_DATE": None,
-        "CURRENT_STATE": rng.choice(["ACTIVE", "SUSPENDED", "GRACE", "CHURNED"]),
-        "PREPAID_BALANCE": round(rng.uniform(0, 60), 3),
-    } for s in subs])
+    counts["dim_prep_state_scd2"] = seed(
+        "dim_prep_state_scd2",
+        [
+            {
+                "EXEC_DATE": TODAY,
+                "SNAPSHOT_DATE": TODAY,
+                "SUBNO": s["SUBNO"],
+                "APPDATE": s["APPDATE"],
+                "PREPOST_PAID": s["PREPOST_PAID"],
+                "EFFECTIVE_START_DATE": s["APPDATE"],
+                "EFFECTIVE_END_DATE": None,
+                "CURRENT_STATE": rng.choice(["ACTIVE", "SUSPENDED", "GRACE", "CHURNED"]),
+                "PREPAID_BALANCE": round(rng.uniform(0, 60), 3),
+            }
+            for s in subs
+        ],
+    )
 
-    counts["fct_prep_provision"] = seed("fct_prep_provision", [(lambda s, p: {
-        "EXEC_DATE": TODAY, "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
-        "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "BS_TYPE": rng.choice(["GSM", "DATA"]), "PROD_OFFERING_ID": p[1],
-        "PRODUCT_OFFER_NAME": p[3], "PRODUCT_TYPE": p[5], "OFFER_ID": p[0], "LOGDATE": days_back(rng, 360),
-        "ORDERSTATUS": rng.choices(["COMPLETED", "FAILED", "PENDING"], [0.8, 0.1, 0.1])[0],
-    })(rng.choice(subs), rng.choice(PRODUCTS)) for _ in range(500)])
+    counts["fct_prep_provision"] = seed(
+        "fct_prep_provision",
+        [
+            (
+                lambda s, p: {
+                    "EXEC_DATE": TODAY,
+                    "CONTRNO": s["CONTRNO"],
+                    "SUBNO": s["SUBNO"],
+                    "APPDATE": s["APPDATE"],
+                    "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                    "NATIONALITY": s["NATIONALITY"],
+                    "PREPOST_PAID": s["PREPOST_PAID"],
+                    "BS_TYPE": rng.choice(["GSM", "DATA"]),
+                    "PROD_OFFERING_ID": p[1],
+                    "PRODUCT_OFFER_NAME": p[3],
+                    "PRODUCT_TYPE": p[5],
+                    "OFFER_ID": p[0],
+                    "LOGDATE": days_back(rng, 360),
+                    "ORDERSTATUS": rng.choices(["COMPLETED", "FAILED", "PENDING"], [0.8, 0.1, 0.1])[
+                        0
+                    ],
+                }
+            )(rng.choice(subs), rng.choice(PRODUCTS))
+            for _ in range(500)
+        ],
+    )
 
-    counts["fct_prep_recharge"] = seed("fct_prep_recharge", [(lambda s: {
-        "EXEC_DATE": TODAY, "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
-        "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "BS_TYPE": rng.choice(["GSM", "DATA"]),
-        "RECHARGE_DATE": days_back(rng, 360), "PREPAIDBALANCEBEFORE": round(rng.uniform(0, 20), 3),
-        "TOPUP_AMOUNT": rng.choice([1, 2, 3, 5, 10, 15, 20, 30]),
-        "VOUCHER_TYPE": rng.choice(["ONLINE", "RETAIL", "ATM", "APP", "VOUCHER"]),
-        "OPERATEDBY": rng.choice(["ONLINE", "RETAIL", "ATM", "APP"]),
-    })(rng.choice(subs)) for _ in range(700)])
+    counts["fct_prep_recharge"] = seed(
+        "fct_prep_recharge",
+        [
+            (
+                lambda s: {
+                    "EXEC_DATE": TODAY,
+                    "CONTRNO": s["CONTRNO"],
+                    "SUBNO": s["SUBNO"],
+                    "APPDATE": s["APPDATE"],
+                    "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                    "NATIONALITY": s["NATIONALITY"],
+                    "PREPOST_PAID": s["PREPOST_PAID"],
+                    "BS_TYPE": rng.choice(["GSM", "DATA"]),
+                    "RECHARGE_DATE": days_back(rng, 360),
+                    "PREPAIDBALANCEBEFORE": round(rng.uniform(0, 20), 3),
+                    "TOPUP_AMOUNT": rng.choice([1, 2, 3, 5, 10, 15, 20, 30]),
+                    "VOUCHER_TYPE": rng.choice(["ONLINE", "RETAIL", "ATM", "APP", "VOUCHER"]),
+                    "OPERATEDBY": rng.choice(["ONLINE", "RETAIL", "ATM", "APP"]),
+                }
+            )(rng.choice(subs))
+            for _ in range(700)
+        ],
+    )
 
-    counts["fct_prep_roaming"] = seed("fct_prep_roaming", [(lambda s: {
-        "EXEC_DATE": TODAY, "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
-        "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "BS_TYPE": rng.choice(["GSM", "DATA"]),
-        "TRANSDATE": days_back(rng, 360), "CALLTYPE": rng.choice(CALL_TYPES),
-        "USED_NETWORK": rng.choice(NETWORKS), "OFFER_ID": rng.choice(PRODUCTS)[0],
-    })(rng.choice(subs)) for _ in range(350)])
+    counts["fct_prep_roaming"] = seed(
+        "fct_prep_roaming",
+        [
+            (
+                lambda s: {
+                    "EXEC_DATE": TODAY,
+                    "CONTRNO": s["CONTRNO"],
+                    "SUBNO": s["SUBNO"],
+                    "APPDATE": s["APPDATE"],
+                    "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                    "NATIONALITY": s["NATIONALITY"],
+                    "PREPOST_PAID": s["PREPOST_PAID"],
+                    "BS_TYPE": rng.choice(["GSM", "DATA"]),
+                    "TRANSDATE": days_back(rng, 360),
+                    "CALLTYPE": rng.choice(CALL_TYPES),
+                    "USED_NETWORK": rng.choice(NETWORKS),
+                    "OFFER_ID": rng.choice(PRODUCTS)[0],
+                }
+            )(rng.choice(subs))
+            for _ in range(350)
+        ],
+    )
 
     kpis = [("VOICE_MIN", "Voice Minutes"), ("DATA_MB", "Data MB"), ("SMS_CNT", "SMS Count")]
-    counts["fct_prep_usage"] = seed("fct_prep_usage", [(lambda s, k: {
-        "EXEC_DATE": TODAY, "CONTRNO": s["CONTRNO"], "SUBNO": s["SUBNO"], "APPDATE": s["APPDATE"],
-        "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"], "NATIONALITY": s["NATIONALITY"],
-        "PREPOST_PAID": s["PREPOST_PAID"], "PLAN_ID": s["PLAN_ID"], "TRANSDATE": days_back(rng, 360),
-        "CATEGORY": rng.choice(["ONNET", "OFFNET", "INTL"]), "NETWORK_DIRECTION": rng.choice(["MO", "MT"]),
-        "OPERATOR_NAME": "STC-KW", "NETWORK_TYPE": rng.choice(["4G", "5G", "3G"]),
-        "KPI_TYPE": k[0], "KPI_NAME": k[1], "KPI_VALUE": round(rng.uniform(1, 5000), 2),
-    })(rng.choice(subs), rng.choice(kpis)) for _ in range(900)])
+    counts["fct_prep_usage"] = seed(
+        "fct_prep_usage",
+        [
+            (
+                lambda s, k: {
+                    "EXEC_DATE": TODAY,
+                    "CONTRNO": s["CONTRNO"],
+                    "SUBNO": s["SUBNO"],
+                    "APPDATE": s["APPDATE"],
+                    "CONTRACT_CATEGORY": s["CONTRACT_CATEGORY"],
+                    "NATIONALITY": s["NATIONALITY"],
+                    "PREPOST_PAID": s["PREPOST_PAID"],
+                    "PLAN_ID": s["PLAN_ID"],
+                    "TRANSDATE": days_back(rng, 360),
+                    "CATEGORY": rng.choice(["ONNET", "OFFNET", "INTL"]),
+                    "NETWORK_DIRECTION": rng.choice(["MO", "MT"]),
+                    "OPERATOR_NAME": "STC-KW",
+                    "NETWORK_TYPE": rng.choice(["4G", "5G", "3G"]),
+                    "KPI_TYPE": k[0],
+                    "KPI_NAME": k[1],
+                    "KPI_VALUE": round(rng.uniform(1, 5000), 2),
+                }
+            )(rng.choice(subs), rng.choice(kpis))
+            for _ in range(900)
+        ],
+    )
 
     print("Seeded rows:", counts)
 

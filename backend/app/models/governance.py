@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -44,9 +44,7 @@ class TeamVaultPolicy(Base, UUIDMixin, TimestampMixin):
         nullable=True,
         comment='Per-table deny-lists, e.g. {"sales": ["revenue", "margin"]}',
     )
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default="true"
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     def __repr__(self) -> str:
         return f"<TeamVaultPolicy {self.name}>"

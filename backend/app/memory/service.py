@@ -14,8 +14,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from enum import Enum
+from datetime import UTC, datetime, timedelta
+from enum import StrEnum
 from typing import Any
 
 try:
@@ -28,7 +28,7 @@ from backend.app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-class MemoryType(str, Enum):
+class MemoryType(StrEnum):
     """Memory scope types."""
 
     USER = "user"  # Personal: preferences, favorite tables
@@ -62,7 +62,7 @@ class MemoryContext:
             for q in self.similar_queries[:2]:
                 mem = q.get("memory", "")
                 queries.append(f"  - {mem[:200]}")
-            parts.append(f"Similar Past Queries:\n" + "\n".join(queries))
+            parts.append("Similar Past Queries:\n" + "\n".join(queries))
 
         return "\n\n".join(parts) if parts else ""
 
@@ -81,7 +81,7 @@ class MemoryService:
     - Similar previously executed queries
     """
 
-    _instance: "MemoryService | None" = None
+    _instance: MemoryService | None = None
 
     def __init__(self) -> None:
         """Initialize Mem0 with Qdrant backend."""
@@ -142,7 +142,7 @@ class MemoryService:
             self._memory = None
 
     @classmethod
-    def get_instance(cls) -> "MemoryService":
+    def get_instance(cls) -> MemoryService:
         """Get singleton instance."""
         if cls._instance is None:
             cls._instance = cls()
@@ -423,10 +423,11 @@ class MemoryService:
                 # Immediate deletion
                 return self.delete_memory(memory_id)
             else:
-                expires_at = (datetime.now(timezone.utc) + timedelta(days=ttl_days)).isoformat()
+                expires_at = (datetime.now(UTC) + timedelta(days=ttl_days)).isoformat()
 
             # Update metadata with expires_at using Qdrant directly
             from qdrant_client import QdrantClient
+
             settings = get_settings()
 
             qdrant_url = settings.qdrant_url
@@ -466,7 +467,7 @@ class MemoryService:
         }
 
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             soon_cutoff = now + timedelta(days=7)
             recent_cutoff = now - timedelta(days=7)
 
@@ -505,13 +506,15 @@ class MemoryService:
                         if isinstance(created_at, str):
                             mem_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
                         else:
-                            mem_time = datetime.fromtimestamp(created_at, tz=timezone.utc)
+                            mem_time = datetime.fromtimestamp(created_at, tz=UTC)
                         if mem_time > recent_cutoff:
                             stats["recent_7d"] += 1
                     except (ValueError, TypeError):
                         pass
 
-                expires_at = mem.get("metadata", {}).get("expires_at") if mem.get("metadata") else None
+                expires_at = (
+                    mem.get("metadata", {}).get("expires_at") if mem.get("metadata") else None
+                )
                 if expires_at:
                     try:
                         exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
@@ -549,9 +552,9 @@ class MemoryService:
         if not self._memory:
             return {"cache": 0, "user": 0}
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cache_cutoff = now - timedelta(days=cache_ttl_days)
-        user_cutoff = now - timedelta(days=user_ttl_days)
+        now - timedelta(days=user_ttl_days)
 
         deleted = {"cache": 0, "user": 0}
 
@@ -572,7 +575,7 @@ class MemoryService:
                         except ValueError:
                             continue
                     else:
-                        mem_time = datetime.fromtimestamp(created_at, tz=timezone.utc)
+                        mem_time = datetime.fromtimestamp(created_at, tz=UTC)
 
                     if mem_time < cache_cutoff:
                         mem_id = mem.get("id")
@@ -585,19 +588,25 @@ class MemoryService:
             # so we fetch by the 'user' metadata marker if we can, or iterate known users.
             # But get_all_memories without user_id might work or we use a fallback.
             # We will use the base memory search to fetch all user memories in the workspace.
-            user_cutoff_180d = now - timedelta(days=180) # Force 6 months memory decay
+            user_cutoff_180d = now - timedelta(days=180)  # Force 6 months memory decay
             all_user_mems = self._memory.get_all()
             if all_user_mems and isinstance(all_user_mems, dict) and "results" in all_user_mems:
                 for mem in all_user_mems["results"]:
                     mem_uid = mem.get("user_id", "")
-                    if mem_uid.startswith(f"{workspace_id}:") and ":team:" not in mem_uid and ":query_cache" not in mem_uid:
+                    if (
+                        mem_uid.startswith(f"{workspace_id}:")
+                        and ":team:" not in mem_uid
+                        and ":query_cache" not in mem_uid
+                    ):
                         created_at = mem.get("created_at")
                         if created_at:
                             try:
                                 if isinstance(created_at, str):
-                                    mem_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                                    mem_time = datetime.fromisoformat(
+                                        created_at.replace("Z", "+00:00")
+                                    )
                                 else:
-                                    mem_time = datetime.fromtimestamp(created_at, tz=timezone.utc)
+                                    mem_time = datetime.fromtimestamp(created_at, tz=UTC)
 
                                 if mem_time < user_cutoff_180d:
                                     mem_id = mem.get("id")

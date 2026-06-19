@@ -7,14 +7,13 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.auth.dependencies import UserContext, get_current_user
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.token import TokenQuota, TokenUsageDaily
-from backend.app.schemas.token import TokenQuotaCreate, TokenQuotaUpdate, TokenQuotaResponse
+from backend.app.schemas.token import TokenQuotaCreate, TokenQuotaResponse, TokenQuotaUpdate
 
 log = logging.getLogger("aria.admin.tokens")
 router = APIRouter()
@@ -25,17 +24,14 @@ async def get_db() -> AsyncSession:  # type: ignore[misc, reportReturnType]
     async with maker() as session:
         yield session  # pyright: ignore[reportReturnType]
 
-async def resolve_customer_id(
-    current_user: UserContext, db: AsyncSession
-) -> uuid.UUID:
+
+async def resolve_customer_id(current_user: UserContext, db: AsyncSession) -> uuid.UUID:
     """Resolve the customer UUID from the workspace slug in the JWT."""
     from backend.app.models.organization import Customer
 
     workspace_slug = getattr(current_user, "workspace_id", None)
     if workspace_slug:
-        result = await db.execute(
-            select(Customer.id).where(Customer.slug == workspace_slug)
-        )
+        result = await db.execute(select(Customer.id).where(Customer.slug == workspace_slug))
         customer_uuid = result.scalar_one_or_none()
         if customer_uuid:
             return customer_uuid
@@ -61,10 +57,8 @@ async def list_quotas(
         raise HTTPException(status_code=403, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
-    
-    result = await db.execute(
-        select(TokenQuota).where(TokenQuota.customer_id == customer_id)
-    )
+
+    result = await db.execute(select(TokenQuota).where(TokenQuota.customer_id == customer_id))
     return result.scalars().all()
 
 
@@ -117,15 +111,12 @@ async def update_quota(
         raise HTTPException(status_code=403, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
-    
+
     result = await db.execute(
-        select(TokenQuota).where(
-            TokenQuota.id == quota_id,
-            TokenQuota.customer_id == customer_id
-        )
+        select(TokenQuota).where(TokenQuota.id == quota_id, TokenQuota.customer_id == customer_id)
     )
     quota = result.scalars().first()
-    
+
     if not quota:
         raise HTTPException(status_code=404, detail="Quota not found")
 
@@ -150,15 +141,12 @@ async def delete_quota(
         raise HTTPException(status_code=403, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
-    
+
     result = await db.execute(
-        select(TokenQuota).where(
-            TokenQuota.id == quota_id,
-            TokenQuota.customer_id == customer_id
-        )
+        select(TokenQuota).where(TokenQuota.id == quota_id, TokenQuota.customer_id == customer_id)
     )
     quota = result.scalars().first()
-    
+
     if not quota:
         raise HTTPException(status_code=404, detail="Quota not found")
 
@@ -177,7 +165,7 @@ async def get_token_usage(
         raise HTTPException(status_code=403, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
-    
+
     result = await db.execute(
         select(TokenUsageDaily)
         .where(TokenUsageDaily.customer_id == customer_id)
@@ -185,7 +173,7 @@ async def get_token_usage(
         .limit(limit)
     )
     records = result.scalars().all()
-    
+
     return [
         {
             "id": str(r.id),

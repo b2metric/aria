@@ -23,7 +23,10 @@ class TokenQuota(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "token_quotas"
 
     customer_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     team_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("teams.id", ondelete="CASCADE"), nullable=True, index=True
@@ -48,11 +51,16 @@ class TokenUsageDaily(Base, UUIDMixin):
 
     __tablename__ = "token_usage_daily"
     __table_args__ = (
-        sa.UniqueConstraint("customer_id", "user_id", "usage_date", name="uix_token_usage_customer_user_date"),
+        sa.UniqueConstraint(
+            "customer_id", "user_id", "usage_date", name="uix_token_usage_customer_user_date"
+        ),
     )
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True

@@ -293,7 +293,9 @@ async def _get_available_tables(
                 result = await db.execute(
                     sa_select(TeamVaultPolicy).where(
                         TeamVaultPolicy.customer_id == cust_id,
-                        TeamVaultPolicy.team_id.in_([team_uuid, None]) if team_uuid else TeamVaultPolicy.team_id.is_(None),
+                        TeamVaultPolicy.team_id.in_([team_uuid, None])
+                        if team_uuid
+                        else TeamVaultPolicy.team_id.is_(None),
                         TeamVaultPolicy.is_active == True,  # noqa: E712
                     )
                 )
@@ -390,7 +392,9 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
         return [{"name": "unknown", "type": "VARCHAR2", "description": ""}]
 
 
-from backend.app.services.llm_resolver import ResolvedLLM
+import contextlib  # noqa: E402
+
+from backend.app.services.llm_resolver import ResolvedLLM  # noqa: E402
 
 
 async def _generate_sql(
@@ -666,7 +670,11 @@ async def _generate_sql(
 
     if wants_top and numeric_cols:
         measure = numeric_cols[0]["name"]
-        label_col = _find_best_column(text_cols, question_words)["name"] if text_cols else all_cols[0]["name"]
+        label_col = (
+            _find_best_column(text_cols, question_words)["name"]
+            if text_cols
+            else all_cols[0]["name"]
+        )
         return (
             f"SELECT {label_col}, {measure}\nFROM {best_table}\nORDER BY {measure} DESC\nLIMIT 10",
             f"Top 10 records from {best_table} ranked by {measure}.",
@@ -676,7 +684,11 @@ async def _generate_sql(
 
     if wants_bottom and numeric_cols:
         measure = numeric_cols[0]["name"]
-        label_col = _find_best_column(text_cols, question_words)["name"] if text_cols else all_cols[0]["name"]
+        label_col = (
+            _find_best_column(text_cols, question_words)["name"]
+            if text_cols
+            else all_cols[0]["name"]
+        )
         return (
             f"SELECT {label_col}, {measure}\nFROM {best_table}\nORDER BY {measure} ASC\nLIMIT 10",
             f"Bottom 10 records from {best_table} ranked by {measure}.",
@@ -718,48 +730,61 @@ async def _generate_sql(
 # ── SQL Execution ──────────────────────────────────────────────────────────
 
 
-
 def _extract_invalid_column(error_msg: str) -> str | None:
     """Extracts the invalid column name from Oracle ORA-00904 error."""
     import re
+
     match = re.search(r'ORA-00904: (?:".*?"\\.)?"(.*?)": invalid identifier', error_msg)
     if match:
         return match.group(1)
     return None
 
+
 def _get_relevant_columns(invalid_col: str, table_columns: dict) -> str:
     """Finds closely matching or semantically relevant column names from available tables."""
     import difflib
-    
+
     all_cols = []
-    for t_name, cols in table_columns.items():
+    for _t_name, cols in table_columns.items():
         all_cols.extend([c["name"] for c in cols])
-        
+
     invalid_lower = invalid_col.lower()
     cols_lower = {c.lower(): c for c in all_cols}
-    
-    close_matches = difflib.get_close_matches(invalid_lower, list(cols_lower.keys()), n=5, cutoff=0.4)
-    
+
+    close_matches = difflib.get_close_matches(
+        invalid_lower, list(cols_lower.keys()), n=5, cutoff=0.4
+    )
+
     semantic_map = {
-        "region": ["nationality", "city", "country", "location", "territory", "district", "address"],
+        "region": [
+            "nationality",
+            "city",
+            "country",
+            "location",
+            "territory",
+            "district",
+            "address",
+        ],
         "price": ["amount", "revenue", "cost", "fee", "billamount", "total"],
         "date": ["revenue_date", "logdate", "appdate", "created_at", "insert_date"],
         "user": ["subno", "subscriberid", "contrno", "accountid", "msisdn"],
         "phone": ["subno", "msisdn", "subscriberid"],
     }
-    
+
     suggestions = [cols_lower[m] for m in close_matches]
-    
+
     for key, mapped_cols in semantic_map.items():
         if key in invalid_lower or invalid_lower in key:
             for mc in mapped_cols:
                 for col in cols_lower:
                     if mc in col and cols_lower[col] not in suggestions:
                         suggestions.append(cols_lower[col])
-                        
+
     unique_suggestions = list(dict.fromkeys(suggestions))[:5]
     if unique_suggestions:
-        return f"Did you mean one of these existing columns instead: {', '.join(unique_suggestions)}?"
+        return (
+            f"Did you mean one of these existing columns instead: {', '.join(unique_suggestions)}?"
+        )
     return "Please only use columns that exist in the schema."
 
 
@@ -863,8 +888,19 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
                 )
             raise ValueError(f"No DB config found for workspace: {workspace_id}")
 
-        customer_id, db_type_str, host, port, database, username, encrypted_password, max_row_limit = row
-        decrypted_password = await async_decrypt_password(encrypted_password, str(customer_id), conn)
+        (
+            customer_id,
+            db_type_str,
+            host,
+            port,
+            database,
+            username,
+            encrypted_password,
+            max_row_limit,
+        ) = row
+        decrypted_password = await async_decrypt_password(
+            encrypted_password, str(customer_id), conn
+        )
 
     # Map string to enum
     db_type_map = {
@@ -892,31 +928,37 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     retry=retry_if_exception_type(OperationalError),
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=2, max=10),
-    reraise=True
+    reraise=True,
 )
-
-async def verify_sql_security(sql: str, engine, workspace_id: str, db, team_id: str | None = None) -> None:
+async def verify_sql_security(
+    sql: str, engine, workspace_id: str, db, team_id: str | None = None
+) -> None:
     import re
 
     from backend.app.query.guards import verify_read_only_sql
-    
+
     # 1. Read-only guard
     verify_read_only_sql(sql)
-    
+
     # 2. App-Level Table RLS guard
     if workspace_id and db:
         all_tables = await _get_available_tables(engine, workspace_id, db=db, team_id=None)
         allowed_tables = await _get_available_tables(engine, workspace_id, db=db, team_id=team_id)
-        
+
         allowed_names = {t["name"].lower() for t in allowed_tables}
-        blocked_names = {t["name"].lower() for t in all_tables if t["name"].lower() not in allowed_names}
-        
+        blocked_names = {
+            t["name"].lower() for t in all_tables if t["name"].lower() not in allowed_names
+        }
+
         sql_clean = re.sub(r"'[^']*'", "", sql).lower()
-        words = set(re.findall(r'[a-z_][a-z0-9_]*', sql_clean))
-        
+        words = set(re.findall(r"[a-z_][a-z0-9_]*", sql_clean))
+
         for b_table in blocked_names:
             if b_table in words:
-                raise ValueError(f"Security Exception: You do not have permission to query the table '{b_table}'.")
+                raise ValueError(
+                    f"Security Exception: You do not have permission to query the table '{b_table}'."
+                )
+
 
 async def _execute_sql(
     sql: str,
@@ -953,7 +995,6 @@ async def _execute_sql(
 
     await verify_sql_security(sql, engine, workspace_id, db, team_id)
 
-
     from backend.app.db import execute_query
 
     # ── Resolve customer UUID for audit logging ──────────────────────────
@@ -973,13 +1014,13 @@ async def _execute_sql(
             logger.debug("Could not resolve customer UUID for audit: %s", workspace_id)
 
     if user_id:
-        try:
+        with contextlib.suppress(ValueError, AttributeError):
             _user_uuid = _uuid.UUID(user_id)
-        except (ValueError, AttributeError):
-            pass
 
     # ── Audit helper ────────────────────────────────────────────────────
-    async def _audit(success: bool, row_count: int = 0, error: str | None = None, mem_trace: dict | None = None) -> None:
+    async def _audit(
+        success: bool, row_count: int = 0, error: str | None = None, mem_trace: dict | None = None
+    ) -> None:
         """Write a query audit log entry if db + customer_uuid are available."""
         if db is None or _customer_uuid is None:
             return
@@ -1005,6 +1046,7 @@ async def _execute_sql(
                 details["error"] = error
 
             from backend.app.services.audit import AuditAction, AuditResourceType
+
             await audit.log_event(
                 customer_id=_customer_uuid,
                 user_id=_user_uuid,
@@ -1041,6 +1083,7 @@ async def _execute_sql(
 
     # Apply row limits
     import re
+
     row_limit = getattr(config, "max_row_limit", 1000)
 
     # Simple limit injection for safety if the query doesn't already have one
@@ -1048,14 +1091,17 @@ async def _execute_sql(
         if not re.search(r"FETCH\s+FIRST", transformed_sql, re.IGNORECASE):
             transformed_sql += f"\nFETCH FIRST {row_limit + 1} ROWS ONLY"
     else:
-        if not re.search(r"\bLIMIT\b", transformed_sql, re.IGNORECASE) and not re.search(r"\bTOP\b", transformed_sql, re.IGNORECASE):
+        if not re.search(r"\bLIMIT\b", transformed_sql, re.IGNORECASE) and not re.search(
+            r"\bTOP\b", transformed_sql, re.IGNORECASE
+        ):
             transformed_sql += f"\nLIMIT {row_limit + 1}"
 
     # ── Security Guard: Enforce SELECT-only queries ─────────────────────
     # We strip comments and whitespace to securely check the first word
     import re
-    clean_sql_for_check = re.sub(r'--.*$', '', transformed_sql, flags=re.MULTILINE)
-    clean_sql_for_check = re.sub(r'/\*.*?\*/', '', clean_sql_for_check, flags=re.DOTALL)
+
+    clean_sql_for_check = re.sub(r"--.*$", "", transformed_sql, flags=re.MULTILINE)
+    clean_sql_for_check = re.sub(r"/\*.*?\*/", "", clean_sql_for_check, flags=re.DOTALL)
     clean_sql_for_check = clean_sql_for_check.strip()
 
     if not clean_sql_for_check.upper().startswith("SELECT"):
@@ -1065,13 +1111,24 @@ async def _execute_sql(
         raise ValueError(error_msg)
 
     # Optional deep-scan for hidden DML inside CTEs (WITH)
-    dml_keywords = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "REPLACE", "MERGE", "GRANT", "REVOKE"]
+    dml_keywords = [
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "ALTER",
+        "TRUNCATE",
+        "REPLACE",
+        "MERGE",
+        "GRANT",
+        "REVOKE",
+    ]
     upper_sql = clean_sql_for_check.upper()
 
     # We want to be careful not to block column names like 'update_date'.
     # A simple regex looking for DML commands starting a statement or after a semicolon
     for kw in dml_keywords:
-        if re.search(r'(?:^|;|\s+)' + kw + r'\s+', upper_sql):
+        if re.search(r"(?:^|;|\s+)" + kw + r"\s+", upper_sql):
             error_msg = f"Security Exception: Query contains forbidden keyword '{kw}'."
             logger.warning("Blocked DML/DDL keyword in query: %s", transformed_sql[:200])
             await _audit(success=False, error=error_msg, mem_trace=mem_trace)
@@ -1093,7 +1150,7 @@ async def _execute_sql(
 
         # Sprint 14 Task 1: EXPLAIN Guard
         row_limit = getattr(config, "max_row_limit", 1000)
-        UI_RENDER_THRESHOLD = 5000  # Triggers background job if > 5000 rows
+        UI_RENDER_THRESHOLD = 5000  # noqa: N806  # Triggers background job if > 5000 rows
 
         explain_res = await explain_query(transformed_sql, config)
         estimated_rows = explain_res.get("estimated_rows", 0)
@@ -1107,15 +1164,23 @@ async def _execute_sql(
 
         # Sprint 14 Task 2: Background Data Offload
         if estimated_rows > UI_RENDER_THRESHOLD:
-            logger.info("Estimated rows (%d) exceeds UI threshold (%d). Offloading to background.", estimated_rows, UI_RENDER_THRESHOLD)
+            logger.info(
+                "Estimated rows (%d) exceeds UI threshold (%d). Offloading to background.",
+                estimated_rows,
+                UI_RENDER_THRESHOLD,
+            )
 
             # Fire and forget background export task
-            asyncio.create_task(export_massive_query_to_minio(
-                sql=transformed_sql,
-                db_config=config,
-                conversation_id=str(uuid.uuid4()) if not workspace_id else f"{workspace_id}_{user_id}",
-                workspace_id=workspace_id or "default"
-            ))
+            asyncio.create_task(
+                export_massive_query_to_minio(
+                    sql=transformed_sql,
+                    db_config=config,
+                    conversation_id=str(uuid.uuid4())
+                    if not workspace_id
+                    else f"{workspace_id}_{user_id}",
+                    workspace_id=workspace_id or "default",
+                )
+            )
 
             error_msg = f"Query estimated to return {estimated_rows:,} rows. Processing in background... A download link will be provided when ready."
             await _audit(success=True, row_count=0, mem_trace=mem_trace)
@@ -1126,7 +1191,12 @@ async def _execute_sql(
         if len(result) > row_limit:
             logger.warning("Query exceeded tenant row limit (%d). Truncating result.", row_limit)
             result = result[:row_limit]
-            explanation = explanation + f"\n\n⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows." if explanation else f"⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
+            explanation = (
+                explanation
+                + f"\n\n⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
+                if explanation
+                else f"⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
+            )
 
         await _audit(success=True, row_count=len(result), mem_trace=mem_trace)
         return result
@@ -1406,7 +1476,7 @@ def _build_chart(
     if "month" in columns and "region" in columns:
         x_key = "month"
 
-    MAX_CHART_POINTS = 1000
+    MAX_CHART_POINTS = 1000  # noqa: N806
     chart_data = _json_safe_rows(rows[:MAX_CHART_POINTS])
 
     # ── Multi-Series Pivot for Recharts ──────────────────────────────────────────
@@ -1438,7 +1508,7 @@ def _build_chart(
                         unique_categories.add(cat_str)
 
             chart_data = list(pivoted_dict.values())
-            y_keys = sorted(list(unique_categories))
+            y_keys = sorted(unique_categories)
             x_key = x_col
 
     return {
@@ -1633,7 +1703,9 @@ async def process_query(
         "user_preferences_count": len(mem_context.user_preferences) if mem_context else 0,
         "team_conventions_count": len(mem_context.team_conventions) if mem_context else 0,
         "similar_queries_count": len(mem_context.similar_queries) if mem_context else 0,
-        "raw": [r.get("memory", "")[:100] for r in (mem_context.raw_memories if mem_context else [])]
+        "raw": [
+            r.get("memory", "")[:100] for r in (mem_context.raw_memories if mem_context else [])
+        ],
     }
 
     # Stage 2: GENERATING_SQL
@@ -1670,9 +1742,7 @@ async def process_query(
 
         async with _AsyncSession(engine) as sess:
             # ── Resolve customer UUID from workspace slug ──────────────────
-            result = await sess.execute(
-                sa_select(Customer.id).where(Customer.slug == workspace_id)
-            )
+            result = await sess.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
             customer_row = result.scalar_one_or_none()
             customer_uuid: _uuid.UUID | None = customer_row
 
@@ -1686,9 +1756,9 @@ async def process_query(
             except (ValueError, TypeError):
                 team_uuid = None
 
-
             # ── Resolve LLM ────────────────────────────────────────────────
             from backend.app.services.llm_resolver import resolve_llm
+
             resolved_llm = await resolve_llm(workspace_id, sess)
             logger.info("Using LLM configuration: %s", resolved_llm)
 
@@ -1707,15 +1777,12 @@ async def process_query(
                         yield {
                             "event": "error",
                             "data": json.dumps(
-                                {"error": "Daily token quota exceeded. "
-                                 "Please try again tomorrow."}
+                                {"error": "Daily token quota exceeded. Please try again tomorrow."}
                             ),
                         }
                         return
                 except Exception:
-                    logger.exception(
-                        "Token quota check failed — allowing request to proceed"
-                    )
+                    logger.exception("Token quota check failed — allowing request to proceed")
                     token_svc = None
 
             # ── Generate SQL ───────────────────────────────────────────────
@@ -1723,14 +1790,14 @@ async def process_query(
                 gen_kwargs["team_id"] = team_id
                 gen_kwargs["db"] = sess
             sql, explanation, is_llm, token_usage = await _generate_sql(
-        request.question,
-        engine,
-        workspace_id,
-        memory_context=mem_context,
-        history=history,
+                request.question,
+                engine,
+                workspace_id,
+                memory_context=mem_context,
+                history=history,
                 llm=resolved_llm,
-        **gen_kwargs,
-    )
+                **gen_kwargs,
+            )
 
             # Run security checks *before* exposing the SQL to the user
             await verify_sql_security(sql, engine, workspace_id, sess, team_id)
@@ -1809,39 +1876,42 @@ async def process_query(
         # Stage 4.1: SELF_CORRECTION
         yield {
             "event": "status",
-            "data": json.dumps({
-                "status": "correcting_sql",
-                "message": "Syntax error detected. Attempting to self-correct SQL..."
-            })
+            "data": json.dumps(
+                {
+                    "status": "correcting_sql",
+                    "message": "Syntax error detected. Attempting to self-correct SQL...",
+                }
+            ),
         }
         try:
             # Re-generate SQL with error feedback
             error_str = str(e)
             correction_prompt = f"The previous SQL query failed with this error: {error_str}. "
-            
+
             invalid_col = _extract_invalid_column(error_str)
-            if invalid_col and 'table_columns' in locals():
-                suggestion = _get_relevant_columns(invalid_col, table_columns)
-                correction_prompt += f"\nThe column '{invalid_col}' does not exist. {suggestion}\nNEVER invent or guess columns. If the exact data is missing, use the closest relevant existing column."
+            if invalid_col:
+                correction_prompt += f"\nThe column '{invalid_col}' does not exist. NEVER invent or guess columns. If the exact data is missing, use the closest relevant existing column."
             else:
                 correction_prompt += "Please fix the syntax and ensure you ONLY use tables and columns defined in the schema."
-                
+
             history.append({"question": correction_prompt, "sql": sql})
             sql, explanation, is_llm, token_usage = await _generate_sql(
-        request.question,
-        engine,
-        workspace_id,
-        memory_context=mem_context,
-        history=history,
+                request.question,
+                engine,
+                workspace_id,
+                memory_context=mem_context,
+                history=history,
                 llm=resolved_llm,
-        **gen_kwargs,
-    )
+                **gen_kwargs,
+            )
 
             # Run security checks *before* exposing the SQL to the user
             await verify_sql_security(sql, engine, workspace_id, sess, team_id)
             yield {
                 "event": "sql",
-                "data": json.dumps({"sql": sql, "explanation": explanation + "\n\n(Self-corrected)"}),
+                "data": json.dumps(
+                    {"sql": sql, "explanation": explanation + "\n\n(Self-corrected)"}
+                ),
             }
             # Re-execute the corrected SQL
             async with _ExecSession(engine) as sess:
@@ -1860,7 +1930,9 @@ async def process_query(
             logger.exception("SQL self-correction failed")
             yield {
                 "event": "error",
-                "data": json.dumps({"error": f"Query execution failed after correction attempt: {retry_e}"}),
+                "data": json.dumps(
+                    {"error": f"Query execution failed after correction attempt: {retry_e}"}
+                ),
             }
             return
 
@@ -1917,6 +1989,7 @@ async def process_query(
     if len(rows) > 0 and sql != "SELECT 'no_tables_found' AS info":
         from backend.app.query.llm_insight import generate_insight_and_suggestions
         from backend.app.services.workspace_language import get_workspace_language
+
         # Pass a sample of rows to the insight generator to avoid massive prompt context
         sample_rows = _json_safe_rows(rows[:10])
         language = await get_workspace_language(workspace_id)

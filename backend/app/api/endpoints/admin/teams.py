@@ -26,9 +26,7 @@ router = APIRouter()
 # ── Slug → customer_id helper ───────────────────────────────────────
 
 
-async def resolve_customer_id(
-    current_user: UserContext, db: AsyncSession
-) -> uuid.UUID:
+async def resolve_customer_id(current_user: UserContext, db: AsyncSession) -> uuid.UUID:
     """Resolve the customer UUID from the workspace slug in the JWT.
 
     Follows the same pattern as `audit.py`: looks up `Customer.id`
@@ -37,9 +35,7 @@ async def resolve_customer_id(
     workspace_slug = getattr(current_user, "workspace_id", None)
 
     if workspace_slug:
-        result = await db.execute(
-            select(Customer.id).where(Customer.slug == workspace_slug)
-        )
+        result = await db.execute(select(Customer.id).where(Customer.slug == workspace_slug))
         customer_uuid = result.scalar_one_or_none()
         if customer_uuid:
             return customer_uuid
@@ -75,16 +71,12 @@ async def list_teams(
 ) -> list[TeamResponse]:
     """List all teams belonging to the current workspace's customer."""
     if not current_user.can_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
 
     result = await db.execute(
-        select(Team)
-        .where(Team.customer_id == customer_id)
-        .order_by(Team.name)
+        select(Team).where(Team.customer_id == customer_id).order_by(Team.name)
     )
     teams = result.scalars().all()
     return [TeamResponse.model_validate(t) for t in teams]
@@ -98,9 +90,7 @@ async def create_team(
 ) -> TeamResponse:
     """Create a new team for the current workspace's customer."""
     if not current_user.can_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
 
@@ -121,9 +111,7 @@ async def delete_team(
 ) -> None:
     """Delete a team (must belong to the current workspace's customer)."""
     if not current_user.can_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     customer_id = await resolve_customer_id(current_user, db)
 

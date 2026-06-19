@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.models.enums import UserRole
 
-
 # ── Teams ────────────────────────────────────────────────────────────
 
 
@@ -41,13 +40,14 @@ class TeamResponse(TeamBase):
 
 class UserCreate(BaseModel):
     """Payload for creating a new user (invitation/manual creation)."""
-    
+
     email: str = Field(..., description="User's email address")
     display_name: str = Field(..., description="User's full name")
     role: UserRole = Field(default=UserRole.VIEWER, description="User's role")
     team_id: uuid.UUID | None = Field(
         default=None, description="Assign to a team (None to remove from team)"
     )
+
 
 class UserUpdate(BaseModel):
     """Payload for updating a user's role and/or team assignment."""

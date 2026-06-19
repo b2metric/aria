@@ -7,7 +7,7 @@ used in CHECK constraints and queried directly.
 import enum
 
 
-class UserRole(str, enum.Enum):
+class UserRole(enum.StrEnum):
     """Role within a customer tenant."""
 
     ADMIN = "admin"
@@ -16,8 +16,7 @@ class UserRole(str, enum.Enum):
     VIEWER = "viewer"
 
 
-
-class TeamRole(str, enum.Enum):
+class TeamRole(enum.StrEnum):
     """Role within a team."""
 
     OWNER = "owner"
@@ -25,7 +24,7 @@ class TeamRole(str, enum.Enum):
     MEMBER = "member"
 
 
-class QueryStatus(str, enum.Enum):
+class QueryStatus(enum.StrEnum):
     """Lifecycle states of a natural-language query."""
 
     PENDING = "pending"
@@ -35,7 +34,7 @@ class QueryStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
-class ArtifactType(str, enum.Enum):
+class ArtifactType(enum.StrEnum):
     """Types of generated output artifacts."""
 
     CHART = "chart"
@@ -44,7 +43,7 @@ class ArtifactType(str, enum.Enum):
     INSIGHT = "insight"
 
 
-class ArtifactStatus(str, enum.Enum):
+class ArtifactStatus(enum.StrEnum):
     """Publishing states for artifacts."""
 
     DRAFT = "draft"
@@ -52,7 +51,7 @@ class ArtifactStatus(str, enum.Enum):
     ARCHIVED = "archived"
 
 
-class JobStatus(str, enum.Enum):
+class JobStatus(enum.StrEnum):
     """Lifecycle states of a background job."""
 
     PENDING = "pending"
@@ -62,7 +61,7 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
-class JobType(str, enum.Enum):
+class JobType(enum.StrEnum):
     """Categories of background work."""
 
     SCHEMA_SYNC = "schema_sync"
@@ -71,7 +70,7 @@ class JobType(str, enum.Enum):
     DATA_EXPORT = "data_export"
 
 
-class DatabaseType(str, enum.Enum):
+class DatabaseType(enum.StrEnum):
     """Supported external database engines."""
 
     POSTGRESQL = "postgresql"
@@ -83,7 +82,7 @@ class DatabaseType(str, enum.Enum):
     MSSQL = "mssql"
 
 
-class KnowledgeType(str, enum.Enum):
+class KnowledgeType(enum.StrEnum):
     """Categories of vault knowledge entries."""
 
     SQL_PATTERN = "sql_pattern"
@@ -92,14 +91,14 @@ class KnowledgeType(str, enum.Enum):
     RELATIONSHIP_DEF = "relationship_def"
 
 
-class QuotaPeriod(str, enum.Enum):
+class QuotaPeriod(enum.StrEnum):
     """Token quota reset interval."""
 
     DAILY = "daily"
     MONTHLY = "monthly"
 
 
-class LLMProvider(str, enum.Enum):
+class LLMProvider(enum.StrEnum):
     """Supported LLM providers for BYOK."""
 
     OPENAI = "openai"

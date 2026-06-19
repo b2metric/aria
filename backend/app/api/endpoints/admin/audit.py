@@ -63,20 +63,19 @@ async def list_audit_logs(
     Results are ordered newest-first.
     """
     if not current_user.can_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     try:
-        from backend.app.models.organization import Customer
         from sqlalchemy import select as sa_select
 
+        from backend.app.models.organization import Customer
+
         customer_id_raw = getattr(current_user, "workspace_id", None)
-        
+
         # Look up the actual customer UUID from the slug
         result = await db.execute(sa_select(Customer.id).where(Customer.slug == customer_id_raw))
         customer_uuid = result.scalar_one_or_none()
-        
+
         if customer_uuid:
             customer_id = customer_uuid
         elif customer_id_raw and customer_id_raw != "stc-kuwait":
@@ -137,6 +136,4 @@ async def list_audit_logs(
         }
     except Exception as exc:
         log.error("audit.list failed: %s", exc)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list audit logs: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Failed to list audit logs: {exc}") from exc

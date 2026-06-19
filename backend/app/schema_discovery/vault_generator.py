@@ -8,15 +8,13 @@ knowledge base for NL2SQL generation.
 from __future__ import annotations
 
 import logging
-import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from backend.app.schema_discovery.models import (
     ColumnInfo,
-    ForeignKeyInfo,
     SchemaSnapshot,
     TableInfo,
 )
@@ -31,50 +29,37 @@ logger = logging.getLogger(__name__)
 # Common telecom/business keywords mapped from column patterns
 _KEYWORD_PATTERNS: list[tuple[str, list[str]]] = [
     # Revenue & financial
-    (r"(?i)(revenue|billamount|amount|price|cost|fee|rental|charge)", 
-     ["revenue", "billing", "financial", "money", "income", "payment"]),
-    (r"(?i)(recharge|topup|top_up)", 
-     ["recharge", "topup", "balance", "prepaid", "credit"]),
-    
+    (
+        r"(?i)(revenue|billamount|amount|price|cost|fee|rental|charge)",
+        ["revenue", "billing", "financial", "money", "income", "payment"],
+    ),
+    (r"(?i)(recharge|topup|top_up)", ["recharge", "topup", "balance", "prepaid", "credit"]),
     # Subscriber/customer
-    (r"(?i)(subno|msisdn|phone|mobile)", 
-     ["subscriber", "phone number", "msisdn", "mobile"]),
-    (r"(?i)(contrno|contract)", 
-     ["contract", "subscriber", "customer", "account"]),
-    (r"(?i)(nationality|country)", 
-     ["nationality", "country", "demographic", "geography"]),
-    
+    (r"(?i)(subno|msisdn|phone|mobile)", ["subscriber", "phone number", "msisdn", "mobile"]),
+    (r"(?i)(contrno|contract)", ["contract", "subscriber", "customer", "account"]),
+    (r"(?i)(nationality|country)", ["nationality", "country", "demographic", "geography"]),
     # Product/service
-    (r"(?i)(offer|product|bundle|package|plan)", 
-     ["product", "offer", "package", "bundle", "tariff"]),
-    (r"(?i)(provision|subscription|service)", 
-     ["provision", "subscription", "service", "activation"]),
-    
+    (
+        r"(?i)(offer|product|bundle|package|plan)",
+        ["product", "offer", "package", "bundle", "tariff"],
+    ),
+    (
+        r"(?i)(provision|subscription|service)",
+        ["provision", "subscription", "service", "activation"],
+    ),
     # Usage
-    (r"(?i)(voice|call|minute|duration)", 
-     ["voice", "call", "usage", "minutes"]),
-    (r"(?i)(sms|message)", 
-     ["sms", "message", "usage"]),
-    (r"(?i)(data|gprs|mb|gb|internet)", 
-     ["data", "internet", "usage", "bandwidth"]),
-    (r"(?i)(roaming|international)", 
-     ["roaming", "international", "travel"]),
-    
+    (r"(?i)(voice|call|minute|duration)", ["voice", "call", "usage", "minutes"]),
+    (r"(?i)(sms|message)", ["sms", "message", "usage"]),
+    (r"(?i)(data|gprs|mb|gb|internet)", ["data", "internet", "usage", "bandwidth"]),
+    (r"(?i)(roaming|international)", ["roaming", "international", "travel"]),
     # Time/date
-    (r"(?i)(date|_dt$|time)", 
-     ["date", "time", "temporal"]),
-    (r"(?i)(snapshot|exec_date|log)", 
-     ["snapshot", "etl", "batch"]),
-    
+    (r"(?i)(date|_dt$|time)", ["date", "time", "temporal"]),
+    (r"(?i)(snapshot|exec_date|log)", ["snapshot", "etl", "batch"]),
     # State/status
-    (r"(?i)(state|status|active|flag)", 
-     ["state", "status", "lifecycle"]),
-    (r"(?i)(churn|grace|disable)", 
-     ["churn", "retention", "lifecycle"]),
-    
+    (r"(?i)(state|status|active|flag)", ["state", "status", "lifecycle"]),
+    (r"(?i)(churn|grace|disable)", ["churn", "retention", "lifecycle"]),
     # Channel
-    (r"(?i)(channel|ussd|ivr|app|web|dealer)", 
-     ["channel", "touchpoint", "acquisition"]),
+    (r"(?i)(channel|ussd|ivr|app|web|dealer)", ["channel", "touchpoint", "acquisition"]),
 ]
 
 # Table name patterns for description inference
@@ -89,13 +74,13 @@ _TABLE_DESCRIPTIONS: dict[str, str] = {
 def _infer_keywords_from_table(table: TableInfo) -> list[str]:
     """Infer semantic keywords from table name and columns."""
     keywords: set[str] = set()
-    
+
     # Check table name
     table_upper = table.name.upper()
     for pattern, kws in _KEYWORD_PATTERNS:
         if re.search(pattern, table.name):
             keywords.update(kws)
-    
+
     # Common table prefixes
     if "PREP" in table_upper:
         keywords.update(["prepaid", "subscriber"])
@@ -107,35 +92,35 @@ def _infer_keywords_from_table(table: TableInfo) -> list[str]:
         keywords.update(["history", "historical", "time series"])
     if "SCD2" in table_upper:
         keywords.update(["slowly changing dimension", "history", "versioned"])
-    
+
     # Check all columns
     for col in table.columns:
         for pattern, kws in _KEYWORD_PATTERNS:
             if re.search(pattern, col.name):
                 keywords.update(kws)
-    
+
     return sorted(keywords)
 
 
 def _infer_description_from_table(table: TableInfo) -> str:
     """Generate a human-readable description for the table."""
     name = table.name
-    
+
     # Check prefix
     prefix_desc = ""
     for prefix, desc in _TABLE_DESCRIPTIONS.items():
         if name.upper().startswith(prefix):
             prefix_desc = desc
             break
-    
+
     # Extract meaningful parts from name
     # e.g., FCT_PREP_RECHARGE -> Prepaid Recharge
     parts = name.replace("FCT_", "").replace("DIM_", "").replace("VW_", "").replace("AGG_", "")
     parts = parts.replace("_", " ").title()
-    
+
     if prefix_desc:
         return f"{prefix_desc}{parts}"
-    
+
     return f"Table containing {parts} data"
 
 
@@ -161,7 +146,7 @@ def generate_table_markdown(
     custom_metadata: dict[str, Any] | None = None,
 ) -> str:
     """Generate Obsidian-compatible markdown for a single table.
-    
+
     Format:
     ---
     table: TABLE_NAME
@@ -171,24 +156,24 @@ def generate_table_markdown(
     keywords: [keyword1, keyword2, ...]
     row_count: N
     ---
-    
+
     # TABLE_NAME
-    
+
     **Description:** ...
-    
+
     ## Columns
-    
+
     | Column | Type | Description |
     |--------|------|-------------|
     | COL1   | TYPE | ...         |
-    
+
     ## Relationships
-    
+
     - FK_NAME: COL -> TARGET.COL
     """
     keywords = _infer_keywords_from_table(table)
     description = _infer_description_from_table(table)
-    
+
     # YAML frontmatter
     lines = [
         "---",
@@ -196,54 +181,58 @@ def generate_table_markdown(
     ]
     if table.schema_name:
         lines.append(f"schema: {table.schema_name}")
-    lines.extend([
-        f"database: {db_type}",
-        f"workspace: {workspace_id}",
-        f"keywords: [{', '.join(keywords)}]",
-    ])
+    lines.extend(
+        [
+            f"database: {db_type}",
+            f"workspace: {workspace_id}",
+            f"keywords: [{', '.join(keywords)}]",
+        ]
+    )
     if table.row_count_estimate is not None:
         lines.append(f"row_count: {table.row_count_estimate}")
     if custom_metadata:
         for key, value in custom_metadata.items():
             lines.append(f"{key}: {value}")
-    lines.append(f"generated_at: {datetime.now(timezone.utc).isoformat()}")
+    lines.append(f"generated_at: {datetime.now(UTC).isoformat()}")
     lines.append("---")
     lines.append("")
-    
+
     # Title and description
     lines.append(f"# {table.name}")
     lines.append("")
     lines.append(f"**Description:** {description}")
     lines.append("")
-    
+
     # Columns table
     lines.append("## Columns")
     lines.append("")
     lines.append("| Column | Type | Nullable | PK | Description |")
     lines.append("|--------|------|----------|----|-----------—|")
-    
+
     for col in table.columns:
         nullable = "✓" if col.nullable else "✗"
         pk = "✓" if col.is_primary_key else ""
         col_desc = col.comment or _infer_column_description(col.name)
         lines.append(f"| {col.name} | {col.data_type} | {nullable} | {pk} | {col_desc} |")
-    
+
     lines.append("")
-    
+
     # Foreign keys / relationships
     if table.foreign_keys:
         lines.append("## Relationships")
         lines.append("")
         for fk in table.foreign_keys:
-            lines.append(f"- **{fk.constraint_name or 'FK'}**: `{fk.source_column}` → `{fk.target_table}.{fk.target_column}`")
+            lines.append(
+                f"- **{fk.constraint_name or 'FK'}**: `{fk.source_column}` → `{fk.target_table}.{fk.target_column}`"
+            )
         lines.append("")
-    
+
     # Keywords section (redundant but helps with grep/search)
     lines.append("## Keywords")
     lines.append("")
     lines.append(", ".join(keywords))
     lines.append("")
-    
+
     return "\n".join(lines)
 
 
@@ -269,11 +258,11 @@ def _infer_column_description(col_name: str) -> str:
         r"(?i)_mb$": "Data volume in MB",
         r"(?i)_min$": "Duration in minutes",
     }
-    
+
     for pattern, desc in patterns.items():
         if re.search(pattern, col_name):
             return desc
-    
+
     # Fallback: humanize column name
     return col_name.replace("_", " ").title()
 
@@ -289,20 +278,20 @@ def generate_vault(
     overwrite: bool = True,
 ) -> dict[str, Any]:
     """Generate Obsidian vault files from a schema snapshot.
-    
+
     Args:
         snapshot: The discovered schema snapshot
         vault_base_path: Base path for vault files (e.g., docs/vaults)
         overwrite: Whether to overwrite existing files
-        
+
     Returns:
         Statistics about generated files
     """
     vault_path = Path(vault_base_path) / snapshot.workspace_id / "tables"
     vault_path.mkdir(parents=True, exist_ok=True)
-    
+
     logger.info("Generating vault at %s", vault_path)
-    
+
     stats = {
         "workspace_id": snapshot.workspace_id,
         "vault_path": str(vault_path),
@@ -311,15 +300,15 @@ def generate_vault(
         "files_skipped": 0,
         "errors": [],
     }
-    
+
     for table in snapshot.tables:
         filename = f"{table.name.lower()}.md"
         filepath = vault_path / filename
-        
+
         if filepath.exists() and not overwrite:
             stats["files_skipped"] += 1
             continue
-        
+
         try:
             content = generate_table_markdown(
                 table=table,
@@ -332,19 +321,19 @@ def generate_vault(
         except Exception as e:
             stats["errors"].append({"table": table.name, "error": str(e)})
             logger.error("Failed to generate %s: %s", table.name, e)
-    
+
     # Generate index.md
     index_path = vault_path.parent / "index.md"
     index_content = _generate_index(snapshot)
     index_path.write_text(index_content, encoding="utf-8")
-    
+
     logger.info(
         "Vault generation complete: %d created, %d skipped, %d errors",
         stats["files_created"],
         stats["files_skipped"],
         len(stats["errors"]),
     )
-    
+
     return stats
 
 
@@ -355,7 +344,7 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
         f"workspace: {snapshot.workspace_id}",
         f"database: {snapshot.db_type}",
         f"table_count: {snapshot.table_count}",
-        f"generated_at: {datetime.now(timezone.utc).isoformat()}",
+        f"generated_at: {datetime.now(UTC).isoformat()}",
         "---",
         "",
         f"# {snapshot.workspace_id} Knowledge Base",
@@ -367,12 +356,12 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
         "## Tables",
         "",
     ]
-    
+
     # Group by prefix
     dim_tables = []
     fct_tables = []
     other_tables = []
-    
+
     for table in snapshot.tables:
         name = table.name.upper()
         if name.startswith("DIM_"):
@@ -381,7 +370,7 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
             fct_tables.append(table)
         else:
             other_tables.append(table)
-    
+
     if dim_tables:
         lines.append("### Dimension Tables")
         lines.append("")
@@ -389,7 +378,7 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
             row_info = f" ({t.row_count_estimate:,} rows)" if t.row_count_estimate else ""
             lines.append(f"- [[tables/{t.name.lower()}|{t.name}]]{row_info}")
         lines.append("")
-    
+
     if fct_tables:
         lines.append("### Fact Tables")
         lines.append("")
@@ -397,7 +386,7 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
             row_info = f" ({t.row_count_estimate:,} rows)" if t.row_count_estimate else ""
             lines.append(f"- [[tables/{t.name.lower()}|{t.name}]]{row_info}")
         lines.append("")
-    
+
     if other_tables:
         lines.append("### Other Tables")
         lines.append("")
@@ -405,7 +394,7 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
             row_info = f" ({t.row_count_estimate:,} rows)" if t.row_count_estimate else ""
             lines.append(f"- [[tables/{t.name.lower()}|{t.name}]]{row_info}")
         lines.append("")
-    
+
     return "\n".join(lines)
 
 
@@ -416,7 +405,7 @@ async def generate_vault_async(
 ) -> dict[str, Any]:
     """Async wrapper for generate_vault."""
     import asyncio
-    
+
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,

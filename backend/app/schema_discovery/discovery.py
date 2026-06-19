@@ -8,7 +8,6 @@ own SQL dialect for information_schema queries.
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from backend.app.db.executor import get_executor
 from backend.app.db.models import DatabaseType, DBConfig
@@ -295,19 +294,19 @@ def discover_schema(
     include_row_counts: bool = True,
 ) -> SchemaSnapshot:
     """Discover database schema by introspecting the target database.
-    
+
     Args:
         config: Database connection configuration
         workspace_id: The workspace this schema belongs to
         db_config_id: Identifier for this database configuration
         include_row_counts: Whether to fetch estimated row counts (can be slow)
-        
+
     Returns:
         A complete SchemaSnapshot with all tables, columns, and foreign keys.
     """
     executor = get_executor(config)
     queries = _get_queries(config.db_type)
-    
+
     logger.info(
         "Discovering schema for %s://%s:%d/%s",
         config.db_type.value,
@@ -315,67 +314,72 @@ def discover_schema(
         config.get_port(),
         config.database,
     )
-    
+
     # 1. Get all tables
     tables_result = executor.execute(queries["tables"])
     logger.info("Found %d tables", len(tables_result))
-    
+
     tables: list[TableInfo] = []
-    
+
     for table_row in tables_result:
         table_name = table_row.get("TABLE_NAME") or table_row.get("table_name")
         schema_name = table_row.get("TABLE_SCHEMA") or table_row.get("table_schema")
-        
+
         if not table_name:
             continue
-            
+
         # 2. Get columns for this table
         col_params = {"table_name": table_name}
         if schema_name and config.db_type != DatabaseType.ORACLE:
             col_params["schema_name"] = schema_name
-            
+
         columns_result = executor.execute(queries["columns"], col_params)
-        
+
         # 3. Get primary keys
         pk_params = {"table_name": table_name}
         if schema_name and config.db_type != DatabaseType.ORACLE:
             pk_params["schema_name"] = schema_name
         pk_result = executor.execute(queries["pks"], pk_params)
-        pk_columns = {
-            (r.get("COLUMN_NAME") or r.get("column_name"))
-            for r in pk_result
-        }
-        
+        pk_columns = {(r.get("COLUMN_NAME") or r.get("column_name")) for r in pk_result}
+
         # Build column list
         columns: list[ColumnInfo] = []
         for col_row in columns_result:
             col_name = col_row.get("COLUMN_NAME") or col_row.get("column_name")
             data_type = col_row.get("DATA_TYPE") or col_row.get("data_type")
-            is_nullable = (col_row.get("IS_NULLABLE") or col_row.get("is_nullable")) in ("YES", "Y", True)
-            
-            columns.append(ColumnInfo(
-                name=col_name,
-                data_type=data_type.upper() if data_type else "UNKNOWN",
-                nullable=is_nullable,
-                is_primary_key=col_name in pk_columns,
-            ))
-        
+            is_nullable = (col_row.get("IS_NULLABLE") or col_row.get("is_nullable")) in (
+                "YES",
+                "Y",
+                True,
+            )
+
+            columns.append(
+                ColumnInfo(
+                    name=col_name,
+                    data_type=data_type.upper() if data_type else "UNKNOWN",
+                    nullable=is_nullable,
+                    is_primary_key=col_name in pk_columns,
+                )
+            )
+
         # 4. Get foreign keys
         fk_params = {"table_name": table_name}
         if schema_name and config.db_type != DatabaseType.ORACLE:
             fk_params["schema_name"] = schema_name
         fk_result = executor.execute(queries["fks"], fk_params)
-        
+
         foreign_keys: list[ForeignKeyInfo] = []
         for fk_row in fk_result:
-            foreign_keys.append(ForeignKeyInfo(
-                source_table=table_name,
-                source_column=fk_row.get("SOURCE_COLUMN") or fk_row.get("source_column"),
-                target_table=fk_row.get("TARGET_TABLE") or fk_row.get("target_table"),
-                target_column=fk_row.get("TARGET_COLUMN") or fk_row.get("target_column"),
-                constraint_name=fk_row.get("CONSTRAINT_NAME") or fk_row.get("constraint_name"),
-            ))
-        
+            foreign_keys.append(
+                ForeignKeyInfo(
+                    source_table=table_name,
+                    source_column=fk_row.get("SOURCE_COLUMN") or fk_row.get("source_column"),
+                    target_table=fk_row.get("TARGET_TABLE") or fk_row.get("target_table"),
+                    target_column=fk_row.get("TARGET_COLUMN") or fk_row.get("target_column"),
+                    constraint_name=fk_row.get("CONSTRAINT_NAME") or fk_row.get("constraint_name"),
+                )
+            )
+
         # 5. Get row count estimate (optional)
         row_count = None
         if include_row_counts:
@@ -390,15 +394,17 @@ def discover_schema(
                         row_count = int(row_count)
             except Exception as e:
                 logger.warning("Could not get row count for %s: %s", table_name, e)
-        
-        tables.append(TableInfo(
-            name=table_name,
-            schema_name=schema_name,
-            columns=columns,
-            foreign_keys=foreign_keys,
-            row_count_estimate=row_count,
-        ))
-    
+
+        tables.append(
+            TableInfo(
+                name=table_name,
+                schema_name=schema_name,
+                columns=columns,
+                foreign_keys=foreign_keys,
+                row_count_estimate=row_count,
+            )
+        )
+
     snapshot = SchemaSnapshot(
         workspace_id=workspace_id,
         db_config_id=db_config_id,
@@ -410,14 +416,14 @@ def discover_schema(
             "port": config.get_port(),
         },
     )
-    
+
     logger.info(
         "Schema discovery complete: %d tables, %d columns, %d foreign keys",
         snapshot.table_count,
         snapshot.total_columns,
         snapshot.total_foreign_keys,
     )
-    
+
     return snapshot
 
 
@@ -429,7 +435,7 @@ async def discover_schema_async(
 ) -> SchemaSnapshot:
     """Async wrapper for discover_schema (runs in thread pool)."""
     import asyncio
-    
+
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(
         None,

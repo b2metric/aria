@@ -9,13 +9,12 @@ from dotenv import load_dotenv
 
 load_dotenv("/Users/tunasonmez/projects/b2metric-aria/.env")
 
-from backend.app.schema_discovery.cache import (
+from backend.app.schema_discovery.cache import (  # noqa: E402
     get_schema,
-    invalidate_schema,
     invalidate_workspace,
     set_schema,
 )
-from backend.app.schema_discovery.models import (
+from backend.app.schema_discovery.models import (  # noqa: E402
     ColumnInfo,
     SchemaSnapshot,
     TableInfo,
@@ -87,6 +86,7 @@ async def main():
 
     # ── Test: corrupted cache entry ──
     import redis.asyncio as aioredis
+
     from backend.app.core.config import get_settings
 
     settings = get_settings()
