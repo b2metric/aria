@@ -62,6 +62,7 @@ codegraph/graph.html
 codegraph/drift-audit.json
 frontend/tsconfig.tsbuildinfo
 frontend/test-results/
+frontend/coverage/
 
 # Generated business PDFs (regenerable from docs/business/*.md; keep on disk, out of git)
 docs/business/pdf/
