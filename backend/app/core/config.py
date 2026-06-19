@@ -45,6 +45,7 @@ class Settings(BaseSettings):
 
     # ── Redis ────────────────────────────────────────────────────────
     redis_url: str = "redis://localhost:6380/0"
+    schema_cache_ttl: int = 1800  # TTL (s) for cached schema snapshots in Redis
 
     # ── MinIO ────────────────────────────────────────────────────────
     minio_endpoint: str = "localhost:9000"
