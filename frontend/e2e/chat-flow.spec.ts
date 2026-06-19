@@ -95,8 +95,8 @@ test.describe("Chat flow", () => {
     await searchInput.fill("monthly revenue");
     await searchInput.press("Enter");
 
-    // Should navigate to chat with the query
-    await expect(page).toHaveURL(/\/chat\?q=monthly\+revenue/, {
+    // Should navigate to chat with the query (space is %20 via encodeURIComponent)
+    await expect(page).toHaveURL(/\/chat\?q=monthly(%20|\+)revenue/, {
       timeout: 10000,
     });
   });

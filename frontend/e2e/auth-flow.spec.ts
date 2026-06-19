@@ -4,6 +4,14 @@ const USER = process.env.E2E_TEST_USER || "admin@aria.local";
 const PASS = process.env.E2E_TEST_PASS || "admin";
 
 test.describe("ARIA real auth flow via Custom Credentials", () => {
+  // Real credentials login hits the backend + Keycloak; it cannot pass in the
+  // frontend-only CI job. Run it against a live stack by setting E2E_TEST_USER /
+  // E2E_TEST_PASS (same gating as admin-flow.spec.ts).
+  test.skip(
+    !process.env.E2E_TEST_USER || !process.env.E2E_TEST_PASS,
+    "set E2E_TEST_USER / E2E_TEST_PASS (+ live backend & Keycloak) to run the real auth flow",
+  );
+
   test("login → dashboard → token refresh → logout", async ({ page }) => {
     // 1) Go to login
     await page.goto("/login");
