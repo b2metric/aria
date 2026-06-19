@@ -86,17 +86,18 @@ async def get_tenant_config(
 
     try:
         async with get_sessionmaker()() as session:
-            quota = (
-                await session.execute(
-                    select(TokenQuota)
-                    .where(TokenQuota.is_active.is_(True))
-                    .order_by(TokenQuota.created_at.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-
             customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
             if customer:
+                # Token quota scoped to THIS customer (no cross-tenant default leak).
+                quota = (
+                    await session.execute(
+                        select(TokenQuota)
+                        .where(TokenQuota.is_active.is_(True), TokenQuota.customer_id == customer.id)
+                        .order_by(TokenQuota.created_at.desc())
+                        .limit(1)
+                    )
+                ).scalar_one_or_none()
+
                 db_config_res = (await session.execute(
                     select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
                 )).scalar_one_or_none()
@@ -150,12 +151,17 @@ async def update_tenant_config(
 
     try:
         async with get_sessionmaker()() as session:
-            # Handle Quotas
+            # Handle Quotas (scoped to this customer)
             if body.daily_token_limit is not None:
+                q_customer = (
+                    await session.execute(select(Customer).where(Customer.slug == workspace_id))
+                ).scalar_one_or_none()
+                if not q_customer:
+                    raise HTTPException(status_code=404, detail="Customer workspace not found")
                 quota = (
                     await session.execute(
                         select(TokenQuota)
-                        .where(TokenQuota.is_active.is_(True))
+                        .where(TokenQuota.is_active.is_(True), TokenQuota.customer_id == q_customer.id)
                         .order_by(TokenQuota.created_at.desc())
                         .limit(1)
                     )
@@ -166,12 +172,13 @@ async def update_tenant_config(
                     log.info("admin.tenant: Updated quota %s: token_limit=%d", quota.id, quota.token_limit)
                 else:
                     new_quota = TokenQuota(
+                        customer_id=q_customer.id,
                         token_limit=body.daily_token_limit,
                         is_active=True,
                     )
                     session.add(new_quota)
                     quota = new_quota
-                    log.info("admin.tenant: Created new quota: token_limit=%d", quota.token_limit)
+                    log.info("admin.tenant: Created customer quota: token_limit=%d", quota.token_limit)
 
             # Handle language (stored on Customer.settings JSONB)
             if body.language is not None:
