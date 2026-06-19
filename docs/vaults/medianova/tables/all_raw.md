@@ -2,9 +2,9 @@
 table: ALL_RAW
 database: oracle
 workspace: medianova
-keywords: [access log, bandwidth, cdn, country, data, date, demographic, edge, geography,
-  internet, istek, lifecycle, log, nationality, raw, request, state, status, temporal,
-  time, traffic, usage]
+keywords: [access log, bandwidth, cache tier, cdn, country, data, date, demographic,
+  edge, feda, geography, internet, istek, lifecycle, log, mcache, nationality, node,
+  raw, request, state, status, temporal, time, traffic, usage, uç, önbellek katmanı]
 generated_at: 2026-06-19 08:10:39.174474+00:00
 description: 'Medianova CDN edge tarafından sunulan her istek için bir satır içeren
   ham HTTP erişim günlüğü. Tüm trafik, gecikme, önbellek ve izleyici analizi için
@@ -13,7 +13,7 @@ description: 'Medianova CDN edge tarafından sunulan her istek için bir satır 
   TIMESTAMP kullanın.'
 business_name: Ham CDN Edge İstekleri
 data_domain: CDN Dağıtımı
-enriched_at: '2026-06-19T09:35:41.377396+00:00'
+enriched_at: '2026-06-19T13:10:53.230933+00:00'
 ---
 
 # ALL_RAW
@@ -25,7 +25,7 @@ enriched_at: '2026-06-19T09:35:41.377396+00:00'
 | Column | Type | Nullable | PK | Description |
 |--------|------|----------|----|-----------—|
  | Q_TIMESTAMP | TIMESTAMP(6) | ✓ |  | Analitik saati; ~16k satır 1970-01-01 (geçersiz) — zaman filtreleme için KULLANMAYIN. | 
- | PROXY_CACHE_STATUS | VARCHAR2 | ✓ |  | Önbellek sonucu: HIT (edge'den sunuldu ~0.045s), MISS (~0.210s), EXPIRED (~0.286s) veya boş (önbelleklenemez). Önbellek İsabet Oranını belirler. | 
+ | PROXY_CACHE_STATUS | VARCHAR2 | ✓ |  | Önbellek sonucu. Değerler SADECE: 'HIT', 'MISS', 'EXPIRED', '' (boş). STALE_HIT YOKTUR. | 
  | TIMESTAMP | TIMESTAMP(6) | ✓ |  | İsteğin gerçek olay zamanı (zaman filtreleri için bunu kullanın). | 
 | REMOTE_ADDR | VARCHAR2 | ✓ |  | Remote Addr |
 | REMOTE_PORT | VARCHAR2 | ✓ |  | Remote Port |
@@ -55,7 +55,7 @@ enriched_at: '2026-06-19T09:35:41.377396+00:00'
 | ROLE | VARCHAR2 | ✓ |  | Role |
 | HTTP_RANGE | VARCHAR2 | ✓ |  | Http Range |
  | ACCOUNT_TYPE | VARCHAR2 | ✓ |  | Müşteri hesap katmanı. | 
- | SERVER_ROLE | VARCHAR2 | ✓ |  | İsteği sunan CDN önbellek katmanı: Node (edge, ~%62 isabet), Mcache (orta), Feda (sadece getir, tasarım gereği %0 isabet). | 
+ | SERVER_ROLE | VARCHAR2 | ✓ |  | Önbellek katmanı: 'Node' (= Edge / uç), 'Mcache' (orta), 'Feda' (origin-fetch). Edge/uç için SERVER_ROLE='Node'. | 
 | HTTP_X_FORWARDED_FOR | VARCHAR2 | ✓ |  | Http X Forwarded For |
 | HTTP_PROTOCOL | VARCHAR2 | ✓ |  | Http Protocol |
  | RESOURCE_NAME | VARCHAR2 | ✓ |  | CDN özelliği/kaynağı (örn. b2metric-video.lg, ssport-live). | 
@@ -101,16 +101,7 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 
 - `RESOURCE_NAME` → `DS_PATHA_5M.RESOURCE_NAME` (lookup) — Same property/resource as the 5-min content rollup.
 - `DATACENTER` → `DS_BASE_1M.DATACENTER` (lookup) — Same PoP dimension as the 1-min rollup.
-## Business Metadata
-
-**Business Name:** Ham CDN Edge İstekleri
-**Description:** Medianova CDN edge tarafından sunulan her istek için bir satır içeren ham HTTP erişim günlüğü. Tüm trafik, gecikme, önbellek ve izleyici analizi için temel kaynak. 2026-06-01..2026-06-12 arasını kapsar (7-10 Haziran'da 4 günlük boşluk). Uyarı: 16.127 satırda Q_TIMESTAMP = 1970-01-01 (geçersiz); gerçek olay zamanı için TIMESTAMP kullanın.
-**Data Domain:** CDN Dağıtımı
-**Business Owner:** Platform / SRE
-**Update Frequency:** Streaming (per request)
-**Notes:** Tanecik = tek HTTP isteği. ~1.07M satır. Toplu analizler için DS_BASE_1M ve DS_PATHA_5M özetlerini tercih edin; detaylı/forensik sorgular için ALL_RAW kullanın.
-
-### Column Descriptions
+## Column Descriptions
 
 - **TIMESTAMP**: İsteğin gerçek olay zamanı (zaman filtreleri için bunu kullanın).
 - **Q_TIMESTAMP**: Analitik saati; ~16k satır 1970-01-01 (geçersiz) — zaman filtreleme için KULLANMAYIN.
@@ -136,3 +127,10 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 
 - `RESOURCE_NAME` → `DS_PATHA_5M.RESOURCE_NAME` (lookup) — Same property/resource as the 5-min content rollup.
 - `DATACENTER` → `DS_BASE_1M.DATACENTER` (lookup) — Same PoP dimension as the 1-min rollup.
+## Business Metadata
+
+
+### Column Descriptions
+
+- **SERVER_ROLE**: Önbellek katmanı: 'Node' (= Edge / uç), 'Mcache' (orta), 'Feda' (origin-fetch). Edge/uç için SERVER_ROLE='Node'.
+- **PROXY_CACHE_STATUS**: Önbellek sonucu. Değerler SADECE: 'HIT', 'MISS', 'EXPIRED', '' (boş). STALE_HIT YOKTUR.
