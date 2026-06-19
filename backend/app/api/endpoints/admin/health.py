@@ -1,14 +1,15 @@
-import logging
 import asyncio
+import logging
+from typing import Any
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
-from typing import Any
 
+from backend.app.api.query import _get_redis
 from backend.app.auth.dependencies import get_current_user
 from backend.app.core.config import get_settings
 from backend.app.db.session import get_engine
-from backend.app.api.query import _get_redis
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -31,16 +32,26 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
 
     # 0. Check Customer Database Connectivities
     try:
-        from backend.app.models.database import CustomerDBConfig
         from backend.app.db.executor import get_executor
         from backend.app.db.models import DBConfig
-        from backend.app.services.crypto import decrypt_password
+        from backend.app.services.crypto import async_decrypt_password
 
+        workspace_id = getattr(current_user, "workspace_id", None) or "default"
         async with get_engine().connect() as conn:
-            # Let's verify if active tenant DB configurations are reachable
-            # For scale, only do a simple ping on the first one found or we could check all active configs
-            configs = await conn.execute(text("SELECT id, db_type, host, port, database, username, encrypted_password FROM customer_db_configs WHERE is_active = true"))
-            conf_rows = configs.fetchall()
+            # Only ping THIS tenant's own database(s) — never other customers' DBs.
+            cid = (
+                await conn.execute(
+                    text("SELECT id FROM customers WHERE slug = :ws"), {"ws": workspace_id}
+                )
+            ).scalar()
+            configs = await conn.execute(
+                text(
+                    "SELECT id, customer_id, db_type, host, port, database, username, encrypted_password "
+                    "FROM customer_db_configs WHERE is_active = true AND customer_id = :cid"
+                ),
+                {"cid": cid},
+            )
+            conf_rows = configs.fetchall() if cid else []
 
             if not conf_rows:
                 results["customer_dbs"] = {"status": "healthy", "error": "No active customer DBs configured yet"}
@@ -56,7 +67,7 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
                         port=c.port,
                         database=c.database,
                         username=c.username,
-                        password=decrypt_password(c.encrypted_password)
+                        password=await async_decrypt_password(c.encrypted_password, c.customer_id, conn)
                     )
                     executor = get_executor(c_config)
                     # We can't really do an async ping easily via sync executor without run_in_executor,
