@@ -90,10 +90,15 @@ async def decode_token(token: str, *, leeway: int | None = None) -> TokenPayload
     except JWTError as exc:
         raise InvalidTokenError("Unable to decode JWT header") from exc
 
+    # Only RSA signature algorithms are accepted — never let the token header pick the
+    # algorithm (prevents alg-confusion, e.g. an HS256 token signed with the RSA public key).
+    allowed_algorithms = ("RS256", "RS384", "RS512")
     kid = unverified_header.get("kid")
     alg = unverified_header.get("alg", "RS256")
     if not kid:
         raise InvalidTokenError("JWT header missing 'kid'")
+    if alg not in allowed_algorithms:
+        raise InvalidTokenError(f"Unsupported JWT algorithm: {alg!r}")
 
     # Fetch JWKS and find the matching public key.
     jwks = await _fetch_jwks()
@@ -115,7 +120,7 @@ async def decode_token(token: str, *, leeway: int | None = None) -> TokenPayload
         payload = jwt.decode(
             token,
             key,
-            algorithms=[alg],
+            algorithms=list(allowed_algorithms),
             audience="account",
             issuer=settings.keycloak_issuer,
             options={
