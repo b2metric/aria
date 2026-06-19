@@ -47,3 +47,17 @@ In `pipeline.py`, if the result (or EXPLAIN estimate) sits between the UI thresh
 Add the background worker service to the backend `/health` endpoint checks to verify the queue is responsive.
 - [ ] **Step 2: DB Connection Tests**
 Add a ping status for the active Tenant Customer DBs (Oracle/Postgres) on the Health dashboard to ensure customer DB connectivity hasn't dropped.
+
+---
+
+### Task 4: Extend CI ruff coverage to `agents/`
+*Goal: Close a lint-gate blind spot — the "Lint Backend (ruff)" job only checks `backend/`, so the top-level `agents/` package (chart pipeline, artifact store/vault) is never linted.*
+
+**Files:**
+- Modify: `.github/workflows/ci.yml` (lint-backend job)
+- Modify: `agents/**` (fix surfaced findings)
+
+- [ ] **Step 1: Add `agents/` to the ruff invocation**
+Update the `lint-backend` job to run `ruff check backend/ agents/` and `ruff format --check backend/ agents/` so the chart/artifact agents are gated like the rest of the backend.
+- [ ] **Step 2: Fix the ~22 pre-existing findings**
+`uv run ruff check agents/` currently reports ~22 errors (unused imports, import ordering, etc.; most are `--fix`-able). Fix them until `agents/` is clean, then keep it in the gate. Surfaced 2026-06-20 while dropping `pydantic-ai` from `agents/chart_llm.py` (PR #47).
