@@ -12,13 +12,13 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app import __version__
+from backend.app.api.dashboard import router as dashboard_router
+from backend.app.api.endpoints.admin import router as admin_router
 from backend.app.api.endpoints.onboarding import router as onboarding_router
 from backend.app.api.query import router as query_router
 from backend.app.api.schema import router as schema_router
 from backend.app.api.workspaces import router as workspaces_router
-from backend.app.api.endpoints.admin import router as admin_router
-from backend.app.api.dashboard import router as dashboard_router
-from backend.app.auth.dependencies import CurrentUser, WorkspaceID, get_current_user
+from backend.app.auth.dependencies import CurrentUser, WorkspaceID
 from backend.app.auth.models import Role
 from backend.app.auth.rbac import require_role, require_sql_access
 
@@ -76,7 +76,10 @@ async def lifespan(app: FastAPI):
             if attempt < attempts:
                 logger.warning(
                     "Keycloak JWKS not ready (%d/%d): %s — retrying in %.1fs",
-                    attempt, attempts, jwks_problem, delay,
+                    attempt,
+                    attempts,
+                    jwks_problem,
+                    delay,
                 )
                 await asyncio.sleep(delay)
         if jwks_problem:
@@ -112,7 +115,13 @@ app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 # ── CORS (dev: allow all) ──────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://aria.localhost", "http://localhost:3000", "http://localhost:3003", "http://127.0.0.1:3000", "http://127.0.0.1:3003"],
+    allow_origins=[
+        "http://aria.localhost",
+        "http://localhost:3000",
+        "http://localhost:3003",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3003",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

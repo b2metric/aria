@@ -42,7 +42,7 @@ def _build_pattern(workspace_id: str) -> str:
 # ── Connection management ──────────────────────────────────────────────────
 
 
-async def _get_redis() -> "Redis":
+async def _get_redis() -> Redis:
     """Return a connected Redis client using the configured URL."""
     settings = get_settings()
     return aioredis.from_url(
@@ -145,7 +145,9 @@ async def invalidate_workspace(workspace_id: str) -> int:
                 break
         if keys:
             deleted = await r.delete(*keys)
-            logger.info("Invalidated %d schema cache entries for workspace %s", deleted, workspace_id)
+            logger.info(
+                "Invalidated %d schema cache entries for workspace %s", deleted, workspace_id
+            )
             return deleted
         return 0
     finally:

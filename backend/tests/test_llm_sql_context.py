@@ -12,7 +12,11 @@ def test_schema_context_includes_column_descriptions():
     tables = [{"name": "DS_BASE_1M", "description": "CDN 1-min rollup", "keywords": "cache"}]
     cols = {
         "DS_BASE_1M": [
-            {"name": "SERVER_ROLE", "type": "VARCHAR2", "description": "Cache tier: Node (=Edge), Mcache, Feda"},
+            {
+                "name": "SERVER_ROLE",
+                "type": "VARCHAR2",
+                "description": "Cache tier: Node (=Edge), Mcache, Feda",
+            },
             {"name": "PROXY_CACHE_STATUS", "type": "VARCHAR2", "description": "HIT/MISS/EXPIRED"},
         ]
     }

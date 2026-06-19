@@ -14,26 +14,24 @@ from backend.app.models.token import TokenUsageDaily
 log = logging.getLogger(__name__)
 router = APIRouter()
 
+
 @router.get("/")
 async def get_dashboard_metrics(current_user: Any = Depends(get_current_user)):
     """Get high-level metrics for the admin dashboard."""
     if not getattr(current_user, "can_admin", False):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
-        
+
     sessionmaker = get_sessionmaker()
-    metrics = {
-        "total_users": 0,
-        "active_teams": 0,
-        "queries_today": 0,
-        "tokens_used_today": 0
-    }
-    
+    metrics = {"total_users": 0, "active_teams": 0, "queries_today": 0, "tokens_used_today": 0}
+
     workspace_id = getattr(current_user, "workspace_id", None) or "default"
 
     try:
         async with sessionmaker() as session:
             # Scope every metric to the caller's own customer (tenant isolation).
-            customer_id = await session.scalar(select(Customer.id).where(Customer.slug == workspace_id))
+            customer_id = await session.scalar(
+                select(Customer.id).where(Customer.slug == workspace_id)
+            )
             if customer_id is None:
                 return metrics  # unknown workspace → zeros, never platform-wide totals
 
@@ -69,5 +67,5 @@ async def get_dashboard_metrics(current_user: Any = Depends(get_current_user)):
     except Exception as exc:
         log.error("Failed to fetch dashboard metrics: %s", exc)
         # Continue with zeros rather than failing the whole dashboard
-        
+
     return metrics

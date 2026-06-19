@@ -2,21 +2,19 @@
 
 from __future__ import annotations
 
-import pytest
-
-from backend.app.db import DBConfig, DatabaseType
+from backend.app.db import DatabaseType, DBConfig
 from backend.app.db.executor import (
-    PostgreSQLExecutor,
+    MSSQLExecutor,
     MySQLExecutor,
     OracleExecutor,
-    MSSQLExecutor,
+    PostgreSQLExecutor,
     get_executor,
 )
 
 
 class TestDBConfig:
     """Tests for DBConfig dataclass."""
-    
+
     def test_default_port_postgresql(self):
         config = DBConfig(
             db_type=DatabaseType.POSTGRESQL,
@@ -28,7 +26,7 @@ class TestDBConfig:
         )
         assert config.default_port == 5432
         assert config.get_port() == 5432
-    
+
     def test_default_port_mysql(self):
         config = DBConfig(
             db_type=DatabaseType.MYSQL,
@@ -39,7 +37,7 @@ class TestDBConfig:
             password="pass",
         )
         assert config.default_port == 3306
-    
+
     def test_default_port_oracle(self):
         config = DBConfig(
             db_type=DatabaseType.ORACLE,
@@ -50,7 +48,7 @@ class TestDBConfig:
             password="pass",
         )
         assert config.default_port == 1521
-    
+
     def test_default_port_mssql(self):
         config = DBConfig(
             db_type=DatabaseType.MSSQL,
@@ -61,7 +59,7 @@ class TestDBConfig:
             password="pass",
         )
         assert config.default_port == 1433
-    
+
     def test_custom_port(self):
         config = DBConfig(
             db_type=DatabaseType.POSTGRESQL,
@@ -76,7 +74,7 @@ class TestDBConfig:
 
 class TestGetExecutor:
     """Tests for executor factory."""
-    
+
     def test_get_postgresql_executor(self):
         config = DBConfig(
             db_type=DatabaseType.POSTGRESQL,
@@ -88,7 +86,7 @@ class TestGetExecutor:
         )
         executor = get_executor(config)
         assert isinstance(executor, PostgreSQLExecutor)
-    
+
     def test_get_mysql_executor(self):
         config = DBConfig(
             db_type=DatabaseType.MYSQL,
@@ -100,7 +98,7 @@ class TestGetExecutor:
         )
         executor = get_executor(config)
         assert isinstance(executor, MySQLExecutor)
-    
+
     def test_get_oracle_executor(self):
         config = DBConfig(
             db_type=DatabaseType.ORACLE,
@@ -112,7 +110,7 @@ class TestGetExecutor:
         )
         executor = get_executor(config)
         assert isinstance(executor, OracleExecutor)
-    
+
     def test_get_mssql_executor(self):
         config = DBConfig(
             db_type=DatabaseType.MSSQL,
@@ -128,13 +126,13 @@ class TestGetExecutor:
 
 class TestDatabaseType:
     """Tests for DatabaseType enum."""
-    
+
     def test_enum_values(self):
         assert DatabaseType.POSTGRESQL.value == "postgresql"
         assert DatabaseType.MYSQL.value == "mysql"
         assert DatabaseType.ORACLE.value == "oracle"
         assert DatabaseType.MSSQL.value == "mssql"
-    
+
     def test_enum_is_str(self):
         # DatabaseType inherits from str
         assert isinstance(DatabaseType.POSTGRESQL, str)

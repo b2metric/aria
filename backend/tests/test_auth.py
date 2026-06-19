@@ -6,21 +6,16 @@ tokens locally and mocking the JWKS endpoint that the auth layer calls.
 
 from __future__ import annotations
 
-import json
 import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI, status
+from cryptography.hazmat.backends import default_backend
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from jose import jwt as jose_jwt
 from jose.constants import Algorithms
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.backends import default_backend
-
-from backend.app.auth.dependencies import get_current_user
-from backend.app.auth.models import Role, UserContext
 
 # ── Key generation for test signing ──────────────────────────────────────
 
@@ -28,9 +23,7 @@ from backend.app.auth.models import Role, UserContext
 @pytest.fixture(scope="session")
 def rsa_key():
     """Generate an RSA keypair once per test session."""
-    key = rsa.generate_private_key(
-        public_exponent=65537, key_size=2048, backend=default_backend()
-    )
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
     return key
 
 
@@ -62,10 +55,14 @@ def jwks(rsa_key):
 @pytest.fixture(scope="session")
 def public_pem(rsa_key):
     """Public key in PEM format (optional, for debugging)."""
-    return rsa_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    return (
+        rsa_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
 
 
 # ── Token factory ────────────────────────────────────────────────────────
@@ -119,7 +116,7 @@ def app_with_mock_jwks(jwks, monkeypatch):
     """Create a test FastAPI app with mocked JWKS endpoint."""
     # Disable dev-mode auth bypass for tests
     monkeypatch.setenv("ENV", "testing")
-    
+
     # Patch the JWKS fetch to return our local key.
     mock_get = AsyncMock(return_value=jwks)
 
@@ -219,44 +216,32 @@ class TestTokenValidation:
 class TestRBACGuards:
     def test_admin_can_access_admin_dashboard(self, rsa_key, client):
         token = make_token(rsa_key, role="admin")
-        resp = client.get(
-            "/admin/dashboard", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/admin/dashboard", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
 
     def test_analyst_cannot_access_admin_dashboard(self, rsa_key, client):
         token = make_token(rsa_key, role="analyst")
-        resp = client.get(
-            "/admin/dashboard", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/admin/dashboard", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 403
 
     def test_viewer_cannot_access_admin_dashboard(self, rsa_key, client):
         token = make_token(rsa_key, role="viewer")
-        resp = client.get(
-            "/admin/dashboard", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/admin/dashboard", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 403
 
     def test_team_lead_can_manage_team(self, rsa_key, client):
         token = make_token(rsa_key, role="team_lead")
-        resp = client.get(
-            "/team/manage", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/team/manage", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
 
     def test_admin_can_manage_team(self, rsa_key, client):
         token = make_token(rsa_key, role="admin")
-        resp = client.get(
-            "/team/manage", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/team/manage", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
 
     def test_analyst_cannot_manage_team(self, rsa_key, client):
         token = make_token(rsa_key, role="analyst")
-        resp = client.get(
-            "/team/manage", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/team/manage", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 403
 
 
@@ -266,30 +251,22 @@ class TestRBACGuards:
 class TestSQLVisibility:
     def test_admin_can_preview_sql(self, rsa_key, client):
         token = make_token(rsa_key, role="admin")
-        resp = client.get(
-            "/queries/sql-preview", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/queries/sql-preview", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
 
     def test_analyst_can_preview_sql(self, rsa_key, client):
         token = make_token(rsa_key, role="analyst")
-        resp = client.get(
-            "/queries/sql-preview", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/queries/sql-preview", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 200
 
     def test_viewer_cannot_preview_sql(self, rsa_key, client):
         token = make_token(rsa_key, role="viewer")
-        resp = client.get(
-            "/queries/sql-preview", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/queries/sql-preview", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 403
 
     def test_team_lead_cannot_preview_sql(self, rsa_key, client):
         token = make_token(rsa_key, role="team_lead")
-        resp = client.get(
-            "/queries/sql-preview", headers={"Authorization": f"Bearer {token}"}
-        )
+        resp = client.get("/queries/sql-preview", headers={"Authorization": f"Bearer {token}"})
         assert resp.status_code == 403
 
 

@@ -10,7 +10,6 @@ token validations avoid a network round-trip to Keycloak.
 
 from __future__ import annotations
 
-import json
 import logging
 import time
 from typing import Any
@@ -51,7 +50,7 @@ async def _fetch_jwks() -> dict[str, Any]:
             jwks = resp.json()
         except httpx.HTTPError as exc:
             logger.error("Failed to fetch JWKS from %s: %s", url, exc)
-            if hasattr(exc, 'response') and exc.response is not None:
+            if hasattr(exc, "response") and exc.response is not None:
                 logger.error("Response body: %s", exc.response.text)
             raise
 

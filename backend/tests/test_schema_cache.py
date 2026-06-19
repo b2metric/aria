@@ -13,13 +13,13 @@ from dotenv import load_dotenv
 
 load_dotenv("/Users/tunasonmez/projects/b2metric-aria/.env")
 
-from backend.app.schema_discovery.cache import (
+from backend.app.schema_discovery.cache import (  # noqa: E402
     get_cache_ttl,
     get_schema,
     invalidate_schema,
     set_schema,
 )
-from backend.app.schema_discovery.models import (
+from backend.app.schema_discovery.models import (  # noqa: E402
     ColumnInfo,
     ForeignKeyInfo,
     SchemaSnapshot,

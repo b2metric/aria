@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, status
 
 from backend.app.auth.jwt import (
     AuthError,
@@ -19,8 +19,6 @@ from backend.app.auth.jwt import (
     decode_token,
 )
 from backend.app.auth.models import Role, TokenPayload, UserContext
-import asyncio
-from functools import lru_cache
 
 # In-memory cache to avoid syncing the same user on every request
 _synced_users = set()
@@ -34,8 +32,9 @@ logger = logging.getLogger(__name__)
 def _extract_bearer_token(authorization: str | None = Header(None)) -> str:
     """Pull the raw JWT from the ``Authorization`` header."""
     from backend.app.core.config import get_settings
-    settings = get_settings()
-    
+
+    get_settings()
+
     if not authorization:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -76,32 +75,30 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from exc
     except AuthError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from exc
 
     # ── Resolve role ────────────────────────────────────────────────
     # Token payload may use standard Keycloak claims or our custom attributes
     role_str = getattr(payload, "role", None)
     if not role_str and hasattr(payload, "model_extra") and payload.model_extra:
         role_str = payload.model_extra.get("aria_role")
-        
+
     if not role_str:
         # Deny by default — never assume admin when the token carries no role claim.
         logger.warning("Token missing 'role' claim — rejecting")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Missing 'role' claim"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Missing 'role' claim")
 
     try:
         role = Role.from_string(role_str)

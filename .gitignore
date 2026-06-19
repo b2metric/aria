@@ -68,3 +68,6 @@ docs/business/pdf/
 
 # Claude Code: local-only settings + router config (never commit the real LiteLLM key)
 .claude/settings.local.json
+
+# scratch debug scripts (throwaway, not real tests)
+backend/scripts/test_*.py

@@ -1,17 +1,18 @@
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import Any
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select, func
-
 import uuid
-from backend.app.auth.dependencies import get_current_user, UserContext, WorkspaceID
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import func, select
+
+from backend.app.auth.dependencies import UserContext, WorkspaceID, get_current_user
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.governance import DataAuditLog
 from backend.app.models.token import TokenUsageDaily
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
 
 @router.get("")
 async def get_user_dashboard(
@@ -20,16 +21,16 @@ async def get_user_dashboard(
 ):
     """Get dashboard stats for the current user."""
     sessionmaker = get_sessionmaker()
-    
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    start_of_week = today - timedelta(days=today.weekday())
-    
+
+    today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    today - timedelta(days=today.weekday())
+
     # Defaults
     total_queries = 0
     queries_today = 0
     tokens_today = 0
     recent_trend = []
-    
+
     try:
         user_uuid = uuid.UUID(str(current_user.user_id))
     except (ValueError, TypeError):
@@ -39,77 +40,77 @@ async def get_user_dashboard(
         async with sessionmaker() as session:
             if user_uuid:
                 # 1. Total Queries (All time for this user)
-                total_queries = await session.scalar(
-                    select(func.count(DataAuditLog.id)).where(
-                        DataAuditLog.user_id == user_uuid,
-                        DataAuditLog.action == "query"
+                total_queries = (
+                    await session.scalar(
+                        select(func.count(DataAuditLog.id)).where(
+                            DataAuditLog.user_id == user_uuid, DataAuditLog.action == "query"
+                        )
                     )
-                ) or 0
+                    or 0
+                )
 
                 # 2. Queries Today
-                queries_today = await session.scalar(
-                    select(func.count(DataAuditLog.id)).where(
-                        DataAuditLog.user_id == user_uuid,
-                        DataAuditLog.action == "query",
-                        DataAuditLog.created_at >= today
+                queries_today = (
+                    await session.scalar(
+                        select(func.count(DataAuditLog.id)).where(
+                            DataAuditLog.user_id == user_uuid,
+                            DataAuditLog.action == "query",
+                            DataAuditLog.created_at >= today,
+                        )
                     )
-                ) or 0
+                    or 0
+                )
 
                 # 3. Tokens Today
-                tokens_today = await session.scalar(
-                    select(func.sum(TokenUsageDaily.tokens_used)).where(
-                        TokenUsageDaily.user_id == user_uuid,
-                        TokenUsageDaily.usage_date == today.date()
+                tokens_today = (
+                    await session.scalar(
+                        select(func.sum(TokenUsageDaily.tokens_used)).where(
+                            TokenUsageDaily.user_id == user_uuid,
+                            TokenUsageDaily.usage_date == today.date(),
+                        )
                     )
-                ) or 0
+                    or 0
+                )
 
                 # 4. Chart Data (Last 7 Days)
                 for i in range(6, -1, -1):
                     day = today - timedelta(days=i)
                     next_day = day + timedelta(days=1)
 
-                    day_queries = await session.scalar(
-                        select(func.count(DataAuditLog.id)).where(
-                            DataAuditLog.user_id == user_uuid,
-                            DataAuditLog.action == "query",
-                            DataAuditLog.created_at >= day,
-                            DataAuditLog.created_at < next_day
+                    day_queries = (
+                        await session.scalar(
+                            select(func.count(DataAuditLog.id)).where(
+                                DataAuditLog.user_id == user_uuid,
+                                DataAuditLog.action == "query",
+                                DataAuditLog.created_at >= day,
+                                DataAuditLog.created_at < next_day,
+                            )
                         )
-                    ) or 0
+                        or 0
+                    )
 
-                    day_str = day.strftime("%b %d") # e.g. "Jun 15"
-                    recent_trend.append({
-                        "date": day_str,
-                        "queries": day_queries
-                    })
+                    day_str = day.strftime("%b %d")  # e.g. "Jun 15"
+                    recent_trend.append({"date": day_str, "queries": day_queries})
 
     except Exception as exc:
         log.warning("User dashboard fetch failed: %s", exc)
 
     # Format like getMockDashboardData() expects
     stats = [
-        {
-            "label": "Total Queries",
-            "value": str(total_queries),
-            "icon": "Database"
-        },
+        {"label": "Total Queries", "value": str(total_queries), "icon": "Database"},
         {
             "label": "Queries Today",
             "value": str(queries_today),
             "change": "Active",
             "changeType": "up",
-            "icon": "Activity"
+            "icon": "Activity",
         },
-        {
-            "label": "Tokens Used Today",
-            "value": f"{tokens_today:,}",
-            "icon": "Zap"
-        },
+        {"label": "Tokens Used Today", "value": f"{tokens_today:,}", "icon": "Zap"},
         {
             "label": "Saved Artifacts",
-            "value": "0", # Placeholder for now
-            "icon": "Save"
-        }
+            "value": "0",  # Placeholder for now
+            "icon": "Save",
+        },
     ]
 
     return {
@@ -120,9 +121,9 @@ async def get_user_dashboard(
             "xKey": "date",
             "yKeys": ["queries"],
             "title": "Query Volume (Last 7 Days)",
-            "colors": ["#3b82f6"]
+            "colors": ["#3b82f6"],
         },
         # These will be fetched/populated by the frontend
         "recentConversations": [],
-        "savedQueries": []
+        "savedQueries": [],
     }

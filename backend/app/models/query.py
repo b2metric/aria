@@ -18,14 +18,19 @@ class Query(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "queries"
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     natural_language: Mapped[str] = mapped_column(Text, nullable=False)
     generated_sql: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[QueryStatus] = mapped_column(default=QueryStatus.PENDING, server_default="pending")
+    status: Mapped[QueryStatus] = mapped_column(
+        default=QueryStatus.PENDING, server_default="pending"
+    )
     execution_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rows_returned: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

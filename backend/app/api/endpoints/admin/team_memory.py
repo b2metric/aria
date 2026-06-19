@@ -1,4 +1,5 @@
 """Admin: manage team conventions/business rules (TEAM memory type)."""
+
 import logging
 from typing import Any
 
@@ -32,7 +33,7 @@ async def list_team_memories(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     workspace_id = getattr(current_user, "workspace_id", None) or "default"
-    
+
     try:
         svc = MemoryService.get_instance()
         memories = svc.get_all_memories(
@@ -40,7 +41,7 @@ async def list_team_memories(
             workspace_id=workspace_id,
             memory_type=MemoryType.TEAM,
         )
-        
+
         return [
             {
                 "id": m.get("id"),
@@ -51,7 +52,7 @@ async def list_team_memories(
             }
             for m in memories
         ]
-        
+
     except Exception as exc:
         log.error("team_memory.list failed: %s", exc)
         return []
@@ -67,7 +68,7 @@ async def create_team_memory(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
     workspace_id = getattr(current_user, "workspace_id", None) or "default"
-    
+
     try:
         svc = MemoryService.get_instance()
         memory_id = svc.store(
@@ -78,7 +79,7 @@ async def create_team_memory(
             team_id=payload.team_id,
             metadata={"created_by": getattr(current_user, "user_id", "admin")},
         )
-        
+
         if memory_id:
             log.info("team_memory.create: Created %s for team %s", memory_id, payload.team_id)
             return {
@@ -89,7 +90,7 @@ async def create_team_memory(
             }
         else:
             raise HTTPException(status_code=500, detail="Failed to create team memory")
-            
+
     except HTTPException:
         raise
     except Exception as exc:
@@ -109,13 +110,13 @@ async def delete_team_memory(
     try:
         svc = MemoryService.get_instance()
         success = svc.delete_memory(memory_id)
-        
+
         if success:
             log.info("team_memory.delete: Deleted %s", memory_id)
             return {"deleted": True, "id": memory_id}
         else:
             raise HTTPException(status_code=404, detail="Team memory not found")
-            
+
     except HTTPException:
         raise
     except Exception as exc:

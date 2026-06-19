@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -69,11 +69,11 @@ class TokenService:
 
     @staticmethod
     def _today_str() -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return datetime.now(UTC).strftime("%Y-%m-%d")
 
     @staticmethod
     def _today_date() -> date:
-        return datetime.now(timezone.utc).date()
+        return datetime.now(UTC).date()
 
     # ── quota lookup ─────────────────────────────────────────────────
 
@@ -154,7 +154,7 @@ class TokenService:
             pipe.get(key)
         results = await pipe.execute()
 
-        for (level, key, limit), raw in zip(keys, results):
+        for (level, key, limit), raw in zip(keys, results, strict=False):
             used = int(raw) if raw else 0
             if used >= limit:
                 logger.warning(

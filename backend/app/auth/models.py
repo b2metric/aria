@@ -6,11 +6,10 @@ import enum
 
 from pydantic import BaseModel, Field
 
-
 # ── Roles ────────────────────────────────────────────────────────────────
 
 
-class Role(str, enum.Enum):
+class Role(enum.StrEnum):
     """ARIA platform roles.
 
     These map directly to Keycloak realm roles.  Only the four role names
@@ -31,8 +30,7 @@ class Role(str, enum.Enum):
             return Role(value.lower())
         except ValueError:
             raise ValueError(
-                f"Unknown role: {value!r}. "
-                f"Valid roles: {[r.value for r in Role]}"
+                f"Unknown role: {value!r}. Valid roles: {[r.value for r in Role]}"
             ) from None
 
     @classmethod

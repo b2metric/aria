@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -24,7 +24,7 @@ class QueryRequest(BaseModel):
     )
 
 
-class QueryStatus(str, Enum):
+class QueryStatus(StrEnum):
     THINKING = "thinking"
     GENERATING_SQL = "generating_sql"
     SQL_READY = "sql_ready"

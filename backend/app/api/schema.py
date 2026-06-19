@@ -11,8 +11,8 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from backend.app.auth.dependencies import CurrentUser, WorkspaceID
-from backend.app.auth.rbac import require_role
 from backend.app.auth.models import Role
+from backend.app.auth.rbac import require_role
 from backend.app.schema_discovery.cache import (
     get_cache_ttl,
     get_schema,

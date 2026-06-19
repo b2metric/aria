@@ -1,6 +1,7 @@
 """Smoke test — verify all auth modules import correctly."""
-from backend.app.auth.models import Role, TokenPayload, UserContext
-from backend.app.core.config import Settings, get_settings
+
+from backend.app.auth.models import Role, UserContext
+from backend.app.core.config import get_settings
 
 
 def test_role_enum():

@@ -17,7 +17,10 @@ class MemoryEntry(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "memory_entries"
 
     customer_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=True, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -38,7 +41,10 @@ class VaultKnowhow(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "vault_knowhow"
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     type: Mapped[KnowledgeType] = mapped_column(nullable=False)
     title: Mapped[str] = mapped_column(String(500), nullable=False)

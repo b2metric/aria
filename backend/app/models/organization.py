@@ -1,15 +1,18 @@
 """Organization models: customers (tenants), teams, and users."""
 
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.app.models.base import Base, TimestampMixin, UUIDMixin
-from backend.app.models.enums import UserRole, TeamRole
+from backend.app.models.enums import UserRole
+
+if TYPE_CHECKING:
+    from backend.app.models.database import CustomerDBConfig, CustomerKeyConfig, CustomerLLMConfig
 
 
 class Customer(Base, UUIDMixin, TimestampMixin):
@@ -26,9 +29,15 @@ class Customer(Base, UUIDMixin, TimestampMixin):
     # relationships
     teams: Mapped[list["Team"]] = relationship(back_populates="customer", lazy="selectin")
     users: Mapped[list["User"]] = relationship(back_populates="customer", lazy="selectin")
-    db_configs: Mapped[list["CustomerDBConfig"]] = relationship(back_populates="customer", lazy="selectin")
-    key_configs: Mapped[list["CustomerKeyConfig"]] = relationship(back_populates="customer", lazy="selectin")
-    llm_configs: Mapped[list["CustomerLLMConfig"]] = relationship(back_populates="customer", lazy="selectin")
+    db_configs: Mapped[list["CustomerDBConfig"]] = relationship(
+        back_populates="customer", lazy="selectin"
+    )
+    key_configs: Mapped[list["CustomerKeyConfig"]] = relationship(
+        back_populates="customer", lazy="selectin"
+    )
+    llm_configs: Mapped[list["CustomerLLMConfig"]] = relationship(
+        back_populates="customer", lazy="selectin"
+    )
 
     def __repr__(self) -> str:
         return f"<Customer {self.slug}>"
@@ -40,7 +49,10 @@ class Team(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "teams"
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
@@ -58,14 +70,23 @@ class User(Base, UUIDMixin, TimestampMixin):
     __tablename__ = "users"
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("customers.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     team_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("teams.id", ondelete="SET NULL"), nullable=True, index=True
     )
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(postgresql.ENUM("admin", "team_lead", "analyst", "viewer", name="user_role", create_type=False), default=UserRole.VIEWER, server_default="viewer")
+    role: Mapped[UserRole] = mapped_column(
+        postgresql.ENUM(
+            "admin", "team_lead", "analyst", "viewer", name="user_role", create_type=False
+        ),
+        default=UserRole.VIEWER,
+        server_default="viewer",
+    )
     external_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, comment="Keycloak user ID"
     )

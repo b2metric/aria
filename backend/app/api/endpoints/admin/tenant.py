@@ -2,6 +2,7 @@
 
 Manages system-wide limits for the workspace/tenant.
 """
+
 import logging
 from typing import Any
 
@@ -25,6 +26,7 @@ DEFAULT_MAX_ROW_LIMIT = 1000
 log = logging.getLogger("aria.admin")
 router = APIRouter()
 
+
 class DBConfigModel(BaseModel):
     db_type: DatabaseType
     host: str
@@ -32,6 +34,7 @@ class DBConfigModel(BaseModel):
     database: str
     username: str
     password: str | None = None
+
 
 class TenantConfigUpdate(BaseModel):
     """Update tenant configuration."""
@@ -71,7 +74,7 @@ async def get_tenant_config(
     current_user: Any = Depends(get_current_user),
 ) -> TenantConfigResponse | dict:
     """Get tenant limits.
-    
+
     Daily token limit comes from the active TokenQuota (real);
     the per-query row limit is a platform default until a per-tenant override exists.
     Degrades to defaults if the table is not yet migrated / DB is unavailable.
@@ -86,21 +89,27 @@ async def get_tenant_config(
 
     try:
         async with get_sessionmaker()() as session:
-            customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
+            customer = (
+                await session.execute(select(Customer).where(Customer.slug == workspace_id))
+            ).scalar_one_or_none()
             if customer:
                 # Token quota scoped to THIS customer (no cross-tenant default leak).
                 quota = (
                     await session.execute(
                         select(TokenQuota)
-                        .where(TokenQuota.is_active.is_(True), TokenQuota.customer_id == customer.id)
+                        .where(
+                            TokenQuota.is_active.is_(True), TokenQuota.customer_id == customer.id
+                        )
                         .order_by(TokenQuota.created_at.desc())
                         .limit(1)
                     )
                 ).scalar_one_or_none()
 
-                db_config_res = (await session.execute(
-                    select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
-                )).scalar_one_or_none()
+                db_config_res = (
+                    await session.execute(
+                        select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
+                    )
+                ).scalar_one_or_none()
 
                 # Also fetch max_row_limit if it exists
                 if db_config_res:
@@ -115,12 +124,16 @@ async def get_tenant_config(
         source="db" if quota else "default",
         language=await get_workspace_language(workspace_id),
         db_config={
-            "db_type": db_config_res.db_type.value if hasattr(db_config_res.db_type, "value") else str(db_config_res.db_type),
+            "db_type": db_config_res.db_type.value
+            if hasattr(db_config_res.db_type, "value")
+            else str(db_config_res.db_type),
             "host": db_config_res.host,
             "port": db_config_res.port,
             "database": db_config_res.database,
             "username": db_config_res.username,
-        } if db_config_res else None
+        }
+        if db_config_res
+        else None,
     )
 
 
@@ -130,7 +143,7 @@ async def update_tenant_config(
     current_user: Any = Depends(get_current_user),
 ) -> TenantConfigResponse:
     """Update tenant limits.
-    
+
     Only admin can update tenant configuration.
     """
     if not getattr(current_user, "can_admin", False):
@@ -161,7 +174,9 @@ async def update_tenant_config(
                 quota = (
                     await session.execute(
                         select(TokenQuota)
-                        .where(TokenQuota.is_active.is_(True), TokenQuota.customer_id == q_customer.id)
+                        .where(
+                            TokenQuota.is_active.is_(True), TokenQuota.customer_id == q_customer.id
+                        )
                         .order_by(TokenQuota.created_at.desc())
                         .limit(1)
                     )
@@ -169,7 +184,11 @@ async def update_tenant_config(
 
                 if quota:
                     quota.token_limit = body.daily_token_limit
-                    log.info("admin.tenant: Updated quota %s: token_limit=%d", quota.id, quota.token_limit)
+                    log.info(
+                        "admin.tenant: Updated quota %s: token_limit=%d",
+                        quota.id,
+                        quota.token_limit,
+                    )
                 else:
                     new_quota = TokenQuota(
                         customer_id=q_customer.id,
@@ -178,7 +197,9 @@ async def update_tenant_config(
                     )
                     session.add(new_quota)
                     quota = new_quota
-                    log.info("admin.tenant: Created customer quota: token_limit=%d", quota.token_limit)
+                    log.info(
+                        "admin.tenant: Created customer quota: token_limit=%d", quota.token_limit
+                    )
 
             # Handle language (stored on Customer.settings JSONB)
             if body.language is not None:
@@ -193,13 +214,17 @@ async def update_tenant_config(
             # Handle DB Config
             db_config_res = None
             if body.db_config is not None:
-                customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
+                customer = (
+                    await session.execute(select(Customer).where(Customer.slug == workspace_id))
+                ).scalar_one_or_none()
                 if not customer:
                     raise HTTPException(status_code=404, detail="Customer workspace not found")
 
-                db_config_res = (await session.execute(
-                    select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
-                )).scalar_one_or_none()
+                db_config_res = (
+                    await session.execute(
+                        select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
+                    )
+                ).scalar_one_or_none()
 
                 if db_config_res:
                     db_config_res.db_type = body.db_config.db_type
@@ -210,7 +235,9 @@ async def update_tenant_config(
                     if body.max_row_limit is not None:
                         db_config_res.max_row_limit = body.max_row_limit
                     if body.db_config.password:
-                        db_config_res.encrypted_password = await async_encrypt_password(body.db_config.password, customer.id, session)
+                        db_config_res.encrypted_password = await async_encrypt_password(
+                            body.db_config.password, customer.id, session
+                        )
                 else:
                     db_config_res = CustomerDBConfig(
                         customer_id=customer.id,
@@ -221,36 +248,54 @@ async def update_tenant_config(
                         database=body.db_config.database,
                         username=body.db_config.username,
                         max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
-                        encrypted_password=await async_encrypt_password(body.db_config.password, customer.id, session) if body.db_config.password else await async_encrypt_password("", customer.id, session),
+                        encrypted_password=await async_encrypt_password(
+                            body.db_config.password, customer.id, session
+                        )
+                        if body.db_config.password
+                        else await async_encrypt_password("", customer.id, session),
                     )
                     session.add(db_config_res)
 
             elif body.max_row_limit is not None:
                 # If only max_row_limit is updated but db_config is empty
-                customer = (await session.execute(select(Customer).where(Customer.slug == workspace_id))).scalar_one_or_none()
+                customer = (
+                    await session.execute(select(Customer).where(Customer.slug == workspace_id))
+                ).scalar_one_or_none()
                 if customer:
-                    db_config_res = (await session.execute(
-                        select(CustomerDBConfig).where(CustomerDBConfig.customer_id == customer.id)
-                    )).scalar_one_or_none()
+                    db_config_res = (
+                        await session.execute(
+                            select(CustomerDBConfig).where(
+                                CustomerDBConfig.customer_id == customer.id
+                            )
+                        )
+                    ).scalar_one_or_none()
                     if db_config_res:
                         db_config_res.max_row_limit = body.max_row_limit
 
             await session.commit()
 
         # For response
-        final_limit = body.daily_token_limit if body.daily_token_limit is not None else DEFAULT_DAILY_TOKEN_LIMIT
+        final_limit = (
+            body.daily_token_limit
+            if body.daily_token_limit is not None
+            else DEFAULT_DAILY_TOKEN_LIMIT
+        )
         return TenantConfigResponse(
             daily_token_limit=final_limit,
             max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
             source="db",
             language=await get_workspace_language(workspace_id),
             db_config={
-                "db_type": body.db_config.db_type.value if hasattr(body.db_config.db_type, "value") else str(body.db_config.db_type),
+                "db_type": body.db_config.db_type.value
+                if hasattr(body.db_config.db_type, "value")
+                else str(body.db_config.db_type),
                 "host": body.db_config.host,
                 "port": body.db_config.port,
                 "database": body.db_config.database,
                 "username": body.db_config.username,
-            } if body.db_config else None
+            }
+            if body.db_config
+            else None,
         )
 
     except SQLAlchemyError as exc:

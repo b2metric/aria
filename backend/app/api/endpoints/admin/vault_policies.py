@@ -51,10 +51,7 @@ class VaultPolicyUpdate(BaseModel):
     )
     deny_columns: dict[str, list[str]] | None = Field(
         default=None,
-        description=(
-            "Per-table column deny-lists, e.g. "
-            '{"sales": ["revenue", "margin"]}'
-        ),
+        description=('Per-table column deny-lists, e.g. {"sales": ["revenue", "margin"]}'),
     )
     name: str | None = Field(
         default=None,
@@ -65,17 +62,13 @@ class VaultPolicyUpdate(BaseModel):
 # ── Endpoints ────────────────────────────────────────────────────────
 
 
-async def resolve_customer_id(
-    current_user: UserContext, db: AsyncSession
-) -> uuid.UUID:
+async def resolve_customer_id(current_user: UserContext, db: AsyncSession) -> uuid.UUID:
     """Resolve the customer UUID from the workspace slug in the JWT."""
     from backend.app.models.organization import Customer
 
     workspace_slug = getattr(current_user, "workspace_id", None)
     if workspace_slug:
-        result = await db.execute(
-            select(Customer.id).where(Customer.slug == workspace_slug)
-        )
+        result = await db.execute(select(Customer.id).where(Customer.slug == workspace_slug))
         customer_uuid = result.scalar_one_or_none()
         if customer_uuid:
             return customer_uuid
@@ -89,6 +82,7 @@ async def resolve_customer_id(
         status_code=400,
         detail="Cannot resolve customer from workspace context",
     )
+
 
 @router.get("")
 async def get_team_policies(
@@ -110,9 +104,7 @@ async def get_team_policies(
 
     try:
         result = await db.execute(
-            select(TeamVaultPolicy).where(
-                TeamVaultPolicy.customer_id == customer_id
-            )
+            select(TeamVaultPolicy).where(TeamVaultPolicy.customer_id == customer_id)
         )
         policies = result.scalars().all()
 
@@ -129,9 +121,7 @@ async def get_team_policies(
         ]
     except Exception as exc:
         log.error("vault_policies.get failed: %s", exc)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get policies: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Failed to get policies: {exc}") from exc
 
 
 @router.put("/{team_id}")
@@ -208,6 +198,4 @@ async def update_team_policy(
     except Exception as exc:
         await db.rollback()
         log.error("vault_policies.update failed: %s", exc)
-        raise HTTPException(
-            status_code=500, detail=f"Failed to update policy: {exc}"
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Failed to update policy: {exc}") from exc

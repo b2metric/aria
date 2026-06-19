@@ -265,8 +265,10 @@ class AuditService:
         resource_type: str | None = None,
     ) -> int:
         """Return the total number of matching audit-log entries."""
-        stmt = select(func.count()).select_from(DataAuditLog).where(
-            DataAuditLog.customer_id == customer_id
+        stmt = (
+            select(func.count())
+            .select_from(DataAuditLog)
+            .where(DataAuditLog.customer_id == customer_id)
         )
 
         if user_id is not None:

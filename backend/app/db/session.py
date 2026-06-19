@@ -1,4 +1,5 @@
 """Shared async DB engine + session factory (cached)."""
+
 from __future__ import annotations
 
 from functools import lru_cache
