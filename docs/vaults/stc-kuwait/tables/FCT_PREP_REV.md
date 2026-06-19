@@ -17,7 +17,7 @@ description: Fact table showing revenue movements and financial reflections obta
 
 | Column | Type | Nullable | PK | Description |
 |--------|------|----------|----|-------------|
- | EXEC_DATE | DATE | ✓ |  | The date the record was created / the job was run (ETL/batch execution date). | 
+ | EXEC_DATE | DATE | ✓ |  | The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE. | 
  | CONTRNO | VARCHAR2 | ✓ |  | Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later. | 
  | SUBNO | VARCHAR2 | ✓ |  | MSISDN | 
  | APPDATE | DATE | ✓ |  | Line's activation / contract start date (Application Date). | 
@@ -32,7 +32,7 @@ description: Fact table showing revenue movements and financial reflections obta
  | CDR_TYPE | VARCHAR2 | ✓ |  | CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.) | 
 | CHARGINGTYPE | VARCHAR2 | ✓ |  |  |
  | BILLAMOUNT | NUMBER | ✓ |  | Amount billed/collected — revenue from this CDR record | 
- | LOGDATE | DATE | ✓ |  | Date-time stamp when the record was created/entered the system | 
+ | LOGDATE | DATE | ✓ |  | Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing. | 
 | CALLTYPE | VARCHAR2 | ✓ |  |  |
  | CALLINGCELLID | VARCHAR2 | ✓ |  | Base station (cell) ID to which the calling party is connected — used for location-based analytics | 
  | CALLEDCELLID | VARCHAR2 | ✓ |  | Base station ID to which the called party is connected | 
@@ -195,7 +195,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **IS_ROAM_REV**: Bu gelir kaydının yurt dışı dolaşımdan (roaming) elde edilip edilmediğini gösteren bayrak (1 = roaming geliri, 0 = yurt içi gelir)
 ## Column Descriptions
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
+- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE.
 - **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
 - **SUBNO**: MSISDN
 - **APPDATE**: Line's activation / contract start date (Application Date).
@@ -209,7 +209,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
 - **CDR_TYPE**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
 - **BILLAMOUNT**: Amount billed/collected — revenue from this CDR record
-- **LOGDATE**: Date-time stamp when the record was created/entered the system
+- **LOGDATE**: Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing.
 - **CALLINGCELLID**: Base station (cell) ID to which the calling party is connected — used for location-based analytics
 - **CALLEDCELLID**: Base station ID to which the called party is connected
 - **SERVICEID**: Service ID — indicates under which service/product the transaction is charged
@@ -238,7 +238,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **IS_ROAM_REV**: Flag indicating whether this revenue record is derived from international roaming (1 = roaming revenue, 0 = domestic revenue)
 ## Column Descriptions
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
+- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE.
 - **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
 - **SUBNO**: MSISDN
 - **APPDATE**: Line's activation / contract start date (Application Date).
@@ -252,7 +252,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
 - **CDR_TYPE**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
 - **BILLAMOUNT**: Amount billed/collected — revenue from this CDR record
-- **LOGDATE**: Date-time stamp when the record was created/entered the system
+- **LOGDATE**: Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing.
 - **CALLINGCELLID**: Base station (cell) ID to which the calling party is connected — used for location-based analytics
 - **CALLEDCELLID**: Base station ID to which the called party is connected
 - **SERVICEID**: Service ID — indicates under which service/product the transaction is charged
@@ -281,7 +281,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **IS_ROAM_REV**: Flag indicating whether this revenue record is derived from international roaming (1 = roaming revenue, 0 = domestic revenue)
 ## Column Descriptions
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
+- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE.
 - **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
 - **SUBNO**: MSISDN
 - **APPDATE**: Line's activation / contract start date (Application Date).
@@ -295,7 +295,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
 - **CDR_TYPE**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
 - **BILLAMOUNT**: Amount billed/collected — revenue from this CDR record
-- **LOGDATE**: Date-time stamp when the record was created/entered the system
+- **LOGDATE**: Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing.
 - **CALLINGCELLID**: Base station (cell) ID to which the calling party is connected — used for location-based analytics
 - **CALLEDCELLID**: Base station ID to which the called party is connected
 - **SERVICEID**: Service ID — indicates under which service/product the transaction is charged
@@ -324,7 +324,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **IS_ROAM_REV**: Flag indicating whether this revenue record is derived from international roaming (1 = roaming revenue, 0 = domestic revenue)
 ## Column Descriptions
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
+- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE.
 - **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
 - **SUBNO**: MSISDN
 - **APPDATE**: Line's activation / contract start date (Application Date).
@@ -338,7 +338,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
 - **CDR_TYPE**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
 - **BILLAMOUNT**: Amount billed/collected — revenue from this CDR record
-- **LOGDATE**: Date-time stamp when the record was created/entered the system
+- **LOGDATE**: Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing.
 - **CALLINGCELLID**: Base station (cell) ID to which the calling party is connected — used for location-based analytics
 - **CALLEDCELLID**: Base station ID to which the called party is connected
 - **SERVICEID**: Service ID — indicates under which service/product the transaction is charged
@@ -367,7 +367,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **IS_ROAM_REV**: Flag indicating whether this revenue record is derived from international roaming (1 = roaming revenue, 0 = domestic revenue)
 ## Column Descriptions
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
+- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE.
 - **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
 - **SUBNO**: MSISDN
 - **APPDATE**: Line's activation / contract start date (Application Date).
@@ -381,7 +381,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
 - **CDR_TYPE**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
 - **BILLAMOUNT**: Amount billed/collected — revenue from this CDR record
-- **LOGDATE**: Date-time stamp when the record was created/entered the system
+- **LOGDATE**: Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing.
 - **CALLINGCELLID**: Base station (cell) ID to which the calling party is connected — used for location-based analytics
 - **CALLEDCELLID**: Base station ID to which the called party is connected
 - **SERVICEID**: Service ID — indicates under which service/product the transaction is charged
@@ -414,7 +414,7 @@ description: Fact table showing revenue movements and financial reflections obta
 
 ### Column Descriptions
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
+- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date). Also used as the REVENUE DATE.
 - **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
 - **SUBNO**: MSISDN
 - **APPDATE**: Line's activation / contract start date (Application Date).
@@ -428,7 +428,7 @@ description: Fact table showing revenue movements and financial reflections obta
 - **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
 - **CDR_TYPE**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
 - **BILLAMOUNT**: Amount billed/collected — revenue from this CDR record
-- **LOGDATE**: Date-time stamp when the record was created/entered the system
+- **LOGDATE**: Date-time stamp when the record was created/entered the system. Use this as the main DATE for revenue and billing.
 - **CALLINGCELLID**: Base station (cell) ID to which the calling party is connected — used for location-based analytics
 - **CALLEDCELLID**: Base station ID to which the called party is connected
 - **SERVICEID**: Service ID — indicates under which service/product the transaction is charged

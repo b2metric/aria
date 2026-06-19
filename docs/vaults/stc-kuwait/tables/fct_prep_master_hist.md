@@ -2,11 +2,8 @@
 table: FCT_PREP_MASTER_HIST
 database: oracle
 workspace: stc-kuwait
-keywords: [archive, arşiv, history, master, prepaid, tarihçe]
-generated_at: '2026-06-16T03:23:43.169154+00:00'
-enriched_at: '2026-06-16T14:59:52.297842+00:00'
-description: History data table that contains historical (archived) records of the
-  Prepaid master table.
+keywords: []
+generated_at: '2026-06-18T04:51:46.208554+00:00'
 ---
 
 # FCT_PREP_MASTER_HIST
@@ -17,32 +14,32 @@ description: History data table that contains historical (archived) records of t
 
 | Column | Type | Nullable | PK | Description |
 |--------|------|----------|----|-------------|
- | EXEC_DATE | DATE | ✓ |  | The date the record was created / the job was run (ETL/batch execution date). | 
- | SNAPSHOT_DATE | DATE | ✓ |  | The date on which the data represents the snapshot of the day. | 
- | CONTRNO | VARCHAR2 | ✓ |  | Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later. | 
- | SUBNO | VARCHAR2 | ✓ |  | MSISDN | 
- | PREPOST_PAID | VARCHAR2 | ✓ |  | It is unimportant and should not be used. | 
- | APPDATE | DATE | ✓ |  | Line's activation / contract start date (Application Date). | 
+| EXEC_DATE | DATE | ✓ |  |  |
+| SNAPSHOT_DATE | DATE | ✓ |  |  |
+| CONTRNO | VARCHAR2 | ✓ |  |  |
+| SUBNO | VARCHAR2 | ✓ |  |  |
+| PREPOST_PAID | VARCHAR2 | ✓ |  |  |
+| APPDATE | DATE | ✓ |  |  |
 | NEXT_APPDATE | DATE | ✓ |  |  |
- | ID_NO | VARCHAR2 | ✓ |  | Customer's identification number (residence, passport, etc.). | 
- | ID_TYPE | VARCHAR2 | ✓ |  | The categorical type of the identifier contained in ID_NO. | 
- | ICC_NUMBER | VARCHAR2 | ✓ |  | Physical serial number of the SIM card (Integrated Circuit Card ID). | 
- | IMSI_NUMBER | VARCHAR2 | ✓ |  | International Mobile Subscriber Identity. The number that identifies the subscriber in the network. | 
- | CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Contract category (e.g. Individual, Corporate, VIP). | 
+| ID_NO | VARCHAR2 | ✓ |  |  |
+| ID_TYPE | VARCHAR2 | ✓ |  |  |
+| ICC_NUMBER | VARCHAR2 | ✓ |  |  |
+| IMSI_NUMBER | VARCHAR2 | ✓ |  |  |
+| CONTRACT_CATEGORY | VARCHAR2 | ✓ |  |  |
 | CONTRACT_CATEGORY_GROUP | VARCHAR2 | ✓ |  |  |
 | CATEGORY_TYPE | VARCHAR2 | ✓ |  |  |
- | NATIONALITY | VARCHAR2 | ✓ |  | Nationality of the customer (short text). | 
+| NATIONALITY | VARCHAR2 | ✓ |  |  |
 | NATIONALITY_LANG | VARCHAR2 | ✓ |  |  |
- | NATIONALITY_GROUP | VARCHAR2 | ✓ |  | Nationality major group (e.g. Local / Foreign / Gulf countries). | 
- | NATIONALITY_SUB_GROUP | VARCHAR2 | ✓ |  | Nationality subgroup (more detailed classification). | 
- | BS_TYPE | VARCHAR2 | ✓ |  | Basic service type — e.g. voice, data, M2M. | 
+| NATIONALITY_GROUP | VARCHAR2 | ✓ |  |  |
+| NATIONALITY_SUB_GROUP | VARCHAR2 | ✓ |  |  |
+| BS_TYPE | VARCHAR2 | ✓ |  |  |
 | BS_FLAG | VARCHAR2 | ✓ |  |  |
 | NUM_TYPE | VARCHAR2 | ✓ |  |  |
 | RETAILER | VARCHAR2 | ✓ |  |  |
 | REGION | VARCHAR2 | ✓ |  |  |
- | MNP_SUB | VARCHAR2 | ✓ |  | Flag of whether there is a subscriber coming with number portability (Mobile Number Portability). | 
- | CREDIT_RISK_PROFILE | VARCHAR2 | ✓ |  | Customer's credit risk profile (low/medium/high risk). | 
- | PREPAID_STATE_GROUP | VARCHAR2 | ✓ |  | Lifecycle status group of the prepaid line (Active, Disable, Grace). | 
+| MNP_SUB | VARCHAR2 | ✓ |  |  |
+| CREDIT_RISK_PROFILE | VARCHAR2 | ✓ |  |  |
+| PREPAID_STATE_GROUP | VARCHAR2 | ✓ |  |  |
 | MAIN_PLAN_PROD_OFFERING_ID | VARCHAR2 | ✓ |  |  |
 | MAIN_PLAN_NAME | VARCHAR2 | ✓ |  |  |
 | MAIN_PLAN_EQUIPID | VARCHAR2 | ✓ |  |  |
@@ -120,7 +117,9 @@ description: History data table that contains historical (archived) records of t
 
 ## Keywords
 
-## Column Descriptions
+## Business Metadata
+
+### Column Descriptions
 - **EXEC_DATE**: 
 - **SNAPSHOT_DATE**: 
 - **CONTRNO**: 
@@ -220,168 +219,4 @@ description: History data table that contains historical (archived) records of t
 - **L30D_ACTIVITY_SOURCES**: 
 - **L90D_ACTIVITY_SOURCES**: 
 - **L120D_ACTIVITY_SOURCES**: 
-- **ACTIVITY_STATUS**:
-## Column Descriptions
-
-- **EXEC_DATE**: Kaydın oluşturulduğu / işin çalıştırıldığı tarih (ETL/batch execution date).
-- **SNAPSHOT_DATE**: Verinin hangi güne ait fotoğrafını (snapshot) temsil ettiği tarih.
-- **CONTRNO**: Sözleşme numarası. Aboneye ait benzersiz sözleşme kimliği. Kullanıcının hayatı boyunca değişmeyen, tekil tanımlayıcı, kullanıcı seneler sonra tekrar bir numara aktifleştirse dahi aynı kimliği tekrar alır.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: Önemsiz, kullanılmaması gerekir.
-- **APPDATE**: Hattın aktivasyon / sözleşme başlangıç tarihi (Application Date).
-- **ID_NO**: Müşterinin kimlik numarası (residence, pasaport vb.).
-- **ID_TYPE**: ID_NO da yer alan tanımlayıcının kategorik tipi.
-- **ICC_NUMBER**: SIM kartın fiziksel seri numarası (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: Uluslararası mobil abone kimliği (International Mobile Subscriber Identity). Şebekede aboneyi tanımlayan numara.
-- **CONTRACT_CATEGORY**: Sözleşme kategorisi (örn. Bireysel, Kurumsal, VIP).
-- **NATIONALITY**: Müşterinin uyruğu (kısa metin).
-- **NATIONALITY_GROUP**: Uyruk ana grubu (örn. Yerel / Yabancı / Körfez ülkeleri).
-- **NATIONALITY_SUB_GROUP**: Uyruk alt grubu (daha detaylı sınıflandırma).
-- **BS_TYPE**: Temel hizmet tipi (Basic Service Type) — örn. ses, veri, M2M.
-- **MNP_SUB**: Numara taşıma (Mobile Number Portability) ile gelen abone olup olmadığı bayrağı.
-- **CREDIT_RISK_PROFILE**: Müşterinin kredi risk profili (düşük/orta/yüksek risk).
-- **PREPAID_STATE_GROUP**: Ön ödemeli hattın yaşam döngüsü durumu grubu (Aktif, Disable, Grace).
-## Column Descriptions
-
-- **EXEC_DATE**: Kaydın oluşturulduğu / işin çalıştırıldığı tarih (ETL/batch execution date).
-- **SNAPSHOT_DATE**: Verinin hangi güne ait fotoğrafını (snapshot) temsil ettiği tarih.
-- **CONTRNO**: Sözleşme numarası. Aboneye ait benzersiz sözleşme kimliği. Kullanıcının hayatı boyunca değişmeyen, tekil tanımlayıcı, kullanıcı seneler sonra tekrar bir numara aktifleştirse dahi aynı kimliği tekrar alır.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: Önemsiz, kullanılmaması gerekir.
-- **APPDATE**: Hattın aktivasyon / sözleşme başlangıç tarihi (Application Date).
-- **ID_NO**: Müşterinin kimlik numarası (residence, pasaport vb.).
-- **ID_TYPE**: ID_NO da yer alan tanımlayıcının kategorik tipi.
-- **ICC_NUMBER**: SIM kartın fiziksel seri numarası (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: Uluslararası mobil abone kimliği (International Mobile Subscriber Identity). Şebekede aboneyi tanımlayan numara.
-- **CONTRACT_CATEGORY**: Sözleşme kategorisi (örn. Bireysel, Kurumsal, VIP).
-- **NATIONALITY**: Müşterinin uyruğu (kısa metin).
-- **NATIONALITY_GROUP**: Uyruk ana grubu (örn. Yerel / Yabancı / Körfez ülkeleri).
-- **NATIONALITY_SUB_GROUP**: Uyruk alt grubu (daha detaylı sınıflandırma).
-- **BS_TYPE**: Temel hizmet tipi (Basic Service Type) — örn. ses, veri, M2M.
-- **MNP_SUB**: Numara taşıma (Mobile Number Portability) ile gelen abone olup olmadığı bayrağı.
-- **CREDIT_RISK_PROFILE**: Müşterinin kredi risk profili (düşük/orta/yüksek risk).
-- **PREPAID_STATE_GROUP**: Ön ödemeli hattın yaşam döngüsü durumu grubu (Aktif, Disable, Grace).
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **SNAPSHOT_DATE**: The date on which the data represents the snapshot of the day.
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **ID_NO**: Customer's identification number (residence, passport, etc.).
-- **ID_TYPE**: The categorical type of the identifier contained in ID_NO.
-- **ICC_NUMBER**: Physical serial number of the SIM card (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: International Mobile Subscriber Identity. The number that identifies the subscriber in the network.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **NATIONALITY_GROUP**: Nationality major group (e.g. Local / Foreign / Gulf countries).
-- **NATIONALITY_SUB_GROUP**: Nationality subgroup (more detailed classification).
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **MNP_SUB**: Flag of whether there is a subscriber coming with number portability (Mobile Number Portability).
-- **CREDIT_RISK_PROFILE**: Customer's credit risk profile (low/medium/high risk).
-- **PREPAID_STATE_GROUP**: Lifecycle status group of the prepaid line (Active, Disable, Grace).
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **SNAPSHOT_DATE**: The date on which the data represents the snapshot of the day.
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **ID_NO**: Customer's identification number (residence, passport, etc.).
-- **ID_TYPE**: The categorical type of the identifier contained in ID_NO.
-- **ICC_NUMBER**: Physical serial number of the SIM card (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: International Mobile Subscriber Identity. The number that identifies the subscriber in the network.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **NATIONALITY_GROUP**: Nationality major group (e.g. Local / Foreign / Gulf countries).
-- **NATIONALITY_SUB_GROUP**: Nationality subgroup (more detailed classification).
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **MNP_SUB**: Flag of whether there is a subscriber coming with number portability (Mobile Number Portability).
-- **CREDIT_RISK_PROFILE**: Customer's credit risk profile (low/medium/high risk).
-- **PREPAID_STATE_GROUP**: Lifecycle status group of the prepaid line (Active, Disable, Grace).
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **SNAPSHOT_DATE**: The date on which the data represents the snapshot of the day.
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **ID_NO**: Customer's identification number (residence, passport, etc.).
-- **ID_TYPE**: The categorical type of the identifier contained in ID_NO.
-- **ICC_NUMBER**: Physical serial number of the SIM card (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: International Mobile Subscriber Identity. The number that identifies the subscriber in the network.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **NATIONALITY_GROUP**: Nationality major group (e.g. Local / Foreign / Gulf countries).
-- **NATIONALITY_SUB_GROUP**: Nationality subgroup (more detailed classification).
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **MNP_SUB**: Flag of whether there is a subscriber coming with number portability (Mobile Number Portability).
-- **CREDIT_RISK_PROFILE**: Customer's credit risk profile (low/medium/high risk).
-- **PREPAID_STATE_GROUP**: Lifecycle status group of the prepaid line (Active, Disable, Grace).
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **SNAPSHOT_DATE**: The date on which the data represents the snapshot of the day.
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **ID_NO**: Customer's identification number (residence, passport, etc.).
-- **ID_TYPE**: The categorical type of the identifier contained in ID_NO.
-- **ICC_NUMBER**: Physical serial number of the SIM card (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: International Mobile Subscriber Identity. The number that identifies the subscriber in the network.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **NATIONALITY_GROUP**: Nationality major group (e.g. Local / Foreign / Gulf countries).
-- **NATIONALITY_SUB_GROUP**: Nationality subgroup (more detailed classification).
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **MNP_SUB**: Flag of whether there is a subscriber coming with number portability (Mobile Number Portability).
-- **CREDIT_RISK_PROFILE**: Customer's credit risk profile (low/medium/high risk).
-- **PREPAID_STATE_GROUP**: Lifecycle status group of the prepaid line (Active, Disable, Grace).
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **SNAPSHOT_DATE**: The date on which the data represents the snapshot of the day.
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **ID_NO**: Customer's identification number (residence, passport, etc.).
-- **ID_TYPE**: The categorical type of the identifier contained in ID_NO.
-- **ICC_NUMBER**: Physical serial number of the SIM card (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: International Mobile Subscriber Identity. The number that identifies the subscriber in the network.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **NATIONALITY_GROUP**: Nationality major group (e.g. Local / Foreign / Gulf countries).
-- **NATIONALITY_SUB_GROUP**: Nationality subgroup (more detailed classification).
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **MNP_SUB**: Flag of whether there is a subscriber coming with number portability (Mobile Number Portability).
-- **CREDIT_RISK_PROFILE**: Customer's credit risk profile (low/medium/high risk).
-- **PREPAID_STATE_GROUP**: Lifecycle status group of the prepaid line (Active, Disable, Grace).
-## Business Metadata
-
-**Description:** History data table that contains historical (archived) records of the Prepaid master table.
-
-### Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **SNAPSHOT_DATE**: The date on which the data represents the snapshot of the day.
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **ID_NO**: Customer's identification number (residence, passport, etc.).
-- **ID_TYPE**: The categorical type of the identifier contained in ID_NO.
-- **ICC_NUMBER**: Physical serial number of the SIM card (Integrated Circuit Card ID).
-- **IMSI_NUMBER**: International Mobile Subscriber Identity. The number that identifies the subscriber in the network.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **NATIONALITY_GROUP**: Nationality major group (e.g. Local / Foreign / Gulf countries).
-- **NATIONALITY_SUB_GROUP**: Nationality subgroup (more detailed classification).
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **MNP_SUB**: Flag of whether there is a subscriber coming with number portability (Mobile Number Portability).
-- **CREDIT_RISK_PROFILE**: Customer's credit risk profile (low/medium/high risk).
-- **PREPAID_STATE_GROUP**: Lifecycle status group of the prepaid line (Active, Disable, Grace).
+- **ACTIVITY_STATUS**: 
