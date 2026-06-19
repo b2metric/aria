@@ -204,7 +204,9 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: pip-audit
-        run: uv run pip-audit
+        # pip-audit lives in the `dev` optional-dependency group; --extra dev
+        # installs it (plain `uv run pip-audit` can't spawn it).
+        run: uv run --extra dev pip-audit
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
