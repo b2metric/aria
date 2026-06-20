@@ -14,7 +14,7 @@
 - `backend/app/services/audit.py` — `AuditService.log_event` (used by Sprint 15 Task 6).
 - AGENTS.md:50 — SQL-visibility invariant (raw SQL/results visible only to permitted roles).
 
-> **Out of scope (long-term / post-MVP — tracked in `LOCKED-DECISIONS.md` & `AGENTS.md`, NOT scheduled here):** ClickHouse (Phase 3), Teams/PowerBI/Slack connectors, dbt sync, embedded/white-label API, Go hot-path microservices, Kubernetes/Terraform IaC, vLLM local-GPU routing, two-way vault sync.
+> **Out of scope (long-term / post-MVP — tracked in `LOCKED-DECISIONS.md` & `AGENTS.md`, NOT scheduled here):** ClickHouse (Phase 3), Teams/PowerBI/Slack connectors, dbt sync, embedded/white-label API, Go hot-path microservices, Kubernetes/Terraform IaC, vLLM local-GPU routing, two-way vault sync, cloud data-warehouse dialects (BigQuery/Snowflake/Redshift — only PostgreSQL/MySQL/Oracle/MSSQL are implemented today; add cloud DWs demand-driven in Phase 3).
 
 ---
 
