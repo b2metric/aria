@@ -45,11 +45,16 @@ type User = {
   team_id: string | null;
   customer_id: string;
   is_active: boolean;
+  // null = inherit the role default; true = always see raw SQL + results; false = never.
+  sql_visibility?: boolean | null;
   created_at: string;
   updated_at: string;
 };
 
 type Tab = "users" | "teams";
+
+// Tri-state token for the SQL-visibility control (kept as a string for the Select).
+type SqlVisibilityToken = "inherit" | "visible" | "hidden";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -87,6 +92,42 @@ function roleLabel(role: string): string {
   }
 }
 
+// ── SQL-visibility tri-state mapping ─────────────────────────────────
+
+function sqlVisibilityToToken(value: boolean | null | undefined): SqlVisibilityToken {
+  if (value === true) return "visible";
+  if (value === false) return "hidden";
+  return "inherit";
+}
+
+function tokenToSqlVisibility(token: SqlVisibilityToken): boolean | null {
+  if (token === "visible") return true;
+  if (token === "hidden") return false;
+  return null;
+}
+
+function sqlVisibilityBadge(value: boolean | null | undefined) {
+  if (value === true) {
+    return (
+      <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+        SQL: visible
+      </Badge>
+    );
+  }
+  if (value === false) {
+    return (
+      <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+        SQL: hidden
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+      SQL: inherit
+    </Badge>
+  );
+}
+
 // ── Page Component ───────────────────────────────────────────────────
 
 export default function UsersTeamsPage() {
@@ -114,6 +155,7 @@ export default function UsersTeamsPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editRole, setEditRole] = useState("");
   const [editTeamId, setEditTeamId] = useState("");
+  const [editSqlVisibility, setEditSqlVisibility] = useState<SqlVisibilityToken>("inherit");
   const [saving, setSaving] = useState(false);
 
   // Create user dialog state
@@ -245,6 +287,7 @@ export default function UsersTeamsPage() {
     setEditingUser(user);
     setEditRole(user.role);
     setEditTeamId(user.team_id || "");
+    setEditSqlVisibility(sqlVisibilityToToken(user.sql_visibility));
     setEditDialogOpen(true);
   };
 
@@ -298,6 +341,8 @@ export default function UsersTeamsPage() {
       } else {
         body.team_id = null;
       }
+      // Tri-state override: null = inherit role default, true = always visible, false = always hidden.
+      body.sql_visibility = tokenToSqlVisibility(editSqlVisibility);
       const res = await fetch(`${API_BASE}/api/admin/users/${editingUser.id}`, {
         method: "PATCH",
         headers: {
@@ -468,19 +513,20 @@ export default function UsersTeamsPage() {
                     <th className="px-6 py-3 font-semibold">Email</th>
                     <th className="px-6 py-3 font-semibold">Role</th>
                     <th className="px-6 py-3 font-semibold">Team</th>
+                    <th className="px-6 py-3 font-semibold">SQL Visibility</th>
                     <th className="px-6 py-3 font-semibold text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {usersLoading && users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         Loading users...
                       </td>
                     </tr>
                   ) : users.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                         No users found in this workspace.
                       </td>
                     </tr>
@@ -495,6 +541,7 @@ export default function UsersTeamsPage() {
                         <td className="px-6 py-4 text-gray-500">
                           {teamNameById(user.team_id)}
                         </td>
+                        <td className="px-6 py-4">{sqlVisibilityBadge(user.sql_visibility)}</td>
                         <td className="px-6 py-4 text-right">
                           <Button
                             variant="ghost"
@@ -693,6 +740,28 @@ export default function UsersTeamsPage() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* SQL Visibility Select */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700">SQL visibility</label>
+                <Select
+                  value={editSqlVisibility}
+                  onValueChange={(v) => setEditSqlVisibility(v as SqlVisibilityToken)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Inherit from role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inherit">Inherit from role</SelectItem>
+                    <SelectItem value="visible">Always visible</SelectItem>
+                    <SelectItem value="hidden">Always hidden</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">
+                  Controls whether this user sees the raw SQL string and raw query results.
+                  &quot;Inherit&quot; uses the role default (admin/analyst can view).
+                </p>
               </div>
             </div>
           )}

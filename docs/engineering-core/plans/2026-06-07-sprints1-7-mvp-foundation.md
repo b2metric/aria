@@ -7,7 +7,7 @@
 ---
 
 ### Task 1: Multi-database connectivity & schema introspection
-- [x] **Generic multi-DB executor** — one executor over PostgreSQL / MySQL / Oracle / BigQuery / Snowflake / Redshift / MSSQL with per-dialect SQL + per-connection row limits. `backend/app/db/executor.py` (06-07). **(RESOLVED — retroactive)**
+- [x] **Generic multi-DB executor** — one executor over PostgreSQL / MySQL / Oracle / MSSQL (the 4 dialects registered in `_EXECUTORS`) with per-dialect SQL + per-connection row limits. `backend/app/db/executor.py` (06-07). **(RESOLVED — retroactive)** *(Cloud data-warehouses — BigQuery / Snowflake / Redshift — are NOT implemented; parked as future work — see Sprint 16 plan "Out of scope".)*
 - [x] **Schema introspection** — per-dialect discovery of tables, columns, PK/FK, row counts. `backend/app/schema_discovery/discovery.py` (06-07). **(RESOLVED — retroactive)**
 
 ### Task 2: Knowledge vault (data dictionary)

@@ -82,15 +82,6 @@ class DatabaseType(enum.StrEnum):
     MSSQL = "mssql"
 
 
-class KnowledgeType(enum.StrEnum):
-    """Categories of vault knowledge entries."""
-
-    SQL_PATTERN = "sql_pattern"
-    BUSINESS_TERM = "business_term"
-    METRIC_DEF = "metric_def"
-    RELATIONSHIP_DEF = "relationship_def"
-
-
 class QuotaPeriod(enum.StrEnum):
     """Token quota reset interval."""
 

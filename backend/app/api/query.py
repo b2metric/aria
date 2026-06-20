@@ -25,6 +25,7 @@ from backend.app.query.conversation import (
     list_conversations,
 )
 from backend.app.query.pipeline import process_query
+from backend.app.query.sql_visibility import resolve_effective_sql_visibility
 from backend.app.services.rate_limit import RateLimitExceeded, check_rate_limit
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,45 @@ async def _get_engine() -> AsyncEngine:
 
     settings = get_settings()
     return create_async_engine(settings.database_url, echo=False)
+
+
+async def _resolve_sql_visible(engine: AsyncEngine, user: CurrentUser) -> bool:
+    """Resolve effective SQL visibility for *user*.
+
+    ``get_current_user`` is JWT-only, so the per-user override
+    (``users.sql_visibility``) is read here from the metadata DB.  The override
+    wins when set; otherwise we fall back to the role default
+    (``resolve_effective_sql_visibility(role, None)``).
+
+    Fail CLOSED: any error reading the override resolves to ``False`` (hide
+    SQL).  A user explicitly set ``sql_visibility=False`` who then hits a
+    transient DB error must NOT silently become visible again — that would be
+    an information leak — so the secure direction on failure is to deny.
+    """
+    from sqlalchemy import text as _text
+
+    if not user.user_id:
+        return resolve_effective_sql_visibility(user.role, sql_visibility=None)
+
+    try:
+        async with engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    _text("SELECT sql_visibility FROM users WHERE id = :uid"),
+                    {"uid": user.user_id},
+                )
+            ).fetchone()
+        override = row[0] if row is not None else None
+    except Exception:
+        # Fail closed: deny SQL visibility when the override cannot be read.
+        logger.warning(
+            "Failed to read per-user sql_visibility for user_id=%s; failing closed (SQL hidden)",
+            user.user_id,
+            exc_info=True,
+        )
+        return False
+
+    return resolve_effective_sql_visibility(user.role, sql_visibility=override)
 
 
 # ── Query endpoint (SSE) ──────────────────────────────────────────────────
@@ -83,6 +123,9 @@ async def query(
 
     engine = await _get_engine()
 
+    # Resolve the per-user SQL-visibility override (DB) over the role default.
+    sql_visible = await _resolve_sql_visible(engine, user)
+
     async def event_generator():
         try:
             async for event in process_query(
@@ -92,6 +135,7 @@ async def query(
                 workspace_id=workspace_id,
                 user_id=user.user_id,
                 team_id=user.team_id,
+                sql_visible=sql_visible,
             ):
                 if await request.is_disconnected():
                     logger.info("Client disconnected during SSE stream")

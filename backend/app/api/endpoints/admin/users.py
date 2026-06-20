@@ -176,15 +176,21 @@ async def update_user(
         user.role = body.role
     if hasattr(body, "team_id") and "team_id" in body.model_fields_set:
         user.team_id = body.team_id
+    # Per-user SQL-visibility override: only touch it when explicitly present in
+    # the request body (so omitting the field leaves the existing value intact,
+    # and an explicit null resets to "inherit role default").
+    if "sql_visibility" in body.model_fields_set:
+        user.sql_visibility = body.sql_visibility
 
     await db.commit()
     await db.refresh(user)
 
     log.info(
-        "Updated user %s (id=%s): role=%s, team_id=%s",
+        "Updated user %s (id=%s): role=%s, team_id=%s, sql_visibility=%s",
         user.email,
         user.id,
         user.role,
         user.team_id,
+        user.sql_visibility,
     )
     return UserResponse.model_validate(user)

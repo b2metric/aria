@@ -44,6 +44,15 @@ class TeamVaultPolicy(Base, UUIDMixin, TimestampMixin):
         nullable=True,
         comment='Per-table deny-lists, e.g. {"sales": ["revenue", "margin"]}',
     )
+    row_filters: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment=(
+            "Per-table row-level predicate map enforced structurally on generated SQL, "
+            'e.g. {"FCT_SALES": "REGION = \'KW\'", "DIM_CUSTOMER": "TENANT_ID = 42"}. '
+            "NULL/empty means no row restriction."
+        ),
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     def __repr__(self) -> str:

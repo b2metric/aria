@@ -53,6 +53,13 @@ class VaultPolicyUpdate(BaseModel):
         default=None,
         description=('Per-table column deny-lists, e.g. {"sales": ["revenue", "margin"]}'),
     )
+    row_filters: dict[str, str] | None = Field(
+        default=None,
+        description=(
+            "Per-table row-level predicate map enforced structurally on generated SQL, "
+            'e.g. {"FCT_SALES": "REGION = \'KW\'", "DIM_CUSTOMER": "TENANT_ID = 42"}'
+        ),
+    )
     name: str | None = Field(
         default=None,
         description="Human-readable policy name (defaults to team_id if omitted)",
@@ -115,6 +122,7 @@ async def get_team_policies(
                 "name": p.name,
                 "allowed_tables": p.allowed_tables,
                 "deny_columns": p.deny_columns,
+                "row_filters": p.row_filters,
                 "is_active": p.is_active,
             }
             for p in policies
@@ -144,6 +152,25 @@ async def update_team_policy(
 
     customer_id = await resolve_customer_id(current_user, db)
 
+    # ── Write-time validation of row-filter predicates ───────────────────
+    # row_filters values are raw SQL predicate strings supplied by admins.
+    # Validate each one now (parse-only) so a malformed predicate is surfaced
+    # immediately as a 400, instead of silently breaking every user query at
+    # RLS-enforcement time later.
+    if payload.row_filters:
+        import sqlglot
+
+        for table, predicate in payload.row_filters.items():
+            try:
+                # Parse-only: a ParseError (or any parse failure) means the
+                # predicate is malformed and must be rejected at write time.
+                sqlglot.condition(predicate)
+            except Exception as exc:  # noqa: BLE001 - any parse failure is a 400
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid row filter predicate for table '{table}': {exc}",
+                ) from exc
+
     # Resolve team_uuid: NULL for the "default" sentinel.
     team_uuid: uuid.UUID | None = None
     if team_id != "default":
@@ -169,6 +196,8 @@ async def update_team_policy(
             policy.allowed_tables = payload.allowed_tables
             if payload.deny_columns is not None:
                 policy.deny_columns = payload.deny_columns
+            if payload.row_filters is not None:
+                policy.row_filters = payload.row_filters
             if payload.name is not None:
                 policy.name = payload.name
         else:
@@ -180,6 +209,7 @@ async def update_team_policy(
                 name=policy_name,
                 allowed_tables=payload.allowed_tables,
                 deny_columns=payload.deny_columns or {},
+                row_filters=payload.row_filters or {},
             )
             db.add(policy)
 
@@ -191,6 +221,7 @@ async def update_team_policy(
             "name": policy.name,
             "allowed_tables": policy.allowed_tables,
             "deny_columns": policy.deny_columns,
+            "row_filters": policy.row_filters,
         }
 
     except HTTPException:

@@ -165,6 +165,81 @@ def _extract_preference_from_successful_query(
     return None
 
 
+# ── Vault-policy resolution (shared by table-pruning + row-level security) ──────
+
+
+# sqlglot dialect names keyed by the DatabaseType enum *value*.
+_SQLGLOT_DIALECTS: dict[str, str] = {
+    "postgresql": "postgres",
+    "mysql": "mysql",
+    "oracle": "oracle",
+    "mssql": "tsql",
+}
+
+
+def _sqlglot_dialect(db_type_value: str | None) -> str | None:
+    """Map a ``DatabaseType`` value to a sqlglot dialect (None if unknown)."""
+    if not db_type_value:
+        return None
+    return _SQLGLOT_DIALECTS.get(db_type_value.lower())
+
+
+async def _resolve_vault_policy(
+    workspace_id: str,
+    db: AsyncSession,
+    team_id: str | None = None,
+):
+    """Resolve the active ``TeamVaultPolicy`` for ``(workspace_id, team_id)``.
+
+    Scopes by ``Customer.slug == workspace_id`` and prefers the team-specific
+    policy over the customer-wide default (``team_id IS NULL``).  Only active
+    policies are considered.  Returns ``None`` when no policy applies.
+
+    This is the single source of truth for policy lookup, shared by both
+    table-level pruning and row-level security so the two never diverge.
+    """
+    from sqlalchemy import select as sa_select
+
+    from backend.app.models.governance import TeamVaultPolicy
+    from backend.app.models.organization import Customer
+
+    # Accept team_id as either a UUID string or a raw UUID.
+    if isinstance(team_id, str):
+        try:
+            team_uuid = _uuid.UUID(team_id)
+        except ValueError:
+            team_uuid = None
+    else:
+        team_uuid = team_id
+
+    # Scope policy lookup to THIS customer — otherwise another tenant's default
+    # (team_id IS NULL) policy would leak into this workspace.
+    cust_id = (
+        await db.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
+    ).scalar_one_or_none()
+    if cust_id is None:
+        return None
+
+    result = await db.execute(
+        sa_select(TeamVaultPolicy).where(
+            TeamVaultPolicy.customer_id == cust_id,
+            TeamVaultPolicy.team_id.in_([team_uuid, None])
+            if team_uuid
+            else TeamVaultPolicy.team_id.is_(None),
+            TeamVaultPolicy.is_active == True,  # noqa: E712
+        )
+    )
+    policies = result.scalars().all()
+
+    # Prefer team-specific policy over the customer-wide default.
+    policy = None
+    if team_uuid:
+        policy = next((p for p in policies if p.team_id == team_uuid), None)
+    if not policy:
+        policy = next((p for p in policies if p.team_id is None), None)
+    return policy
+
+
 async def _get_available_tables(
     engine: AsyncEngine,
     workspace_id: str,
@@ -183,7 +258,6 @@ async def _get_available_tables(
     import glob
     import os
     import pathlib
-    import uuid as _uuid
 
     # Use absolute path based on project root
     project_root = pathlib.Path(__file__).parent.parent.parent.parent
@@ -270,43 +344,7 @@ async def _get_available_tables(
         # ── TeamVaultPolicy pruning ───────────────────────────────────────
         if db is not None and team_id:
             try:
-                from sqlalchemy import select as sa_select
-
-                from backend.app.models.governance import TeamVaultPolicy
-                from backend.app.models.organization import Customer
-
-                # Accept team_id as either a UUID string or a raw UUID
-                if isinstance(team_id, str):
-                    try:
-                        team_uuid = _uuid.UUID(team_id)
-                    except ValueError:
-                        team_uuid = None
-                else:
-                    team_uuid = team_id
-
-                # Scope policy lookup to THIS customer — otherwise another tenant's
-                # default (team_id IS NULL) policy would prune this workspace's tables.
-                cust_id = (
-                    await db.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
-                ).scalar_one_or_none()
-
-                result = await db.execute(
-                    sa_select(TeamVaultPolicy).where(
-                        TeamVaultPolicy.customer_id == cust_id,
-                        TeamVaultPolicy.team_id.in_([team_uuid, None])
-                        if team_uuid
-                        else TeamVaultPolicy.team_id.is_(None),
-                        TeamVaultPolicy.is_active == True,  # noqa: E712
-                    )
-                )
-                policies = result.scalars().all()
-
-                # Prefer team-specific policy over default policy
-                policy = None
-                if team_uuid:
-                    policy = next((p for p in policies if p.team_id == team_uuid), None)
-                if not policy:
-                    policy = next((p for p in policies if p.team_id is None), None)
+                policy = await _resolve_vault_policy(workspace_id, db, team_id)
 
                 if policy and policy.allowed_tables:
                     allowed = {t.lower() for t in policy.allowed_tables}
@@ -319,6 +357,10 @@ async def _get_available_tables(
                         len(tables),
                     )
             except Exception:
+                # Intentional asymmetry: table-level pruning fails OPEN (logged,
+                # full list returned) since over-exposing schema metadata is
+                # low-risk, whereas RLS row-filtering (in _execute_sql) fails
+                # CLOSED — it rejects the query rather than leak rows.
                 logger.exception("Failed to enforce vault policy — returning full table list")
 
         return tables
@@ -427,6 +469,26 @@ async def _generate_sql(
     for tbl in tables[:10]:
         cols = await _get_table_columns(engine, tbl["name"], workspace_id)
         table_columns[tbl["name"]] = cols
+
+    # ── Column-Level Security: hide denied columns from the LLM (prevention) ──
+    # Drop every column listed in ``policy.deny_columns`` from the schema dict
+    # BEFORE it is handed to the LLM (`generate_sql_with_llm` →
+    # `_build_schema_context`) or the rule-based generator below.  A column the
+    # model never sees cannot be SELECTed or referenced.  Defense-in-depth (a
+    # result post-filter for `SELECT *` / aliases) lives in `_execute_sql`.
+    # Guard matches Step 2 in `_execute_sql` (db + workspace): a team-less
+    # request must still resolve the customer-wide-default policy
+    # (``team_id IS NULL``) so its ``deny_columns`` are pruned, not leaked.
+    if db is not None and workspace_id:
+        cls_policy = await _resolve_vault_policy(workspace_id, db, team_id)
+        deny_columns = getattr(cls_policy, "deny_columns", None) if cls_policy else None
+        if deny_columns:
+            from backend.app.query.cls import strip_denied_columns_from_schema
+
+            table_columns = strip_denied_columns_from_schema(table_columns, deny_columns)
+
+    for tbl in tables[:10]:
+        cols = table_columns.get(tbl["name"], [])
         col_str = ", ".join(f"{c['name']} ({c['type']})" for c in cols[:15])
         schema_info.append(f"  {tbl['name']}: {col_str}")
 
@@ -527,8 +589,13 @@ async def _generate_sql(
         best_score,
     )
 
-    # Build the SELECT clause
-    columns = await _get_table_columns(engine, best_table, workspace_id)
+    # Build the SELECT clause.  Prefer the already-built (and CLS-pruned)
+    # `table_columns` so denied columns stay hidden from the rule-based path
+    # too; fall back to a fresh fetch only if the chosen table wasn't in the
+    # first-10 schema slice above.
+    columns = table_columns.get(best_table)
+    if columns is None:
+        columns = await _get_table_columns(engine, best_table, workspace_id)
 
     # Oracle + PostgreSQL numeric types
     numeric_types = (
@@ -995,9 +1062,27 @@ async def _execute_sql(
 
     await verify_sql_security(sql, engine, workspace_id, db, team_id)
 
-    from backend.app.db import execute_query
+    # ── Fetch DB config once ─────────────────────────────────────────────
+    # Both the RLS rewrite (dialect) and execution (below) need the customer's
+    # DB config.  Each fetch opens a connection + decrypts the password, so we
+    # fetch it a single time here and reuse it.  Guarded on ``workspace_id`` to
+    # preserve the original behavior: the no-``workspace_id`` schema-query path
+    # never fetched a config and must still execute against the metadata DB.
+    config: DBConfig | None = None
+    if workspace_id:
+        config = await _get_db_config(engine, workspace_id)
 
-    # ── Resolve customer UUID for audit logging ──────────────────────────
+    # ── Row-Level Security: structurally scope filtered tables ───────────
+    # Enforced on the generated SQL itself (table → filtered-subquery rewrite
+    # via sqlglot), NOT trusted to the LLM.  Runs after table-level security
+    # (verify_sql_security) and before any dialect transformation.  Fails
+    # closed: if a filtered table cannot be safely rewritten, the query is
+    # rejected rather than executed unfiltered.
+    # Column-Level Security deny-list, resolved once here and reused for the
+    # result post-filter (defense-in-depth) at the row-return path below.
+    # ── Resolve customer / user UUIDs for audit logging ──────────────────
+    # Resolved up-front so the RLS-applied governance entry (written right after
+    # the rewrite below) and the query/CLS entries all share the same identities.
     _customer_uuid: _uuid.UUID | None = None
     _user_uuid: _uuid.UUID | None = None
 
@@ -1016,6 +1101,31 @@ async def _execute_sql(
     if user_id:
         with contextlib.suppress(ValueError, AttributeError):
             _user_uuid = _uuid.UUID(user_id)
+
+    deny_columns: dict | None = None
+    if db is not None and workspace_id and config is not None:
+        policy = await _resolve_vault_policy(workspace_id, db, team_id)
+        row_filters = getattr(policy, "row_filters", None) if policy else None
+        deny_columns = getattr(policy, "deny_columns", None) if policy else None
+        if row_filters:
+            from backend.app.query.rls import apply_row_filters
+
+            dialect = _sqlglot_dialect(config.db_type.value)
+            rewritten = apply_row_filters(sql, row_filters, dialect=dialect)
+            # Governance audit: log ONLY when the rewrite actually changed the SQL
+            # (apply_row_filters returns the input byte-for-byte on a no-op pass).
+            if rewritten != sql and _customer_uuid is not None:
+                from backend.app.query.sql_visibility import audit_rls_applied
+
+                await audit_rls_applied(
+                    AuditService(db),
+                    customer_id=_customer_uuid,
+                    user_id=_user_uuid,
+                    row_filters=row_filters,
+                )
+            sql = rewritten
+
+    from backend.app.db import execute_query
 
     # ── Audit helper ────────────────────────────────────────────────────
     async def _audit(
@@ -1075,9 +1185,10 @@ async def _execute_sql(
             await _audit(success=False, error=str(e), mem_trace=mem_trace)
             raise
 
-    # Get customer's DB config and execute
-    config = await _get_db_config(engine, workspace_id)
-
+    # Reuse the DB config fetched once above (workspace_id is guaranteed set
+    # here — the no-workspace_id path returned earlier).  Avoids a second
+    # connection + password-decrypt round-trip.
+    assert config is not None  # narrows Optional for the type checker
     # Transform SQL for target dialect (LIMIT → FETCH FIRST for Oracle)
     transformed_sql = _transform_sql_for_dialect(sql, config.db_type)
 
@@ -1197,6 +1308,38 @@ async def _execute_sql(
                 if explanation
                 else f"⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
             )
+
+        # ── Column-Level Security: defense-in-depth result post-filter ──────
+        # Name-based strip of any denied column that reaches the result with its
+        # original name (e.g. via `SELECT *`), as a backstop to the schema-level
+        # CLS in `_generate_sql`.  This does NOT catch renamed aliases
+        # (`SELECT revenue AS r`), but those can't occur once layer 1 fires.
+        # Result rows are flat dicts and can't be mapped back to a source table,
+        # so the union of all denied column names is stripped (case-insensitive).
+        if deny_columns:
+            from backend.app.query.cls import strip_denied_columns_from_rows
+
+            # Determine which denied columns were ACTUALLY present in the result
+            # (case-insensitive) so we only audit a genuine restriction, not a
+            # no-op pass.  Build a per-table map of just the columns truly removed.
+            present_keys = {str(k).lower() for r in result for k in r}
+            removed_by_table = {
+                table: [c for c in (cols or []) if str(c).lower() in present_keys]
+                for table, cols in deny_columns.items()
+            }
+            removed_by_table = {t: cols for t, cols in removed_by_table.items() if cols}
+
+            result = strip_denied_columns_from_rows(result, deny_columns)
+
+            if removed_by_table and _customer_uuid is not None:
+                from backend.app.query.sql_visibility import audit_cls_denied
+
+                await audit_cls_denied(
+                    AuditService(db),
+                    customer_id=_customer_uuid,
+                    user_id=_user_uuid,
+                    deny_columns=removed_by_table,
+                )
 
         await _audit(success=True, row_count=len(result), mem_trace=mem_trace)
         return result
@@ -1561,8 +1704,42 @@ async def process_query(
     workspace_id: str,
     user_id: str,
     team_id: str | None = None,
+    sql_visible: bool = True,
 ) -> AsyncGenerator[dict, None]:
     """Process a natural language query and yield SSE events.
+
+    Honours the per-user SQL-visibility invariant: when *sql_visible* is
+    ``False`` every emitted event is passed through
+    :func:`~backend.app.query.sql_visibility.gate_sse_event`, which omits the
+    raw ``sql`` events, strips the raw SQL string from the ``sql_ready`` status
+    event, and blanks a raw table grid — while still streaming the chart
+    visualisation and the insight.  Defaults to ``True`` to preserve the
+    behaviour of any caller that does not resolve visibility.
+    """
+    from backend.app.query.sql_visibility import gate_sse_event
+
+    async for _event in _process_query_impl(
+        redis=redis,
+        engine=engine,
+        request=request,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        team_id=team_id,
+    ):
+        gated = gate_sse_event(_event, sql_visible)
+        if gated is not None:
+            yield gated
+
+
+async def _process_query_impl(
+    redis: Redis,
+    engine: AsyncEngine,
+    request: QueryRequest,
+    workspace_id: str,
+    user_id: str,
+    team_id: str | None = None,
+) -> AsyncGenerator[dict, None]:
+    """Inner pipeline generator (un-gated).  See :func:`process_query`.
 
     Pipeline stages:
     1. THINKING — validating input
@@ -1786,9 +1963,11 @@ async def process_query(
                     token_svc = None
 
             # ── Generate SQL ───────────────────────────────────────────────
-            if team_id:
-                gen_kwargs["team_id"] = team_id
-                gen_kwargs["db"] = sess
+            # Always pass the session so Step-1 CLS can resolve the
+            # customer-wide-default policy even for team-less requests; team_id
+            # may be None (the default policy is keyed on team_id IS NULL).
+            gen_kwargs["db"] = sess
+            gen_kwargs["team_id"] = team_id
             sql, explanation, is_llm, token_usage = await _generate_sql(
                 request.question,
                 engine,

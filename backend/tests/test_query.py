@@ -76,7 +76,9 @@ SAMPLE_CHART_HTML = """<!DOCTYPE html>
 </body></html>"""
 
 
-async def _mock_process_query(redis, engine, request, workspace_id, user_id, team_id=None):
+async def _mock_process_query(
+    redis, engine, request, workspace_id, user_id, team_id=None, sql_visible=True
+):
     """Mock pipeline that yields SSE events with chart_html."""
     cid = "conv-test-123"
     yield {"event": "status", "data": json.dumps({"status": "thinking", "message": "Analyzing..."})}
