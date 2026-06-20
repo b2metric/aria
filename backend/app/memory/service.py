@@ -13,6 +13,7 @@ Usage in pipeline:
 from __future__ import annotations
 
 import logging
+import math
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -26,6 +27,70 @@ except ImportError:  # mem0ai not installed — memory features degrade to a no-
 from backend.app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+# ── Memory decay / relevance scoring (Sprint 15 Task 5) ──────────────────────
+# User preferences previously used a hard 180-day delete. We now score each
+# entry by a recency- and usage-weighted relevance and only purge long-cold
+# entries, so a frequently-recalled old preference outlives an untouched one.
+#
+# Recency decays exponentially with a half-life; frequent recall (``use_count``
+# in metadata) extends the effective half-life so it ages more slowly. With
+# 0 uses, the score crosses MEMORY_PURGE_THRESHOLD at ≈ half_life·log2(1/thresh)
+# ≈ 45·4.3 ≈ 195 days — close to the old 180-day cutoff, but graded.
+MEMORY_HALF_LIFE_DAYS = 45.0
+MEMORY_PURGE_THRESHOLD = 0.05
+
+
+def relevance_score(
+    age_days: float,
+    use_count: int = 0,
+    *,
+    half_life_days: float = MEMORY_HALF_LIFE_DAYS,
+) -> float:
+    """Recency- and usage-weighted relevance in ``(0, 1]``.
+
+    ``age_days`` 0 → 1.0; one half-life → 0.5. Each prior recall slows aging by
+    extending the effective half-life (saturating, via ``log1p``), so a
+    well-used memory scores higher than an untouched one of the same age.
+    """
+    age_days = max(0.0, age_days)
+    effective_age = age_days / (1.0 + 0.5 * math.log1p(max(0, use_count)))
+    return 0.5 ** (effective_age / half_life_days)
+
+
+def _parse_created_at(value: Any) -> datetime | None:
+    """Parse a Mem0 ``created_at`` (ISO string or epoch) into aware UTC datetime."""
+    if not value:
+        return None
+    try:
+        if isinstance(value, str):
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromtimestamp(value, tz=UTC)
+    except (ValueError, TypeError, OSError):
+        return None
+
+
+def should_purge_user_memory(mem: dict, now: datetime) -> bool:
+    """Whether a user-preference entry has decayed below the purge threshold.
+
+    Replaces the old hard 180-day cutoff. Entries with an unparseable/missing
+    ``created_at`` are never purged (we don't blind-delete unknown-age data).
+    """
+    created = _parse_created_at(mem.get("created_at"))
+    if created is None:
+        return False
+    age_days = (now - created).total_seconds() / 86400.0
+    use_count = int((mem.get("metadata") or {}).get("use_count", 0) or 0)
+    return relevance_score(age_days, use_count) < MEMORY_PURGE_THRESHOLD
+
+
+def _memory_relevance(mem: dict, now: datetime) -> float:
+    """Relevance score for ranking a memory entry; unknown age → treated as fresh."""
+    created = _parse_created_at(mem.get("created_at"))
+    age_days = (now - created).total_seconds() / 86400.0 if created else 0.0
+    use_count = int((mem.get("metadata") or {}).get("use_count", 0) or 0)
+    return relevance_score(age_days, use_count)
 
 
 class MemoryType(StrEnum):
@@ -272,6 +337,10 @@ class MemoryService:
         try:
             result = self._memory.get_all(user_id=f"{workspace_id}:{user_id}")
             rows = result.get("results", []) if isinstance(result, dict) else []
+            # Rank by relevance (recency + usage) so the freshest / most-used
+            # standing directives win the prompt-context slice (Sprint 15 Task 5).
+            now = datetime.now(UTC)
+            rows.sort(key=lambda m: _memory_relevance(m, now), reverse=True)
             return rows[:limit]
         except Exception as e:
             logger.warning("Failed to fetch user preferences: %s", e)
@@ -453,6 +522,23 @@ class MemoryService:
             logger.warning("Failed to delete memory %s: %s", memory_id, e)
             return False
 
+    def _qdrant_client(self) -> tuple[Any, str]:
+        """Build a direct Qdrant client + collection name.
+
+        Used for operations Mem0's API can't express — payload edits and
+        workspace-wide scrolls (Mem0 0.1.x ``get_all()`` requires a user_id).
+        """
+        from qdrant_client import QdrantClient
+
+        settings = get_settings()
+        url = settings.qdrant_url
+        if url.startswith("http://"):
+            host = url.replace("http://", "").split(":")[0]
+            port = int(url.split(":")[-1])
+        else:
+            host, port = "localhost", 6333
+        return QdrantClient(host=host, port=port), settings.qdrant_collection
+
     def set_memory_status(
         self,
         memory_id: str,
@@ -517,24 +603,10 @@ class MemoryService:
             else:
                 expires_at = (datetime.now(UTC) + timedelta(days=ttl_days)).isoformat()
 
-            # Update metadata with expires_at using Qdrant directly
-            from qdrant_client import QdrantClient
-
-            settings = get_settings()
-
-            qdrant_url = settings.qdrant_url
-            if qdrant_url.startswith("http://"):
-                qdrant_host = qdrant_url.replace("http://", "").split(":")[0]
-                qdrant_port = int(qdrant_url.split(":")[-1])
-            else:
-                qdrant_host = "localhost"
-                qdrant_port = 6333
-
-            client = QdrantClient(host=qdrant_host, port=qdrant_port)
-
-            # Update the point's payload with expires_at
+            # Update the point's payload with expires_at using Qdrant directly
+            client, collection = self._qdrant_client()
             client.set_payload(
-                collection_name=settings.qdrant_collection,
+                collection_name=collection,
                 payload={"expires_at": expires_at},
                 points=[memory_id],
             )
@@ -646,7 +718,8 @@ class MemoryService:
 
         now = datetime.now(UTC)
         cache_cutoff = now - timedelta(days=cache_ttl_days)
-        now - timedelta(days=user_ttl_days)
+        # user_ttl_days retained for API/endpoint compatibility; user-preference
+        # retention is now governed by relevance-scoring decay, not a fixed cutoff.
 
         deleted = {"cache": 0, "user": 0}
 
@@ -674,38 +747,37 @@ class MemoryService:
                         if mem_id and self.delete_memory(mem_id):
                             deleted["cache"] += 1
 
-            # Clean up user preferences (180 days hard decay per Task 4)
-            # Find all user IDs inside workspace_id
-            # Mem0 API currently doesn't allow fetching across all user_ids easily,
-            # so we fetch by the 'user' metadata marker if we can, or iterate known users.
-            # But get_all_memories without user_id might work or we use a fallback.
-            # We will use the base memory search to fetch all user memories in the workspace.
-            user_cutoff_180d = now - timedelta(days=180)  # Force 6 months memory decay
-            all_user_mems = self._memory.get_all()
-            if all_user_mems and isinstance(all_user_mems, dict) and "results" in all_user_mems:
-                for mem in all_user_mems["results"]:
-                    mem_uid = mem.get("user_id", "")
-                    if (
-                        mem_uid.startswith(f"{workspace_id}:")
-                        and ":team:" not in mem_uid
-                        and ":query_cache" not in mem_uid
+            # Clean up user preferences via relevance-scoring decay (Sprint 15
+            # Task 5) — only long-cold entries (score < MEMORY_PURGE_THRESHOLD)
+            # are purged, so a frequently-recalled old preference survives where
+            # an untouched one decays away. Mem0 0.1.x get_all() requires a
+            # user_id, so a workspace-wide sweep scrolls Qdrant directly and
+            # scopes to this workspace's USER namespace (skipping team/cache).
+            client, collection = self._qdrant_client()
+            offset = None
+            while True:
+                points, offset = client.scroll(
+                    collection_name=collection,
+                    limit=256,
+                    with_payload=True,
+                    offset=offset,
+                )
+                for point in points:
+                    payload = point.payload or {}
+                    uid = payload.get("user_id", "")
+                    if not (
+                        uid.startswith(f"{workspace_id}:")
+                        and ":team:" not in uid
+                        and ":query_cache" not in uid
                     ):
-                        created_at = mem.get("created_at")
-                        if created_at:
-                            try:
-                                if isinstance(created_at, str):
-                                    mem_time = datetime.fromisoformat(
-                                        created_at.replace("Z", "+00:00")
-                                    )
-                                else:
-                                    mem_time = datetime.fromtimestamp(created_at, tz=UTC)
-
-                                if mem_time < user_cutoff_180d:
-                                    mem_id = mem.get("id")
-                                    if mem_id and self.delete_memory(mem_id):
-                                        deleted["user"] += 1
-                            except (ValueError, TypeError):
-                                continue
+                        continue
+                    # Mem0 stores metadata flat in the payload, so pass the whole
+                    # payload as `metadata` for the use_count lookup.
+                    mem = {"created_at": payload.get("created_at"), "metadata": payload}
+                    if should_purge_user_memory(mem, now) and self.delete_memory(str(point.id)):
+                        deleted["user"] += 1
+                if offset is None:
+                    break
 
             logger.info(
                 "Memory cleanup for workspace=%s: cache=%d deleted (>%dd)",
