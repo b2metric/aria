@@ -61,3 +61,14 @@ In `pipeline.py`, if the result (or EXPLAIN estimate) sits between the UI thresh
 Update the `lint-backend` job to run `ruff check backend/ agents/` and `ruff format --check backend/ agents/` so the chart/artifact agents are gated like the rest of the backend. **(RESOLVED)**
 - [x] **Step 2: Fix the ~22 pre-existing findings** — fixed 24 findings (UP037/F401/UP017/I001 auto-fixed; F841 unused `loop` + UP042 `ChartType` → `StrEnum` by hand) + `ruff format agents/`. `ruff check backend/ agents/` clean; unit gate 263 passed. **(RESOLVED)**
 `uv run ruff check agents/` currently reports ~22 errors (unused imports, import ordering, etc.; most are `--fix`-able). Fix them until `agents/` is clean, then keep it in the gate. Surfaced 2026-06-20 while dropping `pydantic-ai` from `agents/chart_llm.py` (PR #47).
+
+---
+
+### Task 5: Read-only SQL guard (injection prevention) *(retroactively documented)*
+*Goal: Reject any non-SELECT SQL (DML/DDL) before it reaches a customer DB — the first safeguard layer that complements Task 1's EXPLAIN cost guard. Shipped 2026-06-17 (commit `e43c878` "read-only guards") but not tracked in a sprint — recorded here under Sprint 14's Guards/safeguards theme.*
+
+**Files:**
+- `backend/app/query/guards.py` (`verify_read_only_sql`)
+- `backend/app/query/pipeline.py` (guard invoked before execution)
+
+- [x] **Shipped:** Regex/keyword verifier rejects UPDATE/DELETE/INSERT/DROP/etc. and allows only SELECT/WITH/EXPLAIN reads; runs before EXPLAIN + execution. Unit-tested (`tests/query/test_guards.py`). **(RESOLVED — retroactive)**

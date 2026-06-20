@@ -92,3 +92,15 @@ Update `frontend/src/app/page.tsx` to call this new endpoint. Remove `getMockDas
 Analyze `delete_conversation`. It deletes the individual key but calls `zrem(list_key, conversation_id)`. Check if `list_conversations` reads from this exact sorted set. Ensure `ZADD` and `ZREM` member strings match exactly. **(RESOLVED)**
 - [ ] **Step 2: Ensure Complete Cleanup**
 When testing, if `redis.zrem(list_key, conversation_id)` returns 0, it means the ID wasn't in the sorted set. Updated `delete_conversation` to return `deleted > 0 or zrem_res > 0` and properly sweep the conversation mapping without falsely blocking 204. **(RESOLVED)**
+
+---
+
+### Task 7: Per-customer response language (i18n) *(retroactively documented)*
+*Goal: One consistent response language per customer (e.g. Turkish for medianova, English for stc-kuwait) across chat, insights, follow-up questions, and vault. Shipped 2026-06-19 (commit `73072d7` "feat(i18n)") but not tracked in a sprint — recorded here under Sprint 13's UX theme.*
+
+**Files:**
+- `backend/app/services/workspace_language.py` (`get_workspace_language`, `language_directive`)
+- `backend/app/api/endpoints/admin/tenant.py` (language in tenant config), `backend/app/query/{llm_sql,llm_insight}.py`
+- `frontend/src/app/admin/tenant-config/page.tsx` (language selector)
+
+- [x] **Shipped:** Language stored in `Customer.settings['language']`; a `language_directive` is injected into every LLM prompt (SQL gen, insights, suggestions) so output stays in the customer's language; admin can set it from Tenant Config. Unit-tested (`backend/tests/test_workspace_language.py`). **(RESOLVED — retroactive)**

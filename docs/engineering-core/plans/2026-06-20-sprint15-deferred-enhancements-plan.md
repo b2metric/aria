@@ -78,3 +78,22 @@ Confirm with a couple of NL→SQL cases that preferences nudge output (e.g. mont
 Replace (or augment) the 180-day hard delete with a recency/usage-weighted relevance score; rank recall by score and only purge long-cold entries.
 - [ ] **Step 2: Tuning + tests**
 Add unit coverage for the scoring/decay function and document the chosen half-life / thresholds.
+
+---
+
+### Task 6: CMEK — real external KMS + key-management UI
+*Goal: CMEK shipped as app-KEK envelope encryption + a provider-selection page (Sprint 12 Task 6, retroactively documented), but the external KMS providers are stubbed and the UI has no lifecycle management. Close the gap.*
+
+**Files:**
+- Modify: `backend/app/services/crypto.py` (AWS/GCP/Azure providers — currently stub)
+- Modify: `backend/app/api/endpoints/admin/encryption.py`
+- Modify: `frontend/src/app/settings/encryption/page.tsx`
+
+- [ ] **Step 1: Real KMS providers (backend)**
+Implement the `aws` / `gcp` / `azure` providers in `crypto.py` so that when a customer's provider != `app`, the per-customer DEK is wrapped/unwrapped via the external KMS (boto3 KMS / google-cloud-kms / azure-keyvault-keys) using the configured key URI/ARN. Validate the key URI on PATCH (fail fast if the key is unreachable). Keep `app` as the default fallback.
+- [ ] **Step 2: Key lifecycle UI (frontend)**
+Extend `/settings/encryption` beyond provider+URI: show **key status/health** (is the configured KMS key reachable?), a **rotate key** action (re-wrap the DEK under a new key version), and surface a **CMEK config-change audit trail** (who changed provider/key, when) via the existing audit log.
+- [ ] **Step 3: Tests**
+Unit-test the provider selection + DEK wrap/unwrap round-trip (mock the external KMS SDKs); assert `app` fallback still works.
+
+> Note: the existing config page (provider dropdown + key URI + PATCH) already exists — this task is the *management layer* (real KMS wiring + rotation/status/audit), not a from-scratch build.
