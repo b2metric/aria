@@ -68,10 +68,8 @@ Already implemented: `pipeline.py` uploads `png_bytes` to MinIO (`chart_{convers
 **Files:**
 - Modify: `backend/app/memory/service.py`
 
-- [ ] **Step 1: Relevance score over hard-delete**
-Replace (or augment) the 180-day hard delete with a recency/usage-weighted relevance score; rank recall by score and only purge long-cold entries.
-- [ ] **Step 2: Tuning + tests**
-Add unit coverage for the scoring/decay function and document the chosen half-life / thresholds.
+- [x] **Step 1: Relevance score over hard-delete** — added `relevance_score(age_days, use_count)` (exponential recency decay; recall extends the effective half-life via `log1p`) + `should_purge_user_memory`. `get_user_preferences` now ranks by relevance (freshest/most-used first). `cleanup_expired_memories` purges only entries scoring below `MEMORY_PURGE_THRESHOLD` instead of a hard 180-day cutoff. **Also fixed a pre-existing latent bug:** the workspace user-pref sweep called `self._memory.get_all()` with no `user_id`, which *throws* on mem0 0.1.x — so the old hard-delete never actually ran. Replaced with a direct Qdrant scroll scoped to the workspace USER namespace (new DRY `_qdrant_client()` helper, also adopted by `update_memory_ttl`). **(RESOLVED)**
+- [x] **Step 2: Tuning + tests** — half-life **45 d**, purge threshold **0.05** (0-use score crosses it at ≈195 d, graded vs. the old hard 180 d); documented inline. 5 unit tests in `backend/tests/test_memory_decay.py`; full suite `88 passed`. **Live (aria-backend, real Qdrant):** stored 2 prefs, backdated one to 400 d via Qdrant `set_payload`; `cleanup_expired_memories` purged the cold one (`user=1`) and the fresh one survived. **(RESOLVED)**
 
 ---
 
