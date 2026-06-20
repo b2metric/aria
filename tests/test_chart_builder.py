@@ -29,6 +29,7 @@ from agents.chart_renderer import (
     render_all,
     render_csv,
     render_json,
+    render_png,
 )
 from agents.chart_builder import (
     ChartPipelineResult,
@@ -358,6 +359,31 @@ class TestRendererCSV:
 # ═══════════════════════════════════════════════════════════════════════════
 # Chart renderer — render_all
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestRendererPNG:
+    def test_render_png_contract(self):
+        """render_png returns a PNG RenderOutput and never raises.
+
+        When a Chrome/Kaleido engine is available the content is real PNG
+        bytes; when it is not (e.g. no browser), render_png degrades to empty
+        content rather than crashing — both outcomes are valid here.
+        """
+        cfg = ChartConfig(
+            chart_type=ChartType.BAR,
+            x=AxisConfig(column="month"),
+            y=AxisConfig(column="revenue"),
+            title="Revenue",
+        )
+        rows = [{"month": "Jan", "revenue": 10}, {"month": "Feb", "revenue": 20}]
+
+        out = render_png(rows, cfg)
+
+        assert out.format == "png"
+        if out.content:
+            assert isinstance(out.content, bytes)
+            assert out.content[:4] == b"\x89PNG"  # PNG magic number
+            assert out.size_bytes > 0
 
 
 class TestRenderAll:
