@@ -57,10 +57,8 @@ Already implemented: `pipeline.py` uploads `png_bytes` to MinIO (`chart_{convers
 - Modify: `backend/app/memory/service.py`
 - Modify: `backend/app/query/llm_sql.py`
 
-- [ ] **Step 1: Surface preferences to the SQL prompt**
-In the SQL-generation grounding step, pull relevant `user_preferences` from the memory service and add them to the prompt context (alongside the existing column/enum grounding).
-- [ ] **Step 2: Verify non-regression**
-Confirm with a couple of NL→SQL cases that preferences nudge output (e.g. monthly bucketing) without breaking the scalar-vs-trend rules from the earlier SQL-grounding fix.
+- [x] **Step 1: Surface preferences to the SQL prompt** — `MemoryService.lookup` no longer relies solely on question-similarity search for `user_preferences`: it now also pulls standing USER-type prefs unconditionally via new `get_user_preferences()` (`get_all`) and merges them into the context (deduped by id then text; relevance-ranked semantic matches first, proactive extras appended). `to_prompt_context` shows up to 5 prefs (was 3) so both relevant matches and standing directives fit. These already flow into the SQL prompt via `_build_memory_context` (`llm_sql.py`). **(RESOLVED)**
+- [x] **Step 2: Verify non-regression** — 4 unit tests in `backend/tests/test_memory_proactivity.py`; full suite `83 passed`. **Live (aria-backend, mem0 0.1.116):** stored 6 standing prefs; semantic `search(limit=5)` returned only 5, but `lookup` recalled all 6 (the dropped `PREF_5` re-added by the proactive merge, no duplicates). A standing "TOPUP_AMOUNT→revenue" directive is injected even for an unrelated question. Scalar-vs-trend rules untouched (prompt-additive only). **(RESOLVED)**
 
 ---
 
