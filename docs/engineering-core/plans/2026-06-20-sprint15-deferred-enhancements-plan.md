@@ -33,10 +33,8 @@ Already implemented: `pipeline.py` uploads `png_bytes` to MinIO (`chart_{convers
 - Modify: `backend/app/api/endpoints/admin/audit.py`
 - Modify: `frontend/src/app/admin/audit-log/page.tsx`
 
-- [ ] **Step 1: Backend metadata filters**
-Add query params (e.g. `success`, `resource_type`, free-text on `details`) to the audit-logs endpoint and translate them into JSONB/`details` predicates in the SQLAlchemy query (scoped by `customer_id`).
-- [ ] **Step 2: Frontend filter controls**
-Wire the existing status/action selects (and a new "outcome" filter) to the new query params so filtering is server-side rather than the current client-side slice.
+- [x] **Step 1: Backend metadata filters** — added a `success: bool | None` query param to `GET /api/admin/audit-logs`, translated into a JSONB predicate (`details->>'success'`) in `AuditService.get_logs`/`count_logs` (still scoped by `customer_id`). Verified live: all=80, `success=true`=55, `success=false`=14. **(RESOLVED)**
+- [x] **Step 2: Frontend filter controls** — the audit-log page's status select now sends `&success=true/false` to the backend (re-fetches on change) instead of slicing client-side. `action` was already server-side. **(RESOLVED)**
 
 ---
 

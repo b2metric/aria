@@ -238,6 +238,7 @@ class AuditService:
         user_id: uuid.UUID | None = None,
         action: str | None = None,
         resource_type: str | None = None,
+        success: bool | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[DataAuditLog]:
@@ -250,6 +251,11 @@ class AuditService:
             stmt = stmt.where(DataAuditLog.action == action)
         if resource_type is not None:
             stmt = stmt.where(DataAuditLog.resource_type == resource_type)
+        if success is not None:
+            # `details` is JSONB; match the nested `success` boolean via ->> text.
+            stmt = stmt.where(
+                DataAuditLog.details["success"].astext == ("true" if success else "false")
+            )
 
         stmt = stmt.order_by(DataAuditLog.created_at.desc()).offset(offset).limit(limit)
 
@@ -263,6 +269,7 @@ class AuditService:
         user_id: uuid.UUID | None = None,
         action: str | None = None,
         resource_type: str | None = None,
+        success: bool | None = None,
     ) -> int:
         """Return the total number of matching audit-log entries."""
         stmt = (
@@ -277,6 +284,10 @@ class AuditService:
             stmt = stmt.where(DataAuditLog.action == action)
         if resource_type is not None:
             stmt = stmt.where(DataAuditLog.resource_type == resource_type)
+        if success is not None:
+            stmt = stmt.where(
+                DataAuditLog.details["success"].astext == ("true" if success else "false")
+            )
 
         result = await self._session.execute(stmt)
         return result.scalar_one()

@@ -344,6 +344,58 @@ class TestQueryMethods:
         mock_session.execute.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_get_logs_success_filter_adds_jsonb_predicate(
+        self,
+        audit_service: AuditService,
+        mock_session: AsyncMock,
+        sample_customer_id: uuid.UUID,
+    ) -> None:
+        """success=True/False adds a JSONB ``details->>'success'`` predicate; None omits it."""
+        from sqlalchemy.dialects import postgresql
+
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = []
+        mock_session.execute.return_value = mock_result
+
+        def _sql() -> str:
+            stmt = mock_session.execute.call_args[0][0]
+            return str(
+                stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+            )
+
+        await audit_service.get_logs(customer_id=sample_customer_id, success=None)
+        sql_none = _sql()
+        await audit_service.get_logs(customer_id=sample_customer_id, success=True)
+        sql_true = _sql()
+        await audit_service.get_logs(customer_id=sample_customer_id, success=False)
+        sql_false = _sql()
+
+        assert "->>" not in sql_none
+        assert "->>" in sql_true and "'success'" in sql_true and "'true'" in sql_true
+        assert "->>" in sql_false and "'false'" in sql_false
+
+    @pytest.mark.asyncio
+    async def test_count_logs_success_filter_adds_jsonb_predicate(
+        self,
+        audit_service: AuditService,
+        mock_session: AsyncMock,
+        sample_customer_id: uuid.UUID,
+    ) -> None:
+        """count_logs honours the same JSONB success predicate."""
+        from sqlalchemy.dialects import postgresql
+
+        mock_result = MagicMock()
+        mock_result.scalar_one.return_value = 0
+        mock_session.execute.return_value = mock_result
+
+        await audit_service.count_logs(customer_id=sample_customer_id, success=True)
+        stmt = mock_session.execute.call_args[0][0]
+        sql = str(
+            stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True})
+        )
+        assert "->>" in sql and "'success'" in sql
+
+    @pytest.mark.asyncio
     async def test_get_logs_returns_entries(
         self,
         audit_service: AuditService,
