@@ -15,6 +15,31 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+async def _check_background_worker() -> dict[str, Any]:
+    """Probe the background-task subsystem used for large-result exports.
+
+    The export job (``export_massive_query_to_minio``) is dispatched
+    fire-and-forget via ``asyncio.create_task`` in-process — there is no
+    external ARQ/Prefect broker to ping. So we verify the actual mechanism:
+    that the event loop can still schedule and complete a background task. A
+    wedged or saturated loop fails the probe (timeout).
+    """
+    try:
+        loop = asyncio.get_event_loop()
+        start = loop.time()
+
+        async def _probe() -> bool:
+            return True
+
+        ok = await asyncio.wait_for(asyncio.create_task(_probe()), timeout=3.0)
+        return {
+            "status": "healthy" if ok else "unhealthy",
+            "latency_ms": round((loop.time() - start) * 1000),
+        }
+    except Exception as e:  # noqa: BLE001 — health probe must never raise
+        return {"status": "unhealthy", "error": str(e)}
+
+
 @router.get("/")
 async def get_system_health(current_user: Any = Depends(get_current_user)):
     """Get detailed health status of all system dependencies."""
@@ -29,6 +54,7 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
         "qdrant": {"status": "unknown", "latency_ms": 0},
         "litellm": {"status": "unknown", "latency_ms": 0},
         "customer_dbs": {"status": "unknown", "latency_ms": 0},
+        "background_worker": {"status": "unknown", "latency_ms": 0},
     }
 
     # 0. Check Customer Database Connectivities
@@ -187,5 +213,8 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
                 }
         except Exception as e:
             results["litellm"] = {"status": "unhealthy", "error": str(e)}
+
+    # 6. Background worker (in-process asyncio task scheduler for large-result exports)
+    results["background_worker"] = await _check_background_worker()
 
     return results

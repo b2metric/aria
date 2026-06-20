@@ -43,10 +43,10 @@ In `pipeline.py`, if the result (or EXPLAIN estimate) sits between the UI thresh
 - Modify: `frontend/src/app/admin/health/page.tsx`
 - Modify: `backend/app/api/endpoints/admin/health.py`
 
-- [ ] **Step 1: Prefect / ARQ Health Check**
-Add the background worker service to the backend `/health` endpoint checks to verify the queue is responsive.
-- [ ] **Step 2: DB Connection Tests**
-Add a ping status for the active Tenant Customer DBs (Oracle/Postgres) on the Health dashboard to ensure customer DB connectivity hasn't dropped.
+- [x] **Step 1: Prefect / ARQ Health Check** — added a `background_worker` entry to `/api/admin/health`. The large-result export is fire-and-forget via in-process `asyncio.create_task` (no external ARQ/Prefect broker wired — `arq` is declared but unused), so the probe (`_check_background_worker`) verifies the *actual* mechanism: the event loop can schedule + complete a background task (times out if wedged). Unit-tested. **(RESOLVED)**
+- [x] **Step 2: DB Connection Tests** — the backend already pings each active tenant customer DB (`customer_dbs`: `SELECT 1`, scoped to the caller's own `customer_id`), and the Health dashboard already renders it ("Customer Databases") via its generic service grid. Verified present; no change needed beyond confirming coverage. **(RESOLVED)**
+
+> **Note:** No frontend change was required — `frontend/src/app/admin/health/page.tsx` renders every service key in the response generically (CSS `capitalize`), so the new `background_worker` card appears automatically as "Background Worker".
 
 ---
 
