@@ -17,6 +17,9 @@ table and column names, and never mutate their inputs.
 from __future__ import annotations
 
 import copy
+from types import SimpleNamespace
+
+import pytest
 
 from backend.app.query.cls import (
     strip_denied_columns_from_rows,
@@ -204,3 +207,73 @@ def test_rows_inputs_not_mutated():
     assert rows == snapshot
     assert out is not rows
     assert out[0] is not rows[0]
+
+
+# ── (f) wiring: team-less request applies the customer-DEFAULT deny_columns ───
+#
+# Regression test for the HIGH finding: a request with team_id=None must still
+# resolve the customer-wide-default policy (team_id IS NULL) so its
+# deny_columns are pruned from the schema BEFORE it reaches the LLM (Step 1).
+# Previously the Step-1 guard required ``team_id is not None``, so team-less
+# requests leaked denied column names/types into the LLM prompt.
+
+
+@pytest.mark.asyncio
+async def test_team_less_request_prunes_default_policy_deny_columns(monkeypatch):
+    from backend.app.query import pipeline
+
+    workspace_id = "acme"
+    tables = [{"name": "DIM_PREP_PRODUCTS", "keywords": "", "description": "", "order": 1}]
+    full_columns = [
+        {"name": "PRODUCT_ID", "type": "NUMBER", "description": ""},
+        {"name": "PRODUCT_TYPE", "type": "VARCHAR2", "description": ""},  # denied
+        {"name": "PRODUCT_NAME", "type": "VARCHAR2", "description": ""},
+    ]
+
+    async def fake_get_available_tables(engine, ws, db=None, team_id=None):
+        return tables
+
+    async def fake_get_table_columns(engine, table_name, ws):
+        return list(full_columns)
+
+    # Customer-wide DEFAULT policy (team_id IS NULL) carrying a deny-list.
+    default_policy = SimpleNamespace(
+        deny_columns={"DIM_PREP_PRODUCTS": ["PRODUCT_TYPE"]},
+        row_filters=None,
+    )
+
+    async def fake_resolve_vault_policy(ws, db, team_id=None):
+        # The default policy must be returned even when team_id is None.
+        return default_policy
+
+    # Capture what the LLM path actually receives as its schema.
+    captured: dict = {}
+
+    async def fake_generate_sql_with_llm(**kwargs):
+        captured["table_columns"] = kwargs["table_columns"]
+        return ("SELECT 1", "ok", {})
+
+    monkeypatch.setattr(pipeline, "_get_available_tables", fake_get_available_tables)
+    monkeypatch.setattr(pipeline, "_get_table_columns", fake_get_table_columns)
+    monkeypatch.setattr(pipeline, "_resolve_vault_policy", fake_resolve_vault_policy)
+    # generate_sql_with_llm is imported lazily inside _generate_sql from this module.
+    monkeypatch.setattr(
+        "backend.app.query.llm_sql.generate_sql_with_llm",
+        fake_generate_sql_with_llm,
+    )
+
+    sentinel_db = object()  # a session IS available; team_id is None.
+    # A question with no schema keyword overlap → low score → LLM path fires,
+    # which is where we can observe the (pruned) table_columns.
+    await pipeline._generate_sql(
+        "zzz qqq xxx",
+        engine=None,
+        workspace_id=workspace_id,
+        db=sentinel_db,
+        team_id=None,
+    )
+
+    schema = captured["table_columns"]
+    names = [c["name"] for c in schema["DIM_PREP_PRODUCTS"]]
+    assert "PRODUCT_TYPE" not in names, "default-policy deny_columns must be pruned for team-less requests"
+    assert names == ["PRODUCT_ID", "PRODUCT_NAME"]

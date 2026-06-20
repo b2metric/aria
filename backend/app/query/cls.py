@@ -8,8 +8,10 @@
      LLM / rule-based SQL generator, so the model can never SELECT or otherwise
      reference a denied column.
   2. **Defense-in-depth** — :func:`strip_denied_columns_from_rows` strips denied
-     columns from the flat result rows *after* execution, catching ``SELECT *``
-     and column aliases that would dodge layer 1.
+     columns from the flat result rows *after* execution by name.  It catches
+     ``SELECT *`` and any column that KEEPS its original name; a renamed alias
+     (``SELECT revenue AS r``) is NOT stripped, but in practice cannot reach
+     here when layer 1 fires (the LLM never saw the column to alias it).
 
 Both helpers are pure: they return NEW structures, match table and column names
 case-insensitively, and never mutate their inputs (project immutability rule).

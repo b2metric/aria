@@ -476,7 +476,10 @@ async def _generate_sql(
     # `_build_schema_context`) or the rule-based generator below.  A column the
     # model never sees cannot be SELECTed or referenced.  Defense-in-depth (a
     # result post-filter for `SELECT *` / aliases) lives in `_execute_sql`.
-    if db is not None and team_id is not None:
+    # Guard matches Step 2 in `_execute_sql` (db + workspace): a team-less
+    # request must still resolve the customer-wide-default policy
+    # (``team_id IS NULL``) so its ``deny_columns`` are pruned, not leaked.
+    if db is not None and workspace_id:
         cls_policy = await _resolve_vault_policy(workspace_id, db, team_id)
         deny_columns = getattr(cls_policy, "deny_columns", None) if cls_policy else None
         if deny_columns:
@@ -1293,10 +1296,12 @@ async def _execute_sql(
             )
 
         # ── Column-Level Security: defense-in-depth result post-filter ──────
-        # Strip any denied column that slipped through (e.g. `SELECT *` or an
-        # alias that dodged the schema-level CLS in `_generate_sql`).  Result
-        # rows are flat dicts and can't be mapped back to a source table, so
-        # the union of all denied column names is stripped (case-insensitive).
+        # Name-based strip of any denied column that reaches the result with its
+        # original name (e.g. via `SELECT *`), as a backstop to the schema-level
+        # CLS in `_generate_sql`.  This does NOT catch renamed aliases
+        # (`SELECT revenue AS r`), but those can't occur once layer 1 fires.
+        # Result rows are flat dicts and can't be mapped back to a source table,
+        # so the union of all denied column names is stripped (case-insensitive).
         if deny_columns:
             from backend.app.query.cls import strip_denied_columns_from_rows
 
@@ -1890,9 +1895,11 @@ async def process_query(
                     token_svc = None
 
             # ── Generate SQL ───────────────────────────────────────────────
-            if team_id:
-                gen_kwargs["team_id"] = team_id
-                gen_kwargs["db"] = sess
+            # Always pass the session so Step-1 CLS can resolve the
+            # customer-wide-default policy even for team-less requests; team_id
+            # may be None (the default policy is keyed on team_id IS NULL).
+            gen_kwargs["db"] = sess
+            gen_kwargs["team_id"] = team_id
             sql, explanation, is_llm, token_usage = await _generate_sql(
                 request.question,
                 engine,
