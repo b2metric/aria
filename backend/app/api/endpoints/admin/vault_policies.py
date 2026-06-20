@@ -152,6 +152,25 @@ async def update_team_policy(
 
     customer_id = await resolve_customer_id(current_user, db)
 
+    # ── Write-time validation of row-filter predicates ───────────────────
+    # row_filters values are raw SQL predicate strings supplied by admins.
+    # Validate each one now (parse-only) so a malformed predicate is surfaced
+    # immediately as a 400, instead of silently breaking every user query at
+    # RLS-enforcement time later.
+    if payload.row_filters:
+        import sqlglot
+
+        for table, predicate in payload.row_filters.items():
+            try:
+                # Parse-only: a ParseError (or any parse failure) means the
+                # predicate is malformed and must be rejected at write time.
+                sqlglot.condition(predicate)
+            except Exception as exc:  # noqa: BLE001 - any parse failure is a 400
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid row filter predicate for table '{table}': {exc}",
+                ) from exc
+
     # Resolve team_uuid: NULL for the "default" sentinel.
     team_uuid: uuid.UUID | None = None
     if team_id != "default":

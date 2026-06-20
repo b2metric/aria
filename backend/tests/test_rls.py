@@ -135,3 +135,36 @@ def test_with_cte_query_filters_underlying_table():
     out = apply_row_filters(sql, {"FCT_SALES": "REGION = 'KW'"}, dialect="oracle")
     assert _table_has_predicate(out, "FCT_SALES", dialect="oracle")
     verify_read_only_sql(out)
+
+
+def test_cte_name_collision_does_not_wrap_outer_reference():
+    # A CTE named identically to a filtered physical table.  The OUTER
+    # ``FROM FCT_SALES`` references the CTE — wrapping it would create a
+    # circular self-reference ``(SELECT * FROM FCT_SALES WHERE ...) FCT_SALES``
+    # that the DB rejects.  The CTE body selects from an *unfiltered* table, so
+    # nothing should be wrapped and no error should be raised.
+    sql = "WITH FCT_SALES AS (SELECT id FROM OTHER_TABLE) SELECT * FROM FCT_SALES"
+    out = apply_row_filters(sql, {"FCT_SALES": "REGION = 'KW'"}, dialect="oracle")
+
+    # Outer CTE reference must NOT be wrapped into a filtered subquery.
+    assert not _table_has_predicate(out, "FCT_SALES", dialect="oracle")
+    # The output must remain valid, parseable SELECT SQL.
+    verify_read_only_sql(out)
+    tree = sqlglot.parse_one(out, dialect="oracle")
+    assert tree is not None
+    # The outer FROM should still reference the CTE alias directly (unwrapped),
+    # and no circular subquery should have been introduced.
+    outer_select = tree.find(exp.Select)
+    assert outer_select is not None
+
+
+def test_cte_collision_still_wraps_filtered_table_inside_cte_body():
+    # When the CTE shadows a filtered table BUT the CTE body itself selects FROM
+    # the same filtered physical table, the inner physical reference must still
+    # be wrapped; only the outer CTE-alias reference is skipped.
+    sql = "WITH FCT_SALES AS (SELECT * FROM FCT_SALES) SELECT * FROM FCT_SALES"
+    out = apply_row_filters(sql, {"FCT_SALES": "REGION = 'KW'"}, dialect="oracle")
+
+    # The inner physical reference inside the CTE body must carry the predicate.
+    assert _table_has_predicate(out, "FCT_SALES", dialect="oracle")
+    verify_read_only_sql(out)

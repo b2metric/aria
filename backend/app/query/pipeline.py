@@ -357,6 +357,10 @@ async def _get_available_tables(
                         len(tables),
                     )
             except Exception:
+                # Intentional asymmetry: table-level pruning fails OPEN (logged,
+                # full list returned) since over-exposing schema metadata is
+                # low-risk, whereas RLS row-filtering (in _execute_sql) fails
+                # CLOSED — it rejects the query rather than leak rows.
                 logger.exception("Failed to enforce vault policy — returning full table list")
 
         return tables
@@ -1033,20 +1037,29 @@ async def _execute_sql(
 
     await verify_sql_security(sql, engine, workspace_id, db, team_id)
 
+    # ── Fetch DB config once ─────────────────────────────────────────────
+    # Both the RLS rewrite (dialect) and execution (below) need the customer's
+    # DB config.  Each fetch opens a connection + decrypts the password, so we
+    # fetch it a single time here and reuse it.  Guarded on ``workspace_id`` to
+    # preserve the original behavior: the no-``workspace_id`` schema-query path
+    # never fetched a config and must still execute against the metadata DB.
+    config: DBConfig | None = None
+    if workspace_id:
+        config = await _get_db_config(engine, workspace_id)
+
     # ── Row-Level Security: structurally scope filtered tables ───────────
     # Enforced on the generated SQL itself (table → filtered-subquery rewrite
     # via sqlglot), NOT trusted to the LLM.  Runs after table-level security
     # (verify_sql_security) and before any dialect transformation.  Fails
     # closed: if a filtered table cannot be safely rewritten, the query is
     # rejected rather than executed unfiltered.
-    if db is not None and workspace_id:
+    if db is not None and workspace_id and config is not None:
         policy = await _resolve_vault_policy(workspace_id, db, team_id)
         row_filters = getattr(policy, "row_filters", None) if policy else None
         if row_filters:
             from backend.app.query.rls import apply_row_filters
 
-            rls_config = await _get_db_config(engine, workspace_id)
-            dialect = _sqlglot_dialect(rls_config.db_type.value)
+            dialect = _sqlglot_dialect(config.db_type.value)
             sql = apply_row_filters(sql, row_filters, dialect=dialect)
 
     from backend.app.db import execute_query
@@ -1129,9 +1142,10 @@ async def _execute_sql(
             await _audit(success=False, error=str(e), mem_trace=mem_trace)
             raise
 
-    # Get customer's DB config and execute
-    config = await _get_db_config(engine, workspace_id)
-
+    # Reuse the DB config fetched once above (workspace_id is guaranteed set
+    # here — the no-workspace_id path returned earlier).  Avoids a second
+    # connection + password-decrypt round-trip.
+    assert config is not None  # narrows Optional for the type checker
     # Transform SQL for target dialect (LIMIT → FETCH FIRST for Oracle)
     transformed_sql = _transform_sql_for_dialect(sql, config.db_type)
 

@@ -125,9 +125,31 @@ def apply_row_filters(
     rewritten = tree.copy()
     applied = False
 
+    # Collect CTE alias names so we never wrap the *outer* reference to a CTE.
+    # ``find_all(exp.Table)`` also returns CTE references; if a CTE is named
+    # identically to a filtered physical table, wrapping its outer reference
+    # produces ``(SELECT * FROM <cte> WHERE ...) <cte>`` — a circular
+    # self-reference the DB rejects.  We skip those outer references here; a
+    # CTE *body* that selects FROM a filtered physical table is a distinct
+    # exp.Table node inside the WITH expression and is still wrapped normally.
+    cte_names: set[str] = set()
+    with_node = rewritten.args.get("with")
+    if with_node:
+        for cte in with_node.expressions:
+            if cte.alias:
+                cte_names.add(cte.alias.lower())
+
     # Replace every physical-table reference whose name matches a filter.  We
     # match only exp.Table nodes, so subquery-derived sources are untouched.
     for table in list(rewritten.find_all(exp.Table)):
+        # Skip a reference to a CTE alias, but ONLY the *outer* reference: a
+        # table node living inside a CTE body (``find_ancestor(exp.CTE)``) is a
+        # genuine physical reference and must still be wrapped.  This preserves
+        # the asymmetry where a CTE shadowing a filtered table leaves its outer
+        # reference untouched (no circular self-reference) while still filtering
+        # the physical table the CTE body actually reads from.
+        if table.name.lower() in cte_names and table.find_ancestor(exp.CTE) is None:
+            continue
         predicate_sql = predicates.get(table.name.lower())
         if predicate_sql is None:
             continue
