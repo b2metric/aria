@@ -6,6 +6,7 @@ from backend.app.api.endpoints.admin import (
     audit,
     encryption,
     health,
+    llm_config,
     memory,
     metrics,
     team_memory,
@@ -28,6 +29,7 @@ router.include_router(
     vault_policies.router, prefix="/vault-policies", tags=["admin", "vault-policies"]
 )
 router.include_router(encryption.router, prefix="/encryption", tags=["admin", "encryption"])
+router.include_router(llm_config.router, prefix="/llm-config", tags=["Admin / LLM Config"])
 
 router.include_router(metrics.router, prefix="/metrics", tags=["Admin / Metrics"])
 
