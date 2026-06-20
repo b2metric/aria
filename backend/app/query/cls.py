@@ -96,9 +96,7 @@ def strip_denied_columns_from_rows(
         return rows
 
     # Union of every denied column name across all tables, lower-cased.
-    denied: set[str] = {
-        str(col).lower() for cols in deny_columns.values() for col in (cols or [])
-    }
+    denied: set[str] = {str(col).lower() for cols in deny_columns.values() for col in (cols or [])}
     if not denied:
         return rows
 

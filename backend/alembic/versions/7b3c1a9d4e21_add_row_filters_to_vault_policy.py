@@ -32,7 +32,7 @@ def upgrade() -> None:
             nullable=True,
             comment=(
                 "Per-table row-level predicate map enforced structurally on generated SQL, "
-                "e.g. {\"FCT_SALES\": \"REGION = 'KW'\", \"DIM_CUSTOMER\": \"TENANT_ID = 42\"}. "
+                'e.g. {"FCT_SALES": "REGION = \'KW\'", "DIM_CUSTOMER": "TENANT_ID = 42"}. '
                 "NULL/empty means no row restriction."
             ),
         ),

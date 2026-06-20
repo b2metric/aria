@@ -275,5 +275,7 @@ async def test_team_less_request_prunes_default_policy_deny_columns(monkeypatch)
 
     schema = captured["table_columns"]
     names = [c["name"] for c in schema["DIM_PREP_PRODUCTS"]]
-    assert "PRODUCT_TYPE" not in names, "default-policy deny_columns must be pruned for team-less requests"
+    assert "PRODUCT_TYPE" not in names, (
+        "default-policy deny_columns must be pruned for team-less requests"
+    )
     assert names == ["PRODUCT_ID", "PRODUCT_NAME"]

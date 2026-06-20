@@ -197,9 +197,7 @@ def test_sse_gate_strips_sql_from_status_string_data():
 def test_sse_gate_blanks_table_grid_string_data():
     event = {
         "event": "chart",
-        "data": json.dumps(
-            {"chart_type": "table", "chart_data": [{"a": 1}], "row_count": 1}
-        ),
+        "data": json.dumps({"chart_type": "table", "chart_data": [{"a": 1}], "row_count": 1}),
     }
     out = gate_sse_event(event, sql_visible=False)
     payload = json.loads(out["data"])
@@ -210,9 +208,7 @@ def test_sse_gate_blanks_table_grid_string_data():
 def test_sse_gate_keeps_chart_visualisation_string_data():
     event = {
         "event": "chart",
-        "data": json.dumps(
-            {"chart_type": "bar", "chart_data": [{"x": 1, "y": 2}], "row_count": 1}
-        ),
+        "data": json.dumps({"chart_type": "bar", "chart_data": [{"x": 1, "y": 2}], "row_count": 1}),
     }
     out = gate_sse_event(event, sql_visible=False)
     payload = json.loads(out["data"])
@@ -317,9 +313,7 @@ async def test_audit_failure_does_not_raise():
             raise RuntimeError("db down")
 
     # Should swallow the exception and return without raising.
-    await audit_rls_applied(
-        _Boom(), customer_id="c", user_id="u", row_filters={"T": "x = 1"}
-    )
+    await audit_rls_applied(_Boom(), customer_id="c", user_id="u", row_filters={"T": "x = 1"})
 
 
 # ── (d) DB-backed effective visibility: _resolve_sql_visible ─────────────────
@@ -490,9 +484,7 @@ def _patch_sessionmaker(monkeypatch, session):
     # not on the rbac module namespace.
     import backend.app.db.session as session_mod
 
-    monkeypatch.setattr(
-        session_mod, "get_sessionmaker", lambda: _sessionmaker_returning(session)
-    )
+    monkeypatch.setattr(session_mod, "get_sessionmaker", lambda: _sessionmaker_returning(session))
 
 
 @pytest.mark.asyncio
