@@ -121,9 +121,7 @@ def _build_data_preview(
 
         if col in classified["numeric"]:
             dtype = "numeric"
-            samples = ", ".join(
-                str(v) for v in non_null[:3] if isinstance(v, (int, float))
-            )
+            samples = ", ".join(str(v) for v in non_null[:3] if isinstance(v, (int, float)))
         elif col in classified["datetime"]:
             dtype = "datetime"
             samples = ", ".join(str(v)[:19] for v in non_null[:3])
@@ -199,9 +197,7 @@ def _build_user_prompt(
             f"Suggested X: {heuristic_hint.x.column}, Y: {heuristic_hint.y.column}\n"
         )
 
-    parts.append(
-        "\nPick the best chart type. Respond with structured output only."
-    )
+    parts.append("\nPick the best chart type. Respond with structured output only.")
 
     return "\n".join(parts)
 

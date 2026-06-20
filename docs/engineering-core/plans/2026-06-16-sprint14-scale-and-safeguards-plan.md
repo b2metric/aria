@@ -57,7 +57,7 @@ Add a ping status for the active Tenant Customer DBs (Oracle/Postgres) on the He
 - Modify: `.github/workflows/ci.yml` (lint-backend job)
 - Modify: `agents/**` (fix surfaced findings)
 
-- [ ] **Step 1: Add `agents/` to the ruff invocation**
-Update the `lint-backend` job to run `ruff check backend/ agents/` and `ruff format --check backend/ agents/` so the chart/artifact agents are gated like the rest of the backend.
-- [ ] **Step 2: Fix the ~22 pre-existing findings**
+- [x] **Step 1: Add `agents/` to the ruff invocation**
+Update the `lint-backend` job to run `ruff check backend/ agents/` and `ruff format --check backend/ agents/` so the chart/artifact agents are gated like the rest of the backend. **(RESOLVED)**
+- [x] **Step 2: Fix the ~22 pre-existing findings** — fixed 24 findings (UP037/F401/UP017/I001 auto-fixed; F841 unused `loop` + UP042 `ChartType` → `StrEnum` by hand) + `ruff format agents/`. `ruff check backend/ agents/` clean; unit gate 263 passed. **(RESOLVED)**
 `uv run ruff check agents/` currently reports ~22 errors (unused imports, import ordering, etc.; most are `--fix`-able). Fix them until `agents/` is clean, then keep it in the gate. Surfaced 2026-06-20 while dropping `pydantic-ai` from `agents/chart_llm.py` (PR #47).

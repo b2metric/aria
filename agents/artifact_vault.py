@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import structlog
@@ -80,17 +80,17 @@ class CleanupPolicy:
             raise ValueError("max_size_bytes must be >= 0")
 
     @classmethod
-    def standard(cls) -> "CleanupPolicy":
+    def standard(cls) -> CleanupPolicy:
         """Standard policy: 30-day TTL, no count/size limits."""
         return cls(max_age_days=30)
 
     @classmethod
-    def aggressive(cls) -> "CleanupPolicy":
+    def aggressive(cls) -> CleanupPolicy:
         """Aggressive policy: 7-day TTL, max 1000 artifacts."""
         return cls(max_age_days=7, max_count=1000)
 
     @classmethod
-    def size_based(cls, max_size_mb: int = 500) -> "CleanupPolicy":
+    def size_based(cls, max_size_mb: int = 500) -> CleanupPolicy:
         """Size-based policy: delete oldest when total exceeds max_size_mb megabytes."""
         return cls(max_size_bytes=max_size_mb * 1024 * 1024)
 
@@ -146,7 +146,7 @@ class VaultArchive:
     artifacts: list[dict[str, object]]
     """List of artifact metadata dicts (key, size, format, content_type, etag, last_modified)."""
 
-    archive_ref: "ArtifactRef | None" = None
+    archive_ref: ArtifactRef | None = None
     """Reference to the archive JSON in MinIO (set after upload)."""
 
 
@@ -193,12 +193,12 @@ class Vault:
         total_size = sum(int(a.get("size", 0)) for a in artifacts)
 
         if archive_name is None:
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H%M%SZ")
+            ts = datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
             archive_name = f"archive_{ts}.json"
 
         archive_data: dict[str, object] = {
             "archive_id": uuid.uuid4().hex,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "prefix": prefix,
             "artifact_count": len(artifacts),
             "total_size_bytes": total_size,
@@ -243,8 +243,7 @@ class Vault:
         artifacts_raw = archive_dict.get("artifacts", [])
         if isinstance(artifacts_raw, list):
             artifacts: list[dict[str, object]] = [
-                dict(a) if isinstance(a, dict) else {"key": str(a)}
-                for a in artifacts_raw
+                dict(a) if isinstance(a, dict) else {"key": str(a)} for a in artifacts_raw
             ]
         else:
             artifacts = []
@@ -300,7 +299,7 @@ class Vault:
         artifacts = self._store.list_objects(prefix=prefix, recursive=True)
         candidates: list[dict[str, object]] = []
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # ── Stage 1: Identify candidates by policy ────────────────────
         for art in artifacts:
@@ -336,7 +335,7 @@ class Vault:
             )
             # Keep the NEWEST max_count items; delete the rest (oldest)
             keep_count = policy.max_count
-            candidates = candidates[:len(candidates) - keep_count]
+            candidates = candidates[: len(candidates) - keep_count]
 
         # ── Stage 3: Size-based pruning ───────────────────────────────
         if policy.max_size_bytes is not None:
