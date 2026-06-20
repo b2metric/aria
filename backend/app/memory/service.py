@@ -50,7 +50,9 @@ class MemoryContext:
         parts = []
 
         if self.user_preferences:
-            prefs = "\n".join(f"  - {m.get('memory', m)}" for m in self.user_preferences[:3])
+            # Up to 5: room for both relevance-ranked matches and the standing
+            # directives that `lookup` injects proactively (Sprint 15 Task 4).
+            prefs = "\n".join(f"  - {m.get('memory', m)}" for m in self.user_preferences[:5])
             parts.append(f"User Preferences:\n{prefs}")
 
         if self.team_conventions:
@@ -187,6 +189,23 @@ class MemoryService:
                 user_prefs = user_results["results"]
                 all_memories.extend(user_prefs)
 
+            # Proactively inject standing preferences. Semantic search only
+            # surfaces a directive ("User associates TOPUP_AMOUNT with revenue")
+            # when the question wording is similar; standing directives must feed
+            # SQL generation regardless. Pull all USER-type prefs and append the
+            # ones the semantic search missed (deduped by id, then by text).
+            standing_prefs = self.get_user_preferences(workspace_id=workspace_id, user_id=user_id)
+            seen_ids = {p.get("id") for p in user_prefs if p.get("id")}
+            seen_text = {p.get("memory") or "" for p in user_prefs}
+            extras = [
+                p
+                for p in standing_prefs
+                if p.get("id") not in seen_ids and (p.get("memory") or "") not in seen_text
+            ]
+            if extras:
+                user_prefs = user_prefs + extras
+                all_memories.extend(extras)
+
             # Search team memories (if team_id provided)
             if team_id:
                 team_results = self._memory.search(
@@ -232,6 +251,31 @@ class MemoryService:
             similar_queries=similar_queries,
             raw_memories=all_memories,
         )
+
+    def get_user_preferences(
+        self,
+        *,
+        workspace_id: str,
+        user_id: str,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Return the user's standing preferences (USER-type memories).
+
+        Unlike :meth:`lookup`'s semantic search, this returns directives
+        unconditionally (regardless of the current question) so they can be
+        *proactively* injected into SQL generation — e.g. a stored
+        "User associates TOPUP_AMOUNT with revenue" still applies when the user
+        asks about "churn" or "growth".
+        """
+        if not self._memory:
+            return []
+        try:
+            result = self._memory.get_all(user_id=f"{workspace_id}:{user_id}")
+            rows = result.get("results", []) if isinstance(result, dict) else []
+            return rows[:limit]
+        except Exception as e:
+            logger.warning("Failed to fetch user preferences: %s", e)
+            return []
 
     def store(
         self,
