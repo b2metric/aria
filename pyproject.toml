@@ -27,6 +27,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0,<3",
     "asyncpg>=0.30,<1",
     "alembic>=1.14,<2",
+    "sqlglot>=26,<28",       # SQL parsing/rewriting for row-level security enforcement
     "oracledb>=2.0,<5",      # Oracle DB driver (thin/thick mode)
     "psycopg2-binary>=2.9,<3",  # PostgreSQL sync driver
     "pymysql>=1.1,<2",       # MySQL driver

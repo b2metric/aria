@@ -165,6 +165,81 @@ def _extract_preference_from_successful_query(
     return None
 
 
+# ── Vault-policy resolution (shared by table-pruning + row-level security) ──────
+
+
+# sqlglot dialect names keyed by the DatabaseType enum *value*.
+_SQLGLOT_DIALECTS: dict[str, str] = {
+    "postgresql": "postgres",
+    "mysql": "mysql",
+    "oracle": "oracle",
+    "mssql": "tsql",
+}
+
+
+def _sqlglot_dialect(db_type_value: str | None) -> str | None:
+    """Map a ``DatabaseType`` value to a sqlglot dialect (None if unknown)."""
+    if not db_type_value:
+        return None
+    return _SQLGLOT_DIALECTS.get(db_type_value.lower())
+
+
+async def _resolve_vault_policy(
+    workspace_id: str,
+    db: AsyncSession,
+    team_id: str | None = None,
+):
+    """Resolve the active ``TeamVaultPolicy`` for ``(workspace_id, team_id)``.
+
+    Scopes by ``Customer.slug == workspace_id`` and prefers the team-specific
+    policy over the customer-wide default (``team_id IS NULL``).  Only active
+    policies are considered.  Returns ``None`` when no policy applies.
+
+    This is the single source of truth for policy lookup, shared by both
+    table-level pruning and row-level security so the two never diverge.
+    """
+    from sqlalchemy import select as sa_select
+
+    from backend.app.models.governance import TeamVaultPolicy
+    from backend.app.models.organization import Customer
+
+    # Accept team_id as either a UUID string or a raw UUID.
+    if isinstance(team_id, str):
+        try:
+            team_uuid = _uuid.UUID(team_id)
+        except ValueError:
+            team_uuid = None
+    else:
+        team_uuid = team_id
+
+    # Scope policy lookup to THIS customer — otherwise another tenant's default
+    # (team_id IS NULL) policy would leak into this workspace.
+    cust_id = (
+        await db.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
+    ).scalar_one_or_none()
+    if cust_id is None:
+        return None
+
+    result = await db.execute(
+        sa_select(TeamVaultPolicy).where(
+            TeamVaultPolicy.customer_id == cust_id,
+            TeamVaultPolicy.team_id.in_([team_uuid, None])
+            if team_uuid
+            else TeamVaultPolicy.team_id.is_(None),
+            TeamVaultPolicy.is_active == True,  # noqa: E712
+        )
+    )
+    policies = result.scalars().all()
+
+    # Prefer team-specific policy over the customer-wide default.
+    policy = None
+    if team_uuid:
+        policy = next((p for p in policies if p.team_id == team_uuid), None)
+    if not policy:
+        policy = next((p for p in policies if p.team_id is None), None)
+    return policy
+
+
 async def _get_available_tables(
     engine: AsyncEngine,
     workspace_id: str,
@@ -183,7 +258,6 @@ async def _get_available_tables(
     import glob
     import os
     import pathlib
-    import uuid as _uuid
 
     # Use absolute path based on project root
     project_root = pathlib.Path(__file__).parent.parent.parent.parent
@@ -270,43 +344,7 @@ async def _get_available_tables(
         # ── TeamVaultPolicy pruning ───────────────────────────────────────
         if db is not None and team_id:
             try:
-                from sqlalchemy import select as sa_select
-
-                from backend.app.models.governance import TeamVaultPolicy
-                from backend.app.models.organization import Customer
-
-                # Accept team_id as either a UUID string or a raw UUID
-                if isinstance(team_id, str):
-                    try:
-                        team_uuid = _uuid.UUID(team_id)
-                    except ValueError:
-                        team_uuid = None
-                else:
-                    team_uuid = team_id
-
-                # Scope policy lookup to THIS customer — otherwise another tenant's
-                # default (team_id IS NULL) policy would prune this workspace's tables.
-                cust_id = (
-                    await db.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
-                ).scalar_one_or_none()
-
-                result = await db.execute(
-                    sa_select(TeamVaultPolicy).where(
-                        TeamVaultPolicy.customer_id == cust_id,
-                        TeamVaultPolicy.team_id.in_([team_uuid, None])
-                        if team_uuid
-                        else TeamVaultPolicy.team_id.is_(None),
-                        TeamVaultPolicy.is_active == True,  # noqa: E712
-                    )
-                )
-                policies = result.scalars().all()
-
-                # Prefer team-specific policy over default policy
-                policy = None
-                if team_uuid:
-                    policy = next((p for p in policies if p.team_id == team_uuid), None)
-                if not policy:
-                    policy = next((p for p in policies if p.team_id is None), None)
+                policy = await _resolve_vault_policy(workspace_id, db, team_id)
 
                 if policy and policy.allowed_tables:
                     allowed = {t.lower() for t in policy.allowed_tables}
@@ -994,6 +1032,22 @@ async def _execute_sql(
     """
 
     await verify_sql_security(sql, engine, workspace_id, db, team_id)
+
+    # ── Row-Level Security: structurally scope filtered tables ───────────
+    # Enforced on the generated SQL itself (table → filtered-subquery rewrite
+    # via sqlglot), NOT trusted to the LLM.  Runs after table-level security
+    # (verify_sql_security) and before any dialect transformation.  Fails
+    # closed: if a filtered table cannot be safely rewritten, the query is
+    # rejected rather than executed unfiltered.
+    if db is not None and workspace_id:
+        policy = await _resolve_vault_policy(workspace_id, db, team_id)
+        row_filters = getattr(policy, "row_filters", None) if policy else None
+        if row_filters:
+            from backend.app.query.rls import apply_row_filters
+
+            rls_config = await _get_db_config(engine, workspace_id)
+            dialect = _sqlglot_dialect(rls_config.db_type.value)
+            sql = apply_row_filters(sql, row_filters, dialect=dialect)
 
     from backend.app.db import execute_query
 
