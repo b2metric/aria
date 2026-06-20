@@ -469,6 +469,23 @@ async def _generate_sql(
     for tbl in tables[:10]:
         cols = await _get_table_columns(engine, tbl["name"], workspace_id)
         table_columns[tbl["name"]] = cols
+
+    # ── Column-Level Security: hide denied columns from the LLM (prevention) ──
+    # Drop every column listed in ``policy.deny_columns`` from the schema dict
+    # BEFORE it is handed to the LLM (`generate_sql_with_llm` →
+    # `_build_schema_context`) or the rule-based generator below.  A column the
+    # model never sees cannot be SELECTed or referenced.  Defense-in-depth (a
+    # result post-filter for `SELECT *` / aliases) lives in `_execute_sql`.
+    if db is not None and team_id is not None:
+        cls_policy = await _resolve_vault_policy(workspace_id, db, team_id)
+        deny_columns = getattr(cls_policy, "deny_columns", None) if cls_policy else None
+        if deny_columns:
+            from backend.app.query.cls import strip_denied_columns_from_schema
+
+            table_columns = strip_denied_columns_from_schema(table_columns, deny_columns)
+
+    for tbl in tables[:10]:
+        cols = table_columns.get(tbl["name"], [])
         col_str = ", ".join(f"{c['name']} ({c['type']})" for c in cols[:15])
         schema_info.append(f"  {tbl['name']}: {col_str}")
 
@@ -569,8 +586,13 @@ async def _generate_sql(
         best_score,
     )
 
-    # Build the SELECT clause
-    columns = await _get_table_columns(engine, best_table, workspace_id)
+    # Build the SELECT clause.  Prefer the already-built (and CLS-pruned)
+    # `table_columns` so denied columns stay hidden from the rule-based path
+    # too; fall back to a fresh fetch only if the chosen table wasn't in the
+    # first-10 schema slice above.
+    columns = table_columns.get(best_table)
+    if columns is None:
+        columns = await _get_table_columns(engine, best_table, workspace_id)
 
     # Oracle + PostgreSQL numeric types
     numeric_types = (
@@ -1053,9 +1075,13 @@ async def _execute_sql(
     # (verify_sql_security) and before any dialect transformation.  Fails
     # closed: if a filtered table cannot be safely rewritten, the query is
     # rejected rather than executed unfiltered.
+    # Column-Level Security deny-list, resolved once here and reused for the
+    # result post-filter (defense-in-depth) at the row-return path below.
+    deny_columns: dict | None = None
     if db is not None and workspace_id and config is not None:
         policy = await _resolve_vault_policy(workspace_id, db, team_id)
         row_filters = getattr(policy, "row_filters", None) if policy else None
+        deny_columns = getattr(policy, "deny_columns", None) if policy else None
         if row_filters:
             from backend.app.query.rls import apply_row_filters
 
@@ -1265,6 +1291,16 @@ async def _execute_sql(
                 if explanation
                 else f"⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
             )
+
+        # ── Column-Level Security: defense-in-depth result post-filter ──────
+        # Strip any denied column that slipped through (e.g. `SELECT *` or an
+        # alias that dodged the schema-level CLS in `_generate_sql`).  Result
+        # rows are flat dicts and can't be mapped back to a source table, so
+        # the union of all denied column names is stripped (case-insensitive).
+        if deny_columns:
+            from backend.app.query.cls import strip_denied_columns_from_rows
+
+            result = strip_denied_columns_from_rows(result, deny_columns)
 
         await _audit(success=True, row_count=len(result), mem_trace=mem_trace)
         return result
