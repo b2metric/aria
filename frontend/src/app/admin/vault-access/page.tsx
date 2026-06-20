@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Lock, Save, Database, Users, AlertTriangle, Filter } from "lucide-react";
+import { Lock, Save, Database, Users, AlertTriangle, Filter, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,12 +16,15 @@ type VaultTable = {
 };
 
 type RowFilters = Record<string, string>;
+// Per-table denied (masked) column names (App-Level CLS). Keyed by table name.
+type DenyColumns = Record<string, string[]>;
 
 type VaultPolicy = {
   id: string;
   team_id: string;
   allowed_tables: string[];
   row_filters?: RowFilters | null;
+  deny_columns?: DenyColumns | null;
 };
 
 export default function VaultAccessPage() {
@@ -44,6 +47,8 @@ export default function VaultAccessPage() {
   const [allowedTables, setAllowedTables] = useState<Set<string>>(new Set());
   // Per-table row-filter SQL predicates (App-Level RLS). Keyed by table name.
   const [rowFilters, setRowFilters] = useState<RowFilters>({});
+  // Per-table denied (masked) columns (App-Level CLS). Keyed by table name.
+  const [denyColumns, setDenyColumns] = useState<DenyColumns>({});
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/api/auth/signin");
@@ -75,6 +80,7 @@ export default function VaultAccessPage() {
           if (defaultPolicy) {
             setAllowedTables(new Set(defaultPolicy.allowed_tables));
             setRowFilters({ ...(defaultPolicy.row_filters ?? {}) });
+            setDenyColumns({ ...(defaultPolicy.deny_columns ?? {}) });
           }
         }
 
@@ -101,6 +107,7 @@ export default function VaultAccessPage() {
       const policy = policies.find((p) => p.team_id === selectedTeam);
       setAllowedTables(new Set(policy?.allowed_tables || []));
       setRowFilters({ ...(policy?.row_filters ?? {}) });
+      setDenyColumns({ ...(policy?.deny_columns ?? {}) });
       setSaveError(null);
     })();
   }, [selectedTeam, policies]);
@@ -116,6 +123,12 @@ export default function VaultAccessPage() {
         const { [existing]: _removed, ...rest } = prev;
         return rest;
       });
+      // Drop any denied-columns entry for a table that is no longer allowed.
+      setDenyColumns((prev) => {
+        if (!(existing in prev)) return prev;
+        const { [existing]: _removed, ...rest } = prev;
+        return rest;
+      });
     } else {
       next.add(tableName);
     }
@@ -124,6 +137,15 @@ export default function VaultAccessPage() {
 
   const handleRowFilterChange = (tableName: string, predicate: string) => {
     setRowFilters((prev) => ({ ...prev, [tableName]: predicate }));
+  };
+
+  const handleDenyColumnsChange = (tableName: string, raw: string) => {
+    // Parse the comma-separated input into a trimmed, non-empty column list.
+    const columns = raw
+      .split(",")
+      .map((c) => c.trim())
+      .filter((c) => c.length > 0);
+    setDenyColumns((prev) => ({ ...prev, [tableName]: columns }));
   };
 
   const handleSave = async () => {
@@ -141,6 +163,14 @@ export default function VaultAccessPage() {
         if (predicate) filtersPayload[table] = predicate;
       }
 
+      // Only persist denied columns for allowed tables with a non-empty list.
+      // Omitting a table means "no columns masked".
+      const denyPayload: DenyColumns = {};
+      for (const table of allowed) {
+        const columns = denyColumns[table];
+        if (columns && columns.length > 0) denyPayload[table] = columns;
+      }
+
       const res = await fetch(`${API_BASE}/api/admin/vault-policies/${selectedTeam}`, {
         method: "PUT",
         headers: {
@@ -150,6 +180,7 @@ export default function VaultAccessPage() {
         body: JSON.stringify({
           allowed_tables: allowed,
           row_filters: filtersPayload,
+          deny_columns: denyPayload,
         }),
       });
 
@@ -157,7 +188,9 @@ export default function VaultAccessPage() {
         // Update local policies state
         const updatedPolicy = await res.json();
         const nextRowFilters: RowFilters = updatedPolicy.row_filters ?? {};
+        const nextDenyColumns: DenyColumns = updatedPolicy.deny_columns ?? {};
         setRowFilters({ ...nextRowFilters });
+        setDenyColumns({ ...nextDenyColumns });
         setPolicies((prev) => {
           const exists = prev.find((p) => p.team_id === selectedTeam);
           if (exists) {
@@ -167,6 +200,7 @@ export default function VaultAccessPage() {
                     ...p,
                     allowed_tables: updatedPolicy.allowed_tables,
                     row_filters: nextRowFilters,
+                    deny_columns: nextDenyColumns,
                   }
                 : p
             );
@@ -178,6 +212,7 @@ export default function VaultAccessPage() {
               team_id: selectedTeam,
               allowed_tables: updatedPolicy.allowed_tables,
               row_filters: nextRowFilters,
+              deny_columns: nextDenyColumns,
             },
           ];
         });
@@ -209,7 +244,7 @@ export default function VaultAccessPage() {
             Vault Access Policies
           </h1>
           <p className="text-gray-500 mt-1">
-            Control table access and optional per-table row-level filters for each team (App-Level RLS).
+            Control table access, per-table row-level filters, and column masking for each team (App-Level RLS/CLS).
           </p>
         </div>
         <Button
@@ -323,18 +358,33 @@ export default function VaultAccessPage() {
                       </label>
 
                       {isAllowed && (
-                        <div className="mt-3 ml-8 flex items-center gap-2">
-                          <Filter className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                          <input
-                            type="text"
-                            value={rowFilters[table.table_name] ?? ""}
-                            onChange={(e) =>
-                              handleRowFilterChange(table.table_name, e.target.value)
-                            }
-                            placeholder="e.g. REGION = 'KW'  (optional row filter)"
-                            spellCheck={false}
-                            className="w-full max-w-md rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-mono text-gray-800 placeholder:font-sans placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          />
+                        <div className="mt-3 ml-8 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Filter className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <input
+                              type="text"
+                              value={rowFilters[table.table_name] ?? ""}
+                              onChange={(e) =>
+                                handleRowFilterChange(table.table_name, e.target.value)
+                              }
+                              placeholder="e.g. REGION = 'KW'  (optional row filter)"
+                              spellCheck={false}
+                              className="w-full max-w-md rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-mono text-gray-800 placeholder:font-sans placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <EyeOff className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                            <input
+                              type="text"
+                              value={(denyColumns[table.table_name] ?? []).join(", ")}
+                              onChange={(e) =>
+                                handleDenyColumnsChange(table.table_name, e.target.value)
+                              }
+                              placeholder="e.g. REVENUE, MARGIN  (columns to hide, comma-separated)"
+                              spellCheck={false}
+                              className="w-full max-w-md rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-mono text-gray-800 placeholder:font-sans placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
