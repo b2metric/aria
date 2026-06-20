@@ -105,3 +105,14 @@ On save, send a `PATCH` request to `/api/admin/users/{user_id}` with the updated
 
 - [ ] **Step 4: Commit**
 `git add` and `git commit -m "feat(admin): implement user management UI"`
+
+---
+
+### Task 5: Public onboarding flow (register → DB connect → schema sync) *(retroactively documented)*
+*Goal: Self-serve B2B signup — create a workspace + admin user, connect the first customer database, and kick off schema/vault sync. Shipped 2026-06-17 (commit `1f52eb0` "public registration and B2B settings UI") but not tracked in a sprint — recorded here under Sprint 11's User/registration theme.*
+
+**Files:**
+- `backend/app/api/endpoints/onboarding.py` (registration → Customer + admin User + Keycloak provisioning)
+- `frontend/src/app/register/page.tsx`, `frontend/src/app/onboarding/database/page.tsx`, `frontend/src/app/onboarding/sync/page.tsx`
+
+- [x] **Shipped:** Public registration creates a Customer + admin User (auto workspace slug, Keycloak realm/user), followed by a DB-connection wizard and a schema-sync status screen. **(RESOLVED — retroactive)**

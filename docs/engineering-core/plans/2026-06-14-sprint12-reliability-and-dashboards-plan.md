@@ -81,3 +81,28 @@ Create `frontend/src/app/admin/page.tsx` to fetch and display these metrics in a
 Enhance `GET /health` or add `GET /api/admin/health` to check connections to: PostgreSQL, Redis, Qdrant, MinIO, LiteLLM, Keycloak, and return their individual status.
 - [ ] **Step 2: Health Dashboard UI**
 Create a new admin page at `/admin/health` that displays the status of all these components with green/red status indicators. Add a link to it in the admin sidebar.
+
+---
+
+### Task 6: CMEK — Customer-Managed Encryption Keys *(retroactively documented)*
+*Goal: Per-customer envelope encryption for secrets at rest, extending Task 3's Fernet password encryption. Shipped 2026-06-19 (commit `371d85d` "feat(cmek)") but not tracked in a sprint at the time — recorded here under Sprint 12's Security theme.*
+
+**Files:**
+- `backend/app/services/crypto.py` (AppKEKProvider, per-customer DEK, envelope encrypt/decrypt, 5-min DEK cache)
+- `backend/app/api/endpoints/admin/encryption.py` (GET/PATCH `/api/admin/encryption`)
+- `backend/app/models/database.py` (CustomerKeyConfig)
+- `frontend/src/app/settings/encryption/page.tsx` (provider + key-URI config UI)
+
+- [x] **Shipped:** Per-customer Data Encryption Keys (DEK) wrapped by an app-level KEK (Fernet via `ARIA_SECRET_KEY`); provider framework (`app`/`aws`/`gcp`/`azure`) + a settings page to choose provider and key URI. **(RESOLVED — retroactive)** — *external AWS/GCP/Azure KMS providers are stub-only and the UI lacks rotation/status/audit; carried forward in Sprint 15.*
+
+---
+
+### Task 7: BYOK — Customer LLM provider configuration *(retroactively documented)*
+*Goal: Let each customer bring their own LLM endpoint/key instead of the shared LiteLLM proxy. Shipped 2026-06-17 (commit `e43c878` "BYOK phase 1") but not tracked in a sprint — recorded here under the Security/Admin-config theme (credentials are encrypted at rest).*
+
+**Files:**
+- `backend/app/api/endpoints/admin/llm_config.py`, `backend/app/services/llm_resolver.py`
+- `backend/app/models/database.py` (CustomerLLMConfig)
+- `frontend/src/app/admin/llm-config/page.tsx`
+
+- [x] **Shipped:** Per-customer LLM provider config (OpenAI/Azure/Anthropic/Gemini/LiteLLM) with encrypted credentials; `resolve_llm()` uses the customer config and falls back to the platform LiteLLM proxy. **(RESOLVED — retroactive)**
