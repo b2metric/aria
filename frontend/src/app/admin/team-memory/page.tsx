@@ -114,6 +114,24 @@ export default function TeamMemoryPage() {
     }
   };
 
+  const handleSetStatus = async (memoryId: string, newStatus: "approved" | "rejected") => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/team-memory/${memoryId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ status: newStatus, team_id: teamId }),
+      });
+      if (res.ok) {
+        fetchMemories();
+      } else {
+        const err = await res.json();
+        alert(`Error: ${err.detail || "Failed to update status"}`);
+      }
+    } catch (err) {
+      console.error("Failed to update convention status", err);
+    }
+  };
+
   const handleDelete = async (memoryId: string) => {
     if (!confirm("Are you sure you want to delete this team convention?")) {
       return;
@@ -245,7 +263,16 @@ export default function TeamMemoryPage() {
           </div>
         ) : (
           <ul className="divide-y divide-gray-200">
-            {memories.map((mem, idx) => (
+            {memories.map((mem, idx) => {
+              const status =
+                ((mem.metadata as Record<string, unknown> | null)?.status as string) || "approved";
+              const statusStyle =
+                status === "approved"
+                  ? "bg-green-50 text-green-700"
+                  : status === "rejected"
+                    ? "bg-red-50 text-red-700"
+                    : "bg-amber-50 text-amber-700";
+              return (
               <li
                 key={mem.id || idx}
                 className="px-6 py-4 hover:bg-gray-50 transition-colors group"
@@ -257,6 +284,9 @@ export default function TeamMemoryPage() {
                       <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
                         {mem.team_id}
                       </span>
+                      <span className={`px-2 py-0.5 rounded font-medium capitalize ${statusStyle}`}>
+                        {status}
+                      </span>
                       {mem.created_at && (
                         <span>
                           {new Date(mem.created_at).toLocaleDateString()}
@@ -265,17 +295,38 @@ export default function TeamMemoryPage() {
                     </div>
                   </div>
                   {mem.id && (
-                    <button
-                      onClick={() => handleDelete(mem.id!)}
-                      className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                      {status !== "approved" && (
+                        <button
+                          onClick={() => handleSetStatus(mem.id!, "approved")}
+                          className="px-2 py-1 text-xs font-medium text-green-700 hover:bg-green-50 rounded-lg"
+                          title="Approve — let this convention feed the AI"
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {status !== "rejected" && (
+                        <button
+                          onClick={() => handleSetStatus(mem.id!, "rejected")}
+                          className="px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50 rounded-lg"
+                          title="Reject"
+                        >
+                          Reject
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDelete(mem.id!)}
+                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>

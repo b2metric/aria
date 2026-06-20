@@ -45,10 +45,8 @@ Already implemented: `pipeline.py` uploads `png_bytes` to MinIO (`chart_{convers
 - Modify: `backend/app/api/endpoints/admin/` (team-memory endpoints)
 - Modify: `frontend/src/app/admin/team-memory/page.tsx`
 
-- [ ] **Step 1: Approval states**
-Add a `status` (e.g. `pending` / `approved` / `rejected`) to team conventions and gate which conventions feed the LLM context to `approved` only.
-- [ ] **Step 2: Admin/team_lead review UI**
-Surface pending conventions in the team-memory admin page with approve/reject actions (RBAC: admin + team_lead), per the invariant in `AGENTS.md`.
+- [x] **Step 1: Approval states** — new team conventions now persist with metadata `status="pending"`; `MemoryService.lookup` gates `team_conventions` to `status == "approved"` (legacy/no-status entries treated as approved for back-compat). `set_memory_status(memory_id, status, …)` flips the state. Because Mem0 2.x single-entry `update()`/`get()` by id are unreliable for these points, status changes are applied via `get_all` → `delete` → re-`add` (`infer=False`). **(RESOLVED)**
+- [x] **Step 2: Admin/team_lead review UI** — `PATCH /api/admin/team-memory/{id}/status` (RBAC: `can_admin` OR `can_manage_team`; validates `approved|rejected|pending`). Team-memory admin page shows a status badge (green/amber/red) + hover Approve/Reject actions. Verified live (`stc-kuwait` workspace): create→`pending`, approve→`200`+single entry now `approved`, delete→`200`. 3 unit tests in `backend/tests/test_memory_approval.py`. **(RESOLVED)**
 
 ---
 

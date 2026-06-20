@@ -195,7 +195,14 @@ class MemoryService:
                     limit=limit,
                 )
                 if team_results and "results" in team_results:
-                    team_convs = team_results["results"]
+                    # Only approved conventions feed the LLM context. Entries with
+                    # no `status` are legacy and treated as approved; `pending` /
+                    # `rejected` are withheld until an admin/team_lead approves.
+                    team_convs = [
+                        r
+                        for r in team_results["results"]
+                        if ((r.get("metadata") or {}).get("status") or "approved") == "approved"
+                    ]
                     all_memories.extend(team_convs)
 
             # Search query cache (workspace-wide)
@@ -263,10 +270,14 @@ class MemoryService:
             mem_user_id = f"{workspace_id}:query_cache"
 
         try:
+            # infer=False stores the content verbatim. Mem0 2.x defaults to
+            # infer=True (LLM fact-extraction), which silently drops short,
+            # imperative entries like conventions/preferences → no id returned.
             result = self._memory.add(
                 content,
                 user_id=mem_user_id,
                 metadata=metadata or {},
+                infer=False,
             )
             # Mem0 returns {'results': [{'id': '...', 'memory': '...', 'event': 'ADD'}]}
             results = result.get("results", []) if isinstance(result, dict) else []
@@ -396,6 +407,43 @@ class MemoryService:
             return True
         except Exception as e:
             logger.warning("Failed to delete memory %s: %s", memory_id, e)
+            return False
+
+    def set_memory_status(
+        self,
+        memory_id: str,
+        new_status: str,
+        *,
+        workspace_id: str,
+        team_id: str,
+    ) -> bool:
+        """Set the approval status (pending/approved/rejected) of a team convention.
+
+        Locates the entry via ``get_all`` (Mem0 2.x ``get(vector_id=...)`` is
+        unreliable for these points, whereas ``get_all`` works), then re-writes
+        it via ``update`` preserving the text and merging ``status`` into the
+        metadata. Used by the team-conventions approval workflow.
+        """
+        if not self._memory:
+            return False
+        try:
+            mem_user_id = f"{workspace_id}:team:{team_id}"
+            result = self._memory.get_all(user_id=mem_user_id)
+            rows = result.get("results", []) if isinstance(result, dict) else []
+            entry = next((r for r in rows if r.get("id") == memory_id), None)
+            if not entry:
+                return False
+            text = entry.get("memory") or entry.get("data") or ""
+            metadata = dict(entry.get("metadata") or {})
+            metadata["status"] = new_status
+            # Mem0 2.x single-entry update()/get() (vector_store.get by id) are
+            # unreliable for these points, but get_all/delete/add all work — so
+            # re-create the entry with the new status metadata.
+            self._memory.delete(memory_id)
+            self._memory.add(text, user_id=mem_user_id, metadata=metadata, infer=False)
+            return True
+        except Exception as e:
+            logger.warning("Failed to set status on memory %s: %s", memory_id, e)
             return False
 
     def update_memory_ttl(
