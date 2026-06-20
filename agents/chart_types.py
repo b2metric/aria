@@ -7,11 +7,11 @@ downstream renderers and exporters consume.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class ChartType(str, Enum):
+class ChartType(StrEnum):
     """Supported chart types.
 
     Case-insensitive from string: ``ChartType("TABLE")`` works.
@@ -25,7 +25,7 @@ class ChartType(str, Enum):
     TABLE = "table"
 
     @classmethod
-    def _missing_(cls, value: object) -> "ChartType | None":
+    def _missing_(cls, value: object) -> ChartType | None:
         if isinstance(value, str):
             lower = value.lower()
             for member in cls:
@@ -37,6 +37,7 @@ class ChartType(str, Enum):
 @dataclass
 class AxisConfig:
     """Configuration for a chart axis."""
+
     column: str = ""
     """Column name to use for this axis."""
     label: str = ""

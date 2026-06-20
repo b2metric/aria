@@ -20,12 +20,11 @@ from typing import TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
-    from agents.chart_llm import LlmChartChoice
     from agents.chart_renderer import RenderOutput
 
 from agents.chart_heuristic import propose_chart
 from agents.chart_llm import propose_chart_llm_with_heuristic
-from agents.chart_renderer import render_all, render_csv, render_json, render_png
+from agents.chart_renderer import render_csv, render_json, render_png
 from agents.chart_types import ChartConfig, ChartType
 
 log = structlog.get_logger(__name__)
@@ -41,13 +40,13 @@ class ChartPipelineResult:
     source: str = "heuristic"
     """How the config was determined: 'heuristic' or 'llm'."""
 
-    json: "RenderOutput | None" = None
+    json: RenderOutput | None = None
     """JSON chart output (config + data) for frontend UI."""
 
-    png: "RenderOutput | None" = None
+    png: RenderOutput | None = None
     """PNG chart output."""
 
-    csv: "RenderOutput | None" = None
+    csv: RenderOutput | None = None
     """CSV data output."""
 
     errors: list[str] = field(default_factory=list)
@@ -130,7 +129,9 @@ async def run_chart_pipeline(
     if "json" in render_formats:
         try:
             json_out = render_json(
-                rows, config, columns=columns,
+                rows,
+                config,
+                columns=columns,
                 output_path=f"{output_dir}/{base_name}.json" if output_dir else None,
             )
         except Exception as exc:
@@ -139,7 +140,9 @@ async def run_chart_pipeline(
     if "png" in render_formats:
         try:
             png_out = render_png(
-                rows, config, columns=columns,
+                rows,
+                config,
+                columns=columns,
                 output_path=f"{output_dir}/{base_name}.png" if output_dir else None,
             )
         except Exception as exc:
@@ -148,7 +151,9 @@ async def run_chart_pipeline(
     if "csv" in render_formats:
         try:
             csv_out = render_csv(
-                rows, config, columns=columns,
+                rows,
+                config,
+                columns=columns,
                 output_path=f"{output_dir}/{base_name}.csv" if output_dir else None,
             )
         except Exception as exc:
@@ -204,7 +209,7 @@ def run_chart_pipeline_sync(
     )
 
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
         return asyncio.run(coro)
 
@@ -245,7 +250,9 @@ def _run_sync(
     if "json" in render_formats:
         try:
             json_out = render_json(
-                rows, config, columns=columns,
+                rows,
+                config,
+                columns=columns,
                 output_path=f"{output_dir}/{base_name}.json" if output_dir else None,
             )
         except Exception as exc:
@@ -254,7 +261,9 @@ def _run_sync(
     if "png" in render_formats:
         try:
             png_out = render_png(
-                rows, config, columns=columns,
+                rows,
+                config,
+                columns=columns,
                 output_path=f"{output_dir}/{base_name}.png" if output_dir else None,
             )
         except Exception as exc:
@@ -263,7 +272,9 @@ def _run_sync(
     if "csv" in render_formats:
         try:
             csv_out = render_csv(
-                rows, config, columns=columns,
+                rows,
+                config,
+                columns=columns,
                 output_path=f"{output_dir}/{base_name}.csv" if output_dir else None,
             )
         except Exception as exc:

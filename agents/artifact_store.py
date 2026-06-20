@@ -26,15 +26,13 @@ import io
 import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from minio import Minio  # type: ignore[import-untyped]
-from minio.commonconfig import CopySource  # type: ignore[import-untyped]
-from minio.error import S3Error  # type: ignore[import-untyped]
-
 import structlog
+from minio import Minio  # type: ignore[import-untyped]
+from minio.error import S3Error  # type: ignore[import-untyped]
 
 if TYPE_CHECKING:
     from agents.chart_renderer import RenderOutput
@@ -86,7 +84,7 @@ class ArtifactRef:
     etag: str = ""
     """S3 ETag of the uploaded object (for integrity checks)."""
 
-    _store: "ArtifactStore | None" = field(default=None, repr=False)
+    _store: ArtifactStore | None = field(default=None, repr=False)
     """Back-reference to the store for URL generation."""
 
     def presigned_url(self, expires: int = 3600) -> str:
@@ -131,9 +129,7 @@ _CONTENT_TYPES: dict[str, str] = {
 def _ext_to_format(ext: str) -> str:
     """Map file extension to artifact format name."""
     ext = ext.lower().lstrip(".")
-    return {"html": "html", "htm": "html", "png": "png", "csv": "csv", "json": "json"}.get(
-        ext, ext
-    )
+    return {"html": "html", "htm": "html", "png": "png", "csv": "csv", "json": "json"}.get(ext, ext)
 
 
 # ── Artifact Store ──────────────────────────────────────────────────────────
@@ -344,7 +340,7 @@ class ArtifactStore:
 
     def upload_from_render_output(
         self,
-        output: "RenderOutput",
+        output: RenderOutput,
         *,
         key_prefix: str = "artifacts",
         base_name: str = "chart",
@@ -462,7 +458,7 @@ class ArtifactStore:
             format=format,
             size_bytes=size,
             content_type=content_type,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             etag=result.etag,
             _store=self,
         )
@@ -641,13 +637,15 @@ class ArtifactStore:
             )
             results: list[dict[str, object]] = []
             for obj in objects:
-                results.append({
-                    "key": obj.object_name or "",
-                    "size": obj.size or 0,
-                    "etag": obj.etag or "",
-                    "last_modified": obj.last_modified.isoformat() if obj.last_modified else "",
-                    "content_type": getattr(obj, "content_type", "") or "",
-                })
+                results.append(
+                    {
+                        "key": obj.object_name or "",
+                        "size": obj.size or 0,
+                        "etag": obj.etag or "",
+                        "last_modified": obj.last_modified.isoformat() if obj.last_modified else "",
+                        "content_type": getattr(obj, "content_type", "") or "",
+                    }
+                )
             return results
         except S3Error as exc:
             log.warning("artifact_store.list_failed", prefix=prefix, error=str(exc))

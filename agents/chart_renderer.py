@@ -17,7 +17,6 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import structlog
 
@@ -55,15 +54,15 @@ def render_json(
         columns = list(rows[0].keys())
     elif columns is None:
         columns = []
-        
+
     import dataclasses
-    
+
     payload = {
         "chart_config": dataclasses.asdict(config),
         "chart_data": rows,
         "columns": columns,
     }
-    
+
     json_str = json.dumps(payload, default=str)
     size = len(json_str.encode("utf-8"))
 
@@ -126,7 +125,7 @@ def render_png(
     scale: int = 2,
 ) -> RenderOutput:
     """Render chart as a PNG image via Kaleido & Plotly.
-    
+
     Requires ``kaleido`` and ``plotly`` packages (used only for static export).
     """
     try:
@@ -146,7 +145,7 @@ def render_png(
 
     x_vals = [row.get(x_col) for row in rows] if x_col else []
     y_vals = [row.get(y_col) for row in rows] if y_col else []
-    
+
     fig = go.Figure()
     # Simplified rendering purely for background image export
     if ct == ChartType.BAR:

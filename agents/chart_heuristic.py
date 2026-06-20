@@ -20,7 +20,6 @@ can optionally escalate to the LLM proposer for refinement.
 
 from __future__ import annotations
 
-import math
 from datetime import date, datetime
 from typing import Any
 
@@ -91,9 +90,7 @@ def _extract_values(rows: list[dict], column: str) -> list[Any]:
 # ── Column classification ──────────────────────────────────────────────────
 
 
-def _classify_columns(
-    rows: list[dict], columns: list[str]
-) -> dict[str, list[str]]:
+def _classify_columns(rows: list[dict], columns: list[str]) -> dict[str, list[str]]:
     """Classify columns as numeric, datetime, or categorical.
 
     Returns dict with keys 'numeric', 'datetime', 'categorical'.
@@ -217,10 +214,7 @@ def propose_chart(
             title=_title_from_question(question),
             x=AxisConfig(column=num_cols[0], label=num_cols[0]),
             y=AxisConfig(column=num_cols[1], label=num_cols[1]),
-            reasoning=(
-                f"Scatter: two numeric columns "
-                f"'{num_cols[0]}' (X) vs '{num_cols[1]}' (Y)."
-            ),
+            reasoning=(f"Scatter: two numeric columns '{num_cols[0]}' (X) vs '{num_cols[1]}' (Y)."),
             confidence=0.8,
         )
 
