@@ -19,14 +19,16 @@
 | LLM Proxy | LiteLLM | Multi-model routing, cost tracking |
 | CI/CD | GitHub Actions | lint → test → security → deploy |
 
-## Data Model (12 tables)
+## Data Model (core tables)
 
 customers, teams, users, customer_db_configs, queries, query_history,
-artifacts, background_jobs, memory_entries, schema_relationships,
-token_quotas, token_usage_daily
+artifacts, background_jobs, schema_relationships, token_quotas,
+token_usage_daily, team_vault_policies, data_audit_logs
 
-> **Note:** vault_knowhow table REMOVED — schema metadata now lives in Obsidian
-> vault at `docs/vaults/{workspace_id}/tables/*.md` (MinIO sync optional).
+> **Note (Sprint 16):** `memory_entries` and `vault_knowhow` tables REMOVED —
+> both were modeled but never read. Agent memory lives in Mem0 + Qdrant; schema
+> metadata lives in the Obsidian vault at `docs/vaults/{workspace_id}/tables/*.md`
+> (MinIO sync optional).
 
 ## FK Cascade Decisions
 
@@ -39,7 +41,6 @@ token_quotas, token_usage_daily
 | queries | artifacts | CASCADE | |
 | queries | query_history | CASCADE | |
 | queries | background_jobs | CASCADE | MinIO JSON backup before delete |
-| users | memory_entries | RESTRICT | Admin UI manual delete |
 | users | token_usage_daily | CASCADE | MinIO JSON backup before delete |
 | teams | users | RESTRICT | |
 
@@ -48,9 +49,12 @@ token_quotas, token_usage_daily
 | Role | can_view_sql | can_manage_team | can_admin |
 |------|-------------|-----------------|-----------|
 | admin | ✅ | ✅ | ✅ |
-| team_lead | ✅ | ✅ | ❌ |
+| team_lead | ❌ | ✅ | ❌ |
 | analyst | ✅ | ❌ | ❌ |
 | viewer | ❌ | ❌ | ❌ |
+
+> `can_view_sql` above is the **role default** (`_can_view_sql` = admin + analyst). A
+> per-user `User.sql_visibility` override can flip it either way — see [SQL Visibility](#sql-visibility).
 
 Token: silent refresh, access 15min / refresh 8h, Keycloak OIDC + PKCE.
 
@@ -73,8 +77,16 @@ Token: silent refresh, access 15min / refresh 8h, Keycloak OIDC + PKCE.
 
 **Critical:** If embedding model changes, delete Qdrant collection and let Mem0 recreate it with correct dimensions.
 
-## Row Governance
+## Row & Column Governance
 
+Per-team policies live on `TeamVaultPolicy` (`allowed_tables`, `row_filters`, `deny_columns`), resolved per `(customer, team)` with the team-specific policy preferred over the customer-wide default.
+
+- **Table-level (layer 0):** `allowed_tables` whitelist — non-allowed tables pruned from the schema context and blocked at execution.
+- **Row-Level Security (Sprint 16):** `row_filters` — per-table SQL predicates (e.g. `{"FCT_SALES": "REGION = 'KW'"}`) injected **structurally** into the generated SQL via `sqlglot` (table → filtered subquery), enforced on the executed query, never trusted to the LLM. **Fails closed**: if a filtered table's statement can't be safely rewritten, the query is rejected.
+- **Column-Level Security (Sprint 16):** `deny_columns` — denied columns dropped from the LLM schema context (prevention) **and** stripped from result rows (defense-in-depth, covers `SELECT *`).
+- **Governance audit:** each RLS/CLS enforcement writes a `DataAuditLog` row (`rls_filter` / `cls_denied`) via `AuditService`, only when something was actually restricted.
+
+**Row limits (orthogonal):**
 - Dry-run: EXPLAIN PLAN before execution
 - Row limit: admin-configurable per-customer (default 10K)
 - Admin/team_lead exceed → Prefect background → MinIO presigned URL (3-day)
@@ -87,8 +99,9 @@ Admin-configurable. Local LLMs counted. Redis counters + PostgreSQL persistence.
 
 ## SQL Visibility
 
-Per-role + per-user override. Default: admin + team_lead + analyst see SQL.
-Admin can change `show_sql_to_roles` per customer.
+- **Role default:** admin + analyst may see the raw SQL string + raw results (`_can_view_sql`); team_lead + viewer cannot.
+- **Per-user override (Sprint 16):** `User.sql_visibility` (`bool | NULL`; NULL = inherit role) overrides the role default per user, editable in the admin Users UI.
+- **Enforcement:** when a user lacks visibility, the chat/query response omits the SQL string + the raw `table` result; the chart visualization + insight are still returned (deliberate product choice). **Fails closed** — a DB error while resolving the override hides SQL rather than leaking it.
 
 ## Vault Architecture
 
