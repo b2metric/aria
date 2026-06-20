@@ -48,6 +48,7 @@ async def list_audit_logs(
     user_id: str | None = None,
     action: str | None = None,
     resource_type: str | None = Query(None, alias="resource_type"),
+    success: bool | None = Query(None, description="Filter by details.success (true/false)"),
     current_user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -105,6 +106,7 @@ async def list_audit_logs(
             user_id=user_uuid,
             action=action,
             resource_type=resource_type,
+            success=success,
             limit=limit,
             offset=offset,
         )
@@ -114,6 +116,7 @@ async def list_audit_logs(
             user_id=user_uuid,
             action=action,
             resource_type=resource_type,
+            success=success,
         )
 
         return {

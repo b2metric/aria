@@ -48,19 +48,18 @@ export default function AuditLogPage() {
     try {
       setLoading(true);
       let url = `${API_BASE}/api/admin/audit-logs?limit=100`;
-      // Note: Backend doesn't support status filter out-of-the-box on the root, but we can filter action.
       if (actionFilter !== "all") url += `&action=${actionFilter}`;
+      // Status filter is now applied server-side via the `success` query param
+      // (backend matches details->>'success'), instead of slicing client-side.
+      if (statusFilter === "success") url += `&success=true`;
+      else if (statusFilter === "failed") url += `&success=false`;
 
       const res = await fetch(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         const data = await res.json();
-        // client side status filtering since it's nested in details JSON
-        let filtered = data.data || [];
-        if (statusFilter === "success") filtered = filtered.filter((l: any) => l.details?.success === true);
-        if (statusFilter === "failed") filtered = filtered.filter((l: any) => l.details?.success === false);
-        setLogs(filtered);
+        setLogs(data.data || []);
       }
     } catch (err) {
       console.error("Failed to fetch audit logs", err);
