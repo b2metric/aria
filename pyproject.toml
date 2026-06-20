@@ -49,9 +49,10 @@ dependencies = [
 
     # ── Charting ──
     "plotly>=6.1,<7",
-    # Kaleido lacks ARM64 Linux wheels; restricting to x86_64 to not break Apple Silicon dev.
-    # Pin to ==0.2.1 — 0.2.1.post1 is a metadata-only release with no wheel/sdist (breaks `uv sync`).
-    "kaleido==0.2.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    # Kaleido 1.x ships cross-platform wheels (incl. macOS ARM64) and is the
+    # Plotly-6-native PNG engine. It needs a Chrome/Chromium at render time;
+    # render_png() degrades gracefully (no PNG) when the browser is absent.
+    "kaleido>=1,<2",
 
     # ── Auth ──
     "python-jose[cryptography]>=3.3,<4",
@@ -89,8 +90,8 @@ dev = [
     "pip-audit>=2.8,<3",
 ]
 chart-export = [
-    # Kaleido: static image export for Plotly charts (Linux only, no macOS ARM64 wheel)
-    "kaleido==0.2.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    # Kaleido: static PNG export for Plotly charts (cross-platform wheels in 1.x)
+    "kaleido>=1,<2",
 ]
 
 # ── Build System ────────────────────────────────────────────────────────

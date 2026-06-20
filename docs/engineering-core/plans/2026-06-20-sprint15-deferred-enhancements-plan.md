@@ -17,10 +17,12 @@
 - Modify: `agents/chart_renderer.py` (`render_png`)
 - Modify: `agents/chart_builder.py` / `backend/app/query/pipeline.py` (upload + `chart_url`)
 
-- [ ] **Step 1: Generate the PNG**
-In `render_png`, render the Plotly figure to PNG bytes via Kaleido. Guard for environments without a Kaleido wheel (ARM64 dev) — degrade to "PNG unavailable" rather than raising, since `kaleido` is linux-x86_64-only per `pyproject.toml`.
-- [ ] **Step 2: Upload + surface `chart_url`**
-Upload the PNG to MinIO alongside the CSV, populate the `chart_url` field on the chart artifact, and return it in the SSE/chart payload so the UI/exports can link to it.
+- [x] **Step 1: Generate the PNG**
+`render_png` already builds the Plotly figure and calls `fig.to_image(engine="kaleido")` with graceful degradation. The real blocker was the dependency: bumped `kaleido` `0.2.1` (linux-x86_64-only, not Plotly-6-native) → **`>=1,<2`** (cross-platform wheels incl. macOS ARM64). Verified locally — `render_png` now emits a real 83 KB PNG. **(RESOLVED)**
+- [x] **Step 2: Upload + surface `chart_url`**
+Already implemented: `pipeline.py` uploads `png_bytes` to MinIO (`chart_{conversation_id}.png`) and sets `chart_url` (public/presigned) in the chart payload. Added a `render_png` contract test. **(RESOLVED)**
+
+> **Runtime note (infra follow-up):** Kaleido 1.x needs a Chrome/Chromium at render time. Where it is absent (e.g. a backend container without a browser) `render_png` degrades to "no PNG" — no crash. To actually produce PNGs in prod, provision Chrome in the backend image (or call `kaleido.get_chrome_sync()` at build).
 
 ---
 
