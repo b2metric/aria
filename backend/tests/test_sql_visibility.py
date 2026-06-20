@@ -320,3 +320,367 @@ async def test_audit_failure_does_not_raise():
     await audit_rls_applied(
         _Boom(), customer_id="c", user_id="u", row_filters={"T": "x = 1"}
     )
+
+
+# ── (d) DB-backed effective visibility: _resolve_sql_visible ─────────────────
+#
+# `_resolve_sql_visible` reads the per-user `users.sql_visibility` override from
+# the metadata DB and layers it over the role default. The security-critical
+# property is fail-CLOSED: any error reading the override resolves to False
+# (hide SQL) so a user explicitly set sql_visibility=False cannot silently
+# become visible again on a transient DB error.
+
+
+class _FakeResult:
+    """Stands in for the object returned by ``conn.execute(...)``."""
+
+    def __init__(self, row: tuple | None) -> None:
+        self._row = row
+
+    def fetchone(self) -> tuple | None:
+        return self._row
+
+
+class _FakeConn:
+    """Async context-manager connection whose ``execute`` returns a fixed row."""
+
+    def __init__(self, row: tuple | None) -> None:
+        self._row = row
+
+    async def __aenter__(self) -> _FakeConn:
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+    async def execute(self, *args, **kwargs) -> _FakeResult:
+        return _FakeResult(self._row)
+
+
+class _FakeEngine:
+    """Async engine whose ``connect()`` yields a connection with a fixed row."""
+
+    def __init__(self, row: tuple | None) -> None:
+        self._row = row
+
+    def connect(self) -> _FakeConn:
+        return _FakeConn(self._row)
+
+
+class _BoomConn:
+    async def __aenter__(self) -> _BoomConn:
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+    async def execute(self, *args, **kwargs):
+        raise RuntimeError("db down")
+
+
+class _BoomEngine:
+    """Async engine whose connection raises on ``execute`` — simulates a DB error."""
+
+    def connect(self) -> _BoomConn:
+        return _BoomConn()
+
+
+def _user(role: Role | None, user_id: str | None = "user-001"):
+    from backend.app.auth.models import UserContext
+
+    return UserContext(user_id=user_id, role=role, workspace_id="ws-1")
+
+
+@pytest.mark.asyncio
+async def test_resolve_sql_visible_override_true_beats_role_default():
+    # Override True wins even for a role (viewer) whose default is False.
+    from backend.app.api.query import _resolve_sql_visible
+
+    engine = _FakeEngine(row=(True,))
+    assert await _resolve_sql_visible(engine, _user(Role.VIEWER)) is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_sql_visible_override_false_beats_admin_role():
+    # Override False wins even for admin (whose default is True).
+    from backend.app.api.query import _resolve_sql_visible
+
+    engine = _FakeEngine(row=(False,))
+    assert await _resolve_sql_visible(engine, _user(Role.ADMIN)) is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_sql_visible_null_override_inherits_role_default():
+    # NULL override → role default. Admin → True, Viewer → False.
+    from backend.app.api.query import _resolve_sql_visible
+
+    engine_admin = _FakeEngine(row=(None,))
+    assert await _resolve_sql_visible(engine_admin, _user(Role.ADMIN)) is True
+
+    engine_viewer = _FakeEngine(row=(None,))
+    assert await _resolve_sql_visible(engine_viewer, _user(Role.VIEWER)) is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_sql_visible_no_row_inherits_role_default():
+    # No matching user row → no override → role default.
+    from backend.app.api.query import _resolve_sql_visible
+
+    engine = _FakeEngine(row=None)
+    assert await _resolve_sql_visible(engine, _user(Role.ANALYST)) is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_sql_visible_fails_closed_on_db_error():
+    # SECURITY: a DB error reading the override must resolve to False (deny),
+    # even for an admin whose role default would otherwise be True.
+    from backend.app.api.query import _resolve_sql_visible
+
+    assert await _resolve_sql_visible(_BoomEngine(), _user(Role.ADMIN)) is False
+
+
+@pytest.mark.asyncio
+async def test_resolve_sql_visible_no_user_id_uses_role_default():
+    # No user_id → skip the DB read entirely, fall back to role default.
+    from backend.app.api.query import _resolve_sql_visible
+
+    # engine.connect must NOT be called; pass an engine that would explode if it were.
+    assert await _resolve_sql_visible(_BoomEngine(), _user(Role.ADMIN, user_id=None)) is True
+    assert await _resolve_sql_visible(_BoomEngine(), _user(Role.VIEWER, user_id=None)) is False
+
+
+# ── (e) async require_sql_access: DB override + fail-closed ──────────────────
+
+
+class _FakeSession:
+    def __init__(self, row: tuple | None) -> None:
+        self._row = row
+
+    async def __aenter__(self) -> _FakeSession:
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+    async def execute(self, *args, **kwargs) -> _FakeResult:
+        return _FakeResult(self._row)
+
+
+class _BoomSession:
+    async def __aenter__(self) -> _BoomSession:
+        return self
+
+    async def __aexit__(self, *exc) -> None:
+        return None
+
+    async def execute(self, *args, **kwargs):
+        raise RuntimeError("db down")
+
+
+def _sessionmaker_returning(session):
+    def _maker():
+        return session
+
+    return _maker
+
+
+def _patch_sessionmaker(monkeypatch, session):
+    # require_sql_access does `from backend.app.db.session import get_sessionmaker`
+    # INSIDE the function body, so the name must be patched on its source module,
+    # not on the rbac module namespace.
+    import backend.app.db.session as session_mod
+
+    monkeypatch.setattr(
+        session_mod, "get_sessionmaker", lambda: _sessionmaker_returning(session)
+    )
+
+
+@pytest.mark.asyncio
+async def test_require_sql_access_override_true_grants_for_viewer(monkeypatch):
+    from backend.app.auth import rbac
+
+    _patch_sessionmaker(monkeypatch, _FakeSession((True,)))
+    # Override True grants access even though viewer's role default is False.
+    await rbac.require_sql_access(_user(Role.VIEWER))  # must not raise
+
+
+@pytest.mark.asyncio
+async def test_require_sql_access_override_false_denies_admin(monkeypatch):
+    from fastapi import HTTPException
+
+    from backend.app.auth import rbac
+
+    _patch_sessionmaker(monkeypatch, _FakeSession((False,)))
+    with pytest.raises(HTTPException) as exc:
+        await rbac.require_sql_access(_user(Role.ADMIN))
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_require_sql_access_null_override_inherits_role_default(monkeypatch):
+    from fastapi import HTTPException
+
+    from backend.app.auth import rbac
+
+    # Admin default True → allowed.
+    _patch_sessionmaker(monkeypatch, _FakeSession((None,)))
+    await rbac.require_sql_access(_user(Role.ADMIN))
+    # Viewer default False → denied.
+    _patch_sessionmaker(monkeypatch, _FakeSession((None,)))
+    with pytest.raises(HTTPException) as exc:
+        await rbac.require_sql_access(_user(Role.VIEWER))
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_require_sql_access_fails_closed_on_db_error(monkeypatch):
+    # SECURITY: a DB error reading the override must DENY (403), even for admin.
+    from fastapi import HTTPException
+
+    from backend.app.auth import rbac
+
+    _patch_sessionmaker(monkeypatch, _BoomSession())
+    with pytest.raises(HTTPException) as exc:
+        await rbac.require_sql_access(_user(Role.ADMIN))
+    assert exc.value.status_code == 403
+
+
+# ── (f) admin PATCH persists sql_visibility (model_fields_set semantics) ──────
+#
+# The admin update_user handler must only touch `user.sql_visibility` when the
+# field is explicitly present in the request body. Omitting it leaves the
+# existing value untouched; passing null resets to "inherit role default".
+
+
+def _make_user(sql_visibility):
+    import uuid as _uuid
+    from datetime import UTC, datetime
+
+    from backend.app.models.organization import User
+    from backend.app.schemas.organization import UserRole
+
+    now = datetime.now(UTC)
+    return User(
+        id=_uuid.uuid4(),
+        customer_id=_uuid.uuid4(),
+        external_id="kc-ext-id",
+        email="u@b2metric.com",
+        display_name="U",
+        role=UserRole.ANALYST,
+        team_id=None,
+        is_active=True,
+        sql_visibility=sql_visibility,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+class _PatchSession:
+    """Async session that returns a fixed user and records commit/refresh."""
+
+    def __init__(self, user) -> None:
+        self._user = user
+        self.committed = False
+
+    async def execute(self, *args, **kwargs):
+        from unittest.mock import MagicMock
+
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = self._user
+        return result
+
+    async def commit(self) -> None:
+        self.committed = True
+
+    async def refresh(self, _obj) -> None:
+        return None
+
+
+async def _run_update(body, existing_user, monkeypatch):
+    """Drive the admin update_user handler with a mocked session + Keycloak."""
+    import uuid as _uuid
+    from unittest.mock import AsyncMock
+
+    from backend.app.api.endpoints.admin import users as users_ep
+
+    monkeypatch.setattr(
+        users_ep, "resolve_customer_id", AsyncMock(return_value=existing_user.customer_id)
+    )
+
+    class _FakeKC:
+        async def update_user(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(users_ep, "KeycloakAdminService", _FakeKC)
+
+    session = _PatchSession(existing_user)
+    admin_user = _user(Role.ADMIN)
+    # The handler checks current_user.can_admin.
+    admin_user.can_admin = True
+
+    resp = await users_ep.update_user(
+        user_id=_uuid.uuid4(),
+        body=body,
+        current_user=admin_user,
+        db=session,
+    )
+    return resp, session
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_sets_sql_visibility_false(monkeypatch):
+    from backend.app.schemas.organization import UserUpdate
+
+    existing = _make_user(sql_visibility=None)  # currently inherits role default
+    body = UserUpdate(sql_visibility=False)  # explicitly present → must persist
+    assert "sql_visibility" in body.model_fields_set
+
+    resp, session = await _run_update(body, existing, monkeypatch)
+
+    assert existing.sql_visibility is False
+    assert resp.sql_visibility is False
+    assert session.committed is True
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_sets_sql_visibility_true(monkeypatch):
+    from backend.app.schemas.organization import UserUpdate
+
+    existing = _make_user(sql_visibility=None)
+    body = UserUpdate(sql_visibility=True)
+
+    resp, _ = await _run_update(body, existing, monkeypatch)
+
+    assert existing.sql_visibility is True
+    assert resp.sql_visibility is True
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_omitting_sql_visibility_leaves_value_untouched(monkeypatch):
+    # Only role is set; sql_visibility omitted from the body → existing value
+    # (True) must be preserved (model_fields_set excludes sql_visibility).
+    from backend.app.schemas.organization import UserRole, UserUpdate
+
+    existing = _make_user(sql_visibility=True)
+    body = UserUpdate(role=UserRole.VIEWER)
+    assert "sql_visibility" not in body.model_fields_set
+
+    resp, _ = await _run_update(body, existing, monkeypatch)
+
+    assert existing.sql_visibility is True  # untouched
+    assert resp.sql_visibility is True
+
+
+@pytest.mark.asyncio
+async def test_admin_patch_explicit_null_resets_to_inherit(monkeypatch):
+    # Explicit null → reset override to "inherit role default" (None persisted).
+    from backend.app.schemas.organization import UserUpdate
+
+    existing = _make_user(sql_visibility=True)
+    body = UserUpdate(sql_visibility=None)
+    assert "sql_visibility" in body.model_fields_set
+
+    resp, _ = await _run_update(body, existing, monkeypatch)
+
+    assert existing.sql_visibility is None
+    assert resp.sql_visibility is None

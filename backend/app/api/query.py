@@ -52,32 +52,38 @@ async def _resolve_sql_visible(engine: AsyncEngine, user: CurrentUser) -> bool:
 
     ``get_current_user`` is JWT-only, so the per-user override
     (``users.sql_visibility``) is read here from the metadata DB.  The override
-    wins when set; otherwise we fall back to the role default already computed
-    onto the token (``user.can_view_sql``).  A lookup failure fails safe to the
-    role default rather than breaking the query.
+    wins when set; otherwise we fall back to the role default
+    (``resolve_effective_sql_visibility(role, None)``).
+
+    Fail CLOSED: any error reading the override resolves to ``False`` (hide
+    SQL).  A user explicitly set ``sql_visibility=False`` who then hits a
+    transient DB error must NOT silently become visible again — that would be
+    an information leak — so the secure direction on failure is to deny.
     """
     from sqlalchemy import text as _text
 
-    override: bool | None = None
-    if user.user_id:
-        try:
-            async with engine.connect() as conn:
-                row = (
-                    await conn.execute(
-                        _text("SELECT sql_visibility FROM users WHERE id = :uid"),
-                        {"uid": user.user_id},
-                    )
-                ).fetchone()
-            if row is not None:
-                override = row[0]
-        except Exception:
-            logger.debug("Could not resolve per-user sql_visibility for %s", user.user_id)
+    if not user.user_id:
+        return resolve_effective_sql_visibility(user.role, sql_visibility=None)
 
-    if override is not None:
-        return override
-    return resolve_effective_sql_visibility(user.role, sql_visibility=None) or bool(
-        user.can_view_sql
-    )
+    try:
+        async with engine.connect() as conn:
+            row = (
+                await conn.execute(
+                    _text("SELECT sql_visibility FROM users WHERE id = :uid"),
+                    {"uid": user.user_id},
+                )
+            ).fetchone()
+        override = row[0] if row is not None else None
+    except Exception:
+        # Fail closed: deny SQL visibility when the override cannot be read.
+        logger.warning(
+            "Failed to read per-user sql_visibility for user_id=%s; failing closed (SQL hidden)",
+            user.user_id,
+            exc_info=True,
+        )
+        return False
+
+    return resolve_effective_sql_visibility(user.role, sql_visibility=override)
 
 
 # ── Query endpoint (SSE) ──────────────────────────────────────────────────

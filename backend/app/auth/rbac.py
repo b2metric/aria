@@ -19,12 +19,15 @@ Usage::
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 
 from backend.app.auth.dependencies import get_current_user
 from backend.app.auth.models import Role, UserContext
+
+logger = logging.getLogger("aria.auth.rbac")
 
 CurrentUser = Annotated[UserContext, Depends(get_current_user)]
 
@@ -62,14 +65,18 @@ async def require_sql_access(user: CurrentUser) -> None:
     (``users.sql_visibility``) on top of the role default: an explicit
     True/False wins, NULL inherits the role default (admin/analyst only).
     ``get_current_user`` is JWT-only, so the override is read here from the
-    metadata DB; a lookup failure falls back to the role default.
+    metadata DB.
+
+    Fail CLOSED: any error reading the override resolves to ``False`` (deny
+    SQL access).  A user explicitly set ``sql_visibility=False`` who then hits
+    a transient DB error must NOT silently regain access — the secure
+    direction on failure is to deny.
     """
     from sqlalchemy import text as _text
 
     from backend.app.db.session import get_sessionmaker
     from backend.app.query.sql_visibility import resolve_effective_sql_visibility
 
-    override: bool | None = None
     if user.user_id:
         try:
             maker = get_sessionmaker()
@@ -80,17 +87,22 @@ async def require_sql_access(user: CurrentUser) -> None:
                         {"uid": user.user_id},
                     )
                 ).fetchone()
-            if row is not None:
-                override = row[0]
+            override = row[0] if row is not None else None
         except Exception:
-            override = None
-
-    if override is not None:
-        effective = override
+            # Fail closed: deny SQL access when the override cannot be read.
+            logger.warning(
+                "Failed to read per-user sql_visibility for user_id=%s; "
+                "failing closed (SQL access denied)",
+                user.user_id,
+                exc_info=True,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="SQL access is not available for your role",
+            ) from None
+        effective = resolve_effective_sql_visibility(user.role, sql_visibility=override)
     else:
-        effective = resolve_effective_sql_visibility(user.role, sql_visibility=None) or bool(
-            user.can_view_sql
-        )
+        effective = resolve_effective_sql_visibility(user.role, sql_visibility=None)
 
     if not effective:
         raise HTTPException(

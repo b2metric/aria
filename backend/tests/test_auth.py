@@ -255,7 +255,42 @@ class TestRBACGuards:
 # ── Tests: SQL visibility ────────────────────────────────────────────────
 
 
+class _NoOverrideResult:
+    """fetchone() → None: the user row carries no per-user sql_visibility override."""
+
+    def fetchone(self):
+        return None
+
+
+class _NoOverrideSession:
+    """Async session whose override read returns no row (inherit role default)."""
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+    async def execute(self, *args, **kwargs):
+        return _NoOverrideResult()
+
+
 class TestSQLVisibility:
+    @pytest.fixture(autouse=True)
+    def _stub_override_read(self, monkeypatch):
+        """Stub the per-user sql_visibility override read used by require_sql_access.
+
+        ``require_sql_access`` does ``from backend.app.db.session import
+        get_sessionmaker`` inside the function body, so patch the source module.
+        Returning a no-override session exercises the real "inherit role default"
+        path (admin/analyst → allowed, viewer/team_lead → denied) without a live
+        DB.  The fail-closed-on-error direction is covered in
+        ``test_sql_visibility.py``.
+        """
+        import backend.app.db.session as session_mod
+
+        monkeypatch.setattr(session_mod, "get_sessionmaker", lambda: _NoOverrideSession)
+
     def test_admin_can_preview_sql(self, rsa_key, client):
         token = make_token(rsa_key, role="admin")
         resp = client.get("/queries/sql-preview", headers={"Authorization": f"Bearer {token}"})

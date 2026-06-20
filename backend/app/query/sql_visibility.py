@@ -92,6 +92,12 @@ def apply_sql_visibility_gate(event: dict[str, Any], sql_visible: bool) -> dict[
         if isinstance(data, dict) and data.get("chart_type") == "table":
             # Raw tabular grid == the row-level data; strip it but keep metadata.
             return {**event, "data": {**data, "chart_data": []}}
+        # DELIBERATE PRODUCT DECISION (owner-confirmed, Sprint 16): a user
+        # WITHOUT SQL visibility STILL receives `chart_data` for a genuine chart
+        # visualisation (bar/line/pie/…). Only the raw SQL string and the raw
+        # `table`-grid fallback (above) are withheld; charted/aggregated data is
+        # shown. This matches the sprint plan's "chart/summary still returned" —
+        # do NOT "fix" this later as a leak; it is intentional.
         return event
 
     return event
