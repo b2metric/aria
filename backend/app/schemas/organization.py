@@ -56,6 +56,14 @@ class UserUpdate(BaseModel):
     team_id: uuid.UUID | None = Field(
         default=None, description="Assign to a team (None to remove from team)"
     )
+    sql_visibility: bool | None = Field(
+        default=None,
+        description=(
+            "Per-user SQL-visibility override. NULL inherits the role default; "
+            "True/False explicitly overrides who may see raw SQL + raw rows. "
+            "Only applied when explicitly present in the request body."
+        ),
+    )
 
 
 class UserResponse(BaseModel):
@@ -70,5 +78,6 @@ class UserResponse(BaseModel):
     team_id: uuid.UUID | None
     customer_id: uuid.UUID
     is_active: bool
+    sql_visibility: bool | None = None
     created_at: datetime
     updated_at: datetime

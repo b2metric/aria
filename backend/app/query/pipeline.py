@@ -1080,20 +1080,9 @@ async def _execute_sql(
     # rejected rather than executed unfiltered.
     # Column-Level Security deny-list, resolved once here and reused for the
     # result post-filter (defense-in-depth) at the row-return path below.
-    deny_columns: dict | None = None
-    if db is not None and workspace_id and config is not None:
-        policy = await _resolve_vault_policy(workspace_id, db, team_id)
-        row_filters = getattr(policy, "row_filters", None) if policy else None
-        deny_columns = getattr(policy, "deny_columns", None) if policy else None
-        if row_filters:
-            from backend.app.query.rls import apply_row_filters
-
-            dialect = _sqlglot_dialect(config.db_type.value)
-            sql = apply_row_filters(sql, row_filters, dialect=dialect)
-
-    from backend.app.db import execute_query
-
-    # ── Resolve customer UUID for audit logging ──────────────────────────
+    # ── Resolve customer / user UUIDs for audit logging ──────────────────
+    # Resolved up-front so the RLS-applied governance entry (written right after
+    # the rewrite below) and the query/CLS entries all share the same identities.
     _customer_uuid: _uuid.UUID | None = None
     _user_uuid: _uuid.UUID | None = None
 
@@ -1112,6 +1101,31 @@ async def _execute_sql(
     if user_id:
         with contextlib.suppress(ValueError, AttributeError):
             _user_uuid = _uuid.UUID(user_id)
+
+    deny_columns: dict | None = None
+    if db is not None and workspace_id and config is not None:
+        policy = await _resolve_vault_policy(workspace_id, db, team_id)
+        row_filters = getattr(policy, "row_filters", None) if policy else None
+        deny_columns = getattr(policy, "deny_columns", None) if policy else None
+        if row_filters:
+            from backend.app.query.rls import apply_row_filters
+
+            dialect = _sqlglot_dialect(config.db_type.value)
+            rewritten = apply_row_filters(sql, row_filters, dialect=dialect)
+            # Governance audit: log ONLY when the rewrite actually changed the SQL
+            # (apply_row_filters returns the input byte-for-byte on a no-op pass).
+            if rewritten != sql and _customer_uuid is not None:
+                from backend.app.query.sql_visibility import audit_rls_applied
+
+                await audit_rls_applied(
+                    AuditService(db),
+                    customer_id=_customer_uuid,
+                    user_id=_user_uuid,
+                    row_filters=row_filters,
+                )
+            sql = rewritten
+
+    from backend.app.db import execute_query
 
     # ── Audit helper ────────────────────────────────────────────────────
     async def _audit(
@@ -1305,7 +1319,27 @@ async def _execute_sql(
         if deny_columns:
             from backend.app.query.cls import strip_denied_columns_from_rows
 
+            # Determine which denied columns were ACTUALLY present in the result
+            # (case-insensitive) so we only audit a genuine restriction, not a
+            # no-op pass.  Build a per-table map of just the columns truly removed.
+            present_keys = {str(k).lower() for r in result for k in r}
+            removed_by_table = {
+                table: [c for c in (cols or []) if str(c).lower() in present_keys]
+                for table, cols in deny_columns.items()
+            }
+            removed_by_table = {t: cols for t, cols in removed_by_table.items() if cols}
+
             result = strip_denied_columns_from_rows(result, deny_columns)
+
+            if removed_by_table and _customer_uuid is not None:
+                from backend.app.query.sql_visibility import audit_cls_denied
+
+                await audit_cls_denied(
+                    AuditService(db),
+                    customer_id=_customer_uuid,
+                    user_id=_user_uuid,
+                    deny_columns=removed_by_table,
+                )
 
         await _audit(success=True, row_count=len(result), mem_trace=mem_trace)
         return result
@@ -1670,8 +1704,42 @@ async def process_query(
     workspace_id: str,
     user_id: str,
     team_id: str | None = None,
+    sql_visible: bool = True,
 ) -> AsyncGenerator[dict, None]:
     """Process a natural language query and yield SSE events.
+
+    Honours the per-user SQL-visibility invariant: when *sql_visible* is
+    ``False`` every emitted event is passed through
+    :func:`~backend.app.query.sql_visibility.gate_sse_event`, which omits the
+    raw ``sql`` events, strips the raw SQL string from the ``sql_ready`` status
+    event, and blanks a raw table grid — while still streaming the chart
+    visualisation and the insight.  Defaults to ``True`` to preserve the
+    behaviour of any caller that does not resolve visibility.
+    """
+    from backend.app.query.sql_visibility import gate_sse_event
+
+    async for _event in _process_query_impl(
+        redis=redis,
+        engine=engine,
+        request=request,
+        workspace_id=workspace_id,
+        user_id=user_id,
+        team_id=team_id,
+    ):
+        gated = gate_sse_event(_event, sql_visible)
+        if gated is not None:
+            yield gated
+
+
+async def _process_query_impl(
+    redis: Redis,
+    engine: AsyncEngine,
+    request: QueryRequest,
+    workspace_id: str,
+    user_id: str,
+    team_id: str | None = None,
+) -> AsyncGenerator[dict, None]:
+    """Inner pipeline generator (un-gated).  See :func:`process_query`.
 
     Pipeline stages:
     1. THINKING — validating input

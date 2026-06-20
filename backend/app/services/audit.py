@@ -32,6 +32,8 @@ class AuditAction:
     VAULT_WRITE = "vault_write"
     DB_CONFIG_ACCESS = "db_config_access"
     POLICY_EVALUATION = "policy_evaluation"
+    RLS_FILTER = "rls_filter"
+    CLS_DENIED = "cls_denied"
 
 
 class AuditResourceType:

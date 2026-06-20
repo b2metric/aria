@@ -55,12 +55,44 @@ def require_role(minimum: Role) -> RoleGuard:
     return guard
 
 
-def require_sql_access(user: CurrentUser) -> None:
-    """Require the user to have SQL visibility (``can_view_sql``).
+async def require_sql_access(user: CurrentUser) -> None:
+    """Require the user to have *effective* SQL visibility.
 
-    By default only ``admin`` and ``analyst`` roles have this permission.
+    Effective visibility honours the per-user override
+    (``users.sql_visibility``) on top of the role default: an explicit
+    True/False wins, NULL inherits the role default (admin/analyst only).
+    ``get_current_user`` is JWT-only, so the override is read here from the
+    metadata DB; a lookup failure falls back to the role default.
     """
-    if not user.can_view_sql:
+    from sqlalchemy import text as _text
+
+    from backend.app.db.session import get_sessionmaker
+    from backend.app.query.sql_visibility import resolve_effective_sql_visibility
+
+    override: bool | None = None
+    if user.user_id:
+        try:
+            maker = get_sessionmaker()
+            async with maker() as session:
+                row = (
+                    await session.execute(
+                        _text("SELECT sql_visibility FROM users WHERE id = :uid"),
+                        {"uid": user.user_id},
+                    )
+                ).fetchone()
+            if row is not None:
+                override = row[0]
+        except Exception:
+            override = None
+
+    if override is not None:
+        effective = override
+    else:
+        effective = resolve_effective_sql_visibility(user.role, sql_visibility=None) or bool(
+            user.can_view_sql
+        )
+
+    if not effective:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="SQL access is not available for your role",

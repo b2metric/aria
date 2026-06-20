@@ -92,6 +92,16 @@ class User(Base, UUIDMixin, TimestampMixin):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     avatar_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    sql_visibility: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True,
+        default=None,
+        comment=(
+            "Per-user SQL-visibility override. NULL = inherit the role default "
+            "(_can_view_sql); True/False explicitly overrides who may see the raw "
+            "SQL string + raw tabular result."
+        ),
+    )
 
     # relationships
     customer: Mapped["Customer"] = relationship(back_populates="users")
