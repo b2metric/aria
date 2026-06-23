@@ -47,78 +47,17 @@ services:
     networks:
       - aria-net
   # ── Traefik Proxy ──────────────────────────────────────────────────────
-  traefik:
-    image: traefik:v3.0
-    container_name: aria-traefik
-    command:
-      - "--api.insecure=true"
-      - "--entrypoints.web.address=:80"
-      - "--providers.file.directory=/etc/traefik/dynamic"
-      - "--providers.file.watch=true"
-    ports:
-      - "80:80"
-      - "8081:8080" # Dashboard
-    volumes:
-      - ./infra/traefik-dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
-    networks:
-      aria-net:
-        # In-cluster aliases so containers resolve the SAME external hostnames as
-        # the browser (-> consistent OIDC issuer). All three resolve to Traefik.
-        aliases:
-          - aria.localhost
-          - api.aria.localhost
-          - auth.aria.localhost
-
-  # ── Keycloak (SSO & IAM) ───────────────────────────────────────────────
-  keycloak:
-    image: quay.io/keycloak/keycloak:26.1
-    container_name: aria-keycloak
-    command: start-dev --http-port 8080 --import-realm
-    environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
-      KC_HEALTH_ENABLED: "true"
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: keycloak_dev
-      # KC26 hostname v2: full external origin behind Traefik (http, port 80).
-      # Issuer becomes http://auth.aria.localhost/auth/realms/aria for every caller.
-      KC_HOSTNAME: "http://auth.aria.localhost/auth"
-      KC_HOSTNAME_STRICT: "false"
-      KC_HTTP_ENABLED: "true"
-      KC_HTTP_RELATIVE_PATH: "/auth"
-      KC_PROXY_HEADERS: "xforwarded"
-    volumes:
-      - ./infra/keycloak/aria-realm.json:/opt/keycloak/data/import/aria-realm.json:ro
-    depends_on:
-      keycloak-db:
-        condition: service_healthy
-    healthcheck:
-      # KC_HTTP_RELATIVE_PATH=/auth moves the mgmt health endpoint under /auth too.
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; echo -e 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost:9000\\r\\nConnection: close\\r\\n\\r\\n' >&3; cat <&3 | grep -q UP"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-    networks:
-      - aria-net
-
-  keycloak-db:
-    image: postgres:16-alpine
-    container_name: aria-keycloak-db
-    environment:
-      POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: keycloak_dev
-      POSTGRES_DB: keycloak
-    volumes:
-      - keycloak_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - aria-net
+  # ── Traefik + Keycloak (REMOVED — migrated to the shared portfolio infra) ──
+  # aria now uses the ONE shared Traefik ingress + the central b2metric-sso
+  # Keycloak (realm `b2metric`), both on the external `b2metric-net`:
+  #   • Ingress: orchestration/docker-compose.shared.yml in the b2metric-cockpit repo
+  #     (Traefik v3.7, docker provider, :80). aria's backend/frontend below carry
+  #     `traefik.*` labels + join b2metric-net so the shared Traefik routes them.
+  #   • IdP: docker compose -f ~/projects/b2metric-sso/docker-compose.yml up -d
+  #     (issuer http://sso.b2metric.localhost/auth/realms/b2metric; aria-web/
+  #     aria-backend/aria-cli clients already exist in the shared realm).
+  # aria's own `traefik`, `keycloak`, `keycloak-db` services were removed; the
+  # `infra/traefik-dynamic.yml` file-provider config is no longer used.
 
   # ── Backend (FastAPI - Live Reload) ──────────────────────────────────
   backend:
@@ -135,9 +74,11 @@ services:
     environment:
       - DATABASE_URL=postgresql+asyncpg://aria:aria_dev@postgres:5432/aria
       - REDIS_URL=redis://redis:6379/0
-      # Resolve auth.aria.localhost via Traefik alias so the JWKS host + token `iss`
-      # match (no split-horizon issuer mismatch).
-      - KEYCLOAK_URL=http://auth.aria.localhost/auth
+      # Central SSO (b2metric-sso, shared realm `b2metric`). The shared Traefik's
+      # network alias for sso.b2metric.localhost resolves this in-cluster so the
+      # JWKS host + token `iss` match for browser AND server-side callers.
+      - KEYCLOAK_URL=http://sso.b2metric.localhost/auth
+      - KEYCLOAK_REALM=b2metric
       # mem0 writes a telemetry/user-id file under ~/.mem0; container user `aria`
       # has no writable HOME, so point it at /tmp and disable telemetry.
       - MEM0_DIR=/tmp/.mem0
@@ -154,14 +95,17 @@ services:
         condition: service_started
       redis:
         condition: service_started
-      # Wait for Keycloak's healthcheck (mgmt /auth/health/ready) before the backend
-      # boots, so the JWKS startup gate doesn't race a still-booting Keycloak and exit
-      # (that race left api.aria.localhost 502 -> surfaced in the browser as "CORS").
-      # The backend ALSO retries JWKS with backoff for residual Traefik routing lag.
-      keycloak:
-        condition: service_healthy
+    # The central SSO is a SEPARATE stack (b2metric-sso); the backend retries JWKS
+    # with backoff at startup, so no cross-stack depends_on is needed.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=b2metric-net"
+      - "traefik.http.routers.aria-api.rule=Host(`api.aria.localhost`)"
+      - "traefik.http.routers.aria-api.entrypoints=web"
+      - "traefik.http.services.aria-api.loadbalancer.server.port=8000"
     networks:
-      - aria-net
+      - aria-net        # app-internal services (postgres/redis/qdrant/litellm)
+      - b2metric-net    # shared ingress + central SSO
 
   # ── Frontend (Next.js - Hot Reload) ──────────────────────────────────
   frontend:
@@ -182,11 +126,19 @@ services:
       # REQUIRED by NextAuth — without it sessions use an unstable auto-generated dev
       # secret (resets every restart; breaks in prod). Override via .env in real envs.
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-aria-dev-nextauth-secret-change-me}
-      # Server-side next-auth issuer MUST equal the browser issuer and include /auth.
-      - KEYCLOAK_ISSUER=http://auth.aria.localhost/auth/realms/aria
-      - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://auth.aria.localhost/auth/realms/aria
+      # Central SSO issuer (shared realm `b2metric`). MUST equal the browser issuer
+      # and include /auth. Dev mode (`npm run dev`) reads NEXT_PUBLIC_* at runtime,
+      # so no build-arg is needed (unlike a production `next start`).
+      - KEYCLOAK_ISSUER=http://sso.b2metric.localhost/auth/realms/b2metric
+      - NEXT_PUBLIC_KEYCLOAK_ISSUER=http://sso.b2metric.localhost/auth/realms/b2metric
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=b2metric-net"
+      - "traefik.http.routers.aria-web.rule=Host(`aria.localhost`)"
+      - "traefik.http.routers.aria-web.entrypoints=web"
+      - "traefik.http.services.aria-web.loadbalancer.server.port=3000"
     networks:
-      - aria-net
+      - b2metric-net    # shared ingress + central SSO (FE talks to BE via Traefik)
 
   # ── Oracle Database (STC MOCK) ───────────────────────────────────────
   oracle:
@@ -282,13 +234,19 @@ volumes:
   postgres_data:
   oracle_data:
   redis_data:
-  keycloak_db_data:
   minio_data:
   qdrant_data:
   prefect_db_data:
 
-# ── Network ────────────────────────────────────────────────────────────
+# ── Networks ───────────────────────────────────────────────────────────
 networks:
+  # App-internal services (postgres/redis/oracle/minio/qdrant/prefect/litellm).
   aria-net:
     name: aria-net
     driver: bridge
+  # Shared portfolio bridge — the ONE Traefik ingress + central b2metric-sso live
+  # here (created by orchestration/docker-compose.shared.yml in b2metric-cockpit).
+  # backend + frontend join it; create once: `docker network create b2metric-net`.
+  b2metric-net:
+    external: true
+    name: b2metric-net
