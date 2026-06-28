@@ -75,6 +75,8 @@ enriched_at: '2026-06-19T13:10:53.230933+00:00'
 ## Keywords
 
 bandwidth, country, data, date, demographic, geography, internet, lifecycle, nationality, state, status, temporal, time, usage
+## Business Metadata
+
 ## Column Descriptions
 
 - **TIMESTAMP**: Real event time of the request (use this for time filters).
@@ -97,40 +99,7 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 - **ACCOUNT_TYPE**: Customer account tier.
 - **TCPINFO_RTT**: TCP round-trip time (network distance signal), microseconds.
 
-### Manual Relationships
+## Relationships
 
 - `RESOURCE_NAME` → `DS_PATHA_5M.RESOURCE_NAME` (lookup) — Same property/resource as the 5-min content rollup.
 - `DATACENTER` → `DS_BASE_1M.DATACENTER` (lookup) — Same PoP dimension as the 1-min rollup.
-## Column Descriptions
-
-- **TIMESTAMP**: İsteğin gerçek olay zamanı (zaman filtreleri için bunu kullanın).
-- **Q_TIMESTAMP**: Analitik saati; ~16k satır 1970-01-01 (geçersiz) — zaman filtreleme için KULLANMAYIN.
-- **BYTES_SENT**: İstemciye gönderilen toplam bayt (başlıklar + gövde). Birincil bant genişliği/veri aktarımı ölçüsü.
-- **BODY_BYTES_SENT**: Yalnızca yanıt gövde baytları (başlıklar hariç).
-- **REQUEST_TIME**: İsteği sunmak için geçen toplam saniye — temel gecikme metriği.
-- **PROXY_CACHE_STATUS**: Önbellek sonucu: HIT (edge'den sunuldu ~0.045s), MISS (~0.210s), EXPIRED (~0.286s) veya boş (önbelleklenemez). Önbellek İsabet Oranını belirler.
-- **STATUS**: HTTP yanıt kodu. 200 OK (~%80), 410 Gone (~%17.5, zararsız — süresi dolmuş canlı yayın segmentleri), 304 Not Modified (~%2). 410'u gerçek 5xx hatalarından ayrı değerlendirin.
-- **SERVER_ROLE**: İsteği sunan CDN önbellek katmanı: Node (edge, ~%62 isabet), Mcache (orta), Feda (sadece getir, tasarım gereği %0 isabet).
-- **DATACENTER**: İsteği sunan uç nokta (PoP), şehir.sağlayıcı olarak adlandırılır (örn. ist.mrs = İstanbul). İstanbul PoP'leri en düşük gecikme (15-26ms); Sidney en yüksek (~275ms).
-- **COUNTRY_CODE**: İstemci ülkesi (ISO-2), IP/ASN'den çözümlenir. ~%99.95 TR.
-- **CONTINENT_CODE**: İstemci kıtası (örn. AS, EU).
-- **ASN**: İstemci ağ ASN'si (örn. 47331). Türk Telekom baskın.
-- **ISP**: İstemci ISS / ağ operatörü (Türk Telekom %47.5, Superonline, Millenicom, Türksat).
-- **REQUEST_URI**: İstenen URI/yol (DASH .mpd manifestleri, HLS .m3u8 oynatma listeleri, medya segmentleri).
-- **HTTP_USER_AGENT**: İstemci kullanıcı aracısı — cihaz/tarayıcı/işletim sistemi izleyici ilişkilendirmesi için kaynak.
-- **RESOURCE_NAME**: CDN özelliği/kaynağı (örn. b2metric-video.lg, ssport-live).
-- **HTTP_HOST**: İstenen sunucu adı (teslim edilen özelliğin sunucu adı).
-- **ACCOUNT_TYPE**: Müşteri hesap katmanı.
-- **TCPINFO_RTT**: TCP gidiş-dönüş süresi (ağ mesafesi sinyali), mikrosaniye.
-
-### Manual Relationships
-
-- `RESOURCE_NAME` → `DS_PATHA_5M.RESOURCE_NAME` (lookup) — Same property/resource as the 5-min content rollup.
-- `DATACENTER` → `DS_BASE_1M.DATACENTER` (lookup) — Same PoP dimension as the 1-min rollup.
-## Business Metadata
-
-
-### Column Descriptions
-
-- **SERVER_ROLE**: Önbellek katmanı: 'Node' (= Edge / uç), 'Mcache' (orta), 'Feda' (origin-fetch). Edge/uç için SERVER_ROLE='Node'.
-- **PROXY_CACHE_STATUS**: Önbellek sonucu. Değerler SADECE: 'HIT', 'MISS', 'EXPIRED', '' (boş). STALE_HIT YOKTUR.

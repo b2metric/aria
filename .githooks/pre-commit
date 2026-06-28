@@ -63,5 +63,21 @@ if [ "${SKIP_TDD_GUARD:-0}" != "1" ]; then
   fi
 fi
 
+# 7) vault schema-contract guard (see docs/vault-format-analysis.md, mirrors CI
+#    job `vault-validate`). When vault markdown is staged, block duplicated/stale
+#    sections before they reach the LLM prompt. Remediate: python3
+#    scripts/dedup-vault-sections.py <workspace>. Override: SKIP_VAULT_GUARD=1.
+if [ "${SKIP_VAULT_GUARD:-0}" != "1" ]; then
+  vault=$(staged | grep -E '^docs/vaults/.+\.md$' || true)
+  if [ -n "$vault" ]; then
+    if ! python3 "$ROOT/scripts/validate-vault.py" >/tmp/aria-vault-validate.txt 2>&1; then
+      echo "BLOCKED (vault contract): staged vault markdown violates the schema contract:"
+      grep -E '✗ ERROR|^[a-z]' /tmp/aria-vault-validate.txt | sed 's/^/    /'
+      echo "  -> fix: python3 scripts/dedup-vault-sections.py <workspace>  (override: SKIP_VAULT_GUARD=1)"
+      fail=1
+    fi
+  fi
+fi
+
 [ "$fail" -eq 1 ] && { echo "--- pre-commit guard failed (engineering-core) ---"; exit 1; }
 exit 0

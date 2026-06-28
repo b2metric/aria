@@ -12,6 +12,9 @@ from backend.app.services.crypto import async_decrypt_password
 logger = logging.getLogger(__name__)
 
 
+VALID_OPERATIONS = {"sql_generation", "insight", "suggestion", "chart"}
+
+
 @dataclass(frozen=True)
 class ResolvedLLM:
     """Resolved LLM configuration for a specific customer or platform default."""
@@ -21,6 +24,10 @@ class ResolvedLLM:
     model: str
     custom_llm_provider: str
     source: str  # "customer_byok" or "platform_default"
+    # Optional per-operation overrides (None → caller/litellm default).
+    temperature: float | None = None
+    max_tokens: int | None = None
+    operation: str | None = None  # which operation this was resolved for, if any
 
     def __repr__(self) -> str:
         """Mask API key in representation."""
@@ -32,11 +39,41 @@ class ResolvedLLM:
         return f"<ResolvedLLM source={self.source} provider={self.custom_llm_provider} model={self.model} api_base={self.api_base} api_key={masked_key}>"
 
 
-async def resolve_llm(workspace_id: str, session: AsyncSession) -> ResolvedLLM:
-    """Resolve the LLM configuration for a given workspace.
+def _apply_operation_override(
+    base: ResolvedLLM, operation_models: dict | None, operation: str | None
+) -> ResolvedLLM:
+    """Return ``base`` with the per-operation model/temperature/max_tokens applied.
 
-    If the customer has BYOK configured and enabled, return their dedicated proxy credentials.
-    Otherwise, fall back to the platform default (from settings).
+    ``operation_models`` shape: ``{operation: {model, temperature?, max_tokens?}}``.
+    Each major ARIA operation (sql_generation / insight / suggestion / chart) can
+    route to a DIFFERENT model on the same LiteLLM proxy. Absent override → base.
+    """
+    import dataclasses
+
+    if not operation or not operation_models:
+        return base
+    ov = operation_models.get(operation)
+    if not isinstance(ov, dict):
+        return base
+    model = ov.get("model") or base.model
+    return dataclasses.replace(
+        base,
+        model=model,
+        temperature=ov.get("temperature", base.temperature),
+        max_tokens=ov.get("max_tokens", base.max_tokens),
+        operation=operation,
+    )
+
+
+async def resolve_llm(
+    workspace_id: str, session: AsyncSession, operation: str | None = None
+) -> ResolvedLLM:
+    """Resolve the LLM configuration for a given workspace (and optional operation).
+
+    If the customer has BYOK configured and enabled, return their dedicated proxy
+    credentials. Otherwise, fall back to the platform default (from settings).
+    When ``operation`` is given and the customer config has a per-operation model
+    override, that model (and optional temperature/max_tokens) is applied.
     """
     settings = get_settings()
 
@@ -47,6 +84,9 @@ async def resolve_llm(workspace_id: str, session: AsyncSession) -> ResolvedLLM:
         model=settings.llm_model,
         custom_llm_provider="litellm",
         source="platform_default",
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+        operation=operation,
     )
 
     if not workspace_id or workspace_id == "default":
@@ -80,12 +120,18 @@ async def resolve_llm(workspace_id: str, session: AsyncSession) -> ResolvedLLM:
                     else ""
                 )
 
-                return ResolvedLLM(
+                base = ResolvedLLM(
                     api_base=settings.litellm_api_base,  # We route everything through our LiteLLM proxy
                     api_key=virtual_key,
                     model=llm_config.model_name,
                     custom_llm_provider="litellm",
                     source="customer_byok",
+                    temperature=settings.llm_temperature,
+                    max_tokens=settings.llm_max_tokens,
+                    operation=operation,
+                )
+                return _apply_operation_override(
+                    base, getattr(llm_config, "operation_models", None), operation
                 )
 
     except Exception as exc:

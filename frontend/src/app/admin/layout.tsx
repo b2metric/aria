@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -147,9 +147,21 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <Lock className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Vault Access</span>}
             </Link>
-            
-            <Link 
-              href="/admin/users" 
+
+            <Link
+              href="/admin/join-keys"
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/join-keys") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Join Keys"
+            >
+              <Link2 className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Join Keys</span>}
+            </Link>
+
+            <Link
+              href="/admin/users"
               className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
                 ${isCollapsed ? "justify-center" : "justify-start gap-3"}
                 ${pathname?.includes("/admin/users") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}

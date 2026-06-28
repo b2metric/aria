@@ -327,33 +327,259 @@ def _add_enrichment_section(body: str, enrichment: TableEnrichment) -> str:
             section_lines.append(f"- **{col.name}**: {desc}")
         section_lines.append("")
 
-    # Add relationships
-    if enrichment.relationships:
-        section_lines.append("### Manual Relationships")
-        section_lines.append("")
-        for rel in enrichment.relationships:
-            desc = f" — {rel.description}" if rel.description else ""
-            section_lines.append(
-                f"- `{rel.source_column}` → `{rel.target_table}.{rel.target_column}` ({rel.relationship_type}){desc}"
-            )
-        section_lines.append("")
+    # NOTE: relationships are intentionally NOT written here. They live in a
+    # single canonical "## Relationships" section managed by append_relationship/
+    # remove_relationship, so repeated enrichment never stacks duplicate
+    # relationship sections.
 
     return body + "\n".join(section_lines)
+
+
+def _resolve_vault_file(vault_path: Path, table_name: str) -> Path:
+    """Resolve a table's md file case-insensitively.
+
+    Vault files are generated with the DB's native casing (Oracle = UPPERCASE,
+    Postgres = lowercase), so a fixed-case lookup misses on the case-sensitive
+    Linux container (STC files are ``FCT_*.md``, Medianova ``ds_*.md``). Try
+    exact / upper / lower, then a case-insensitive directory scan. Falls back to
+    the lowercase name (preserving prior new-file-creation behavior) when no
+    existing file matches.
+    """
+    for cand in (
+        f"{table_name}.md",
+        f"{table_name.upper()}.md",
+        f"{table_name.lower()}.md",
+    ):
+        p = vault_path / cand
+        if p.exists():
+            return p
+    target = f"{table_name.lower()}.md"
+    if vault_path.exists():
+        for p in vault_path.glob("*.md"):
+            if p.name.lower() == target:
+                return p
+    return vault_path / target
+
+
+def remove_relationship(
+    vault_base_path: str | Path,
+    workspace_id: str,
+    table_name: str,
+    raw: str,
+) -> dict[str, Any]:
+    """Remove a single relationship bullet (matched by its rendered text) from a
+    table's vault file. ``raw`` is the text the API returned for the row (the
+    line content after the "- " bullet). Only bullets inside a Relationships
+    section are eligible, so unrelated bullets are never touched.
+
+    Returns {status: ok|not_found|error, removed: bool}.
+    """
+    vault_path = Path(vault_base_path) / workspace_id / "tables"
+    filepath = _resolve_vault_file(vault_path, table_name)
+    if not filepath.exists():
+        return {
+            "status": "error",
+            "error": f"Vault file not found: {filepath.name}",
+            "removed": False,
+        }
+
+    target = (raw or "").strip()
+    if not target:
+        return {"status": "error", "error": "raw relationship text is required", "removed": False}
+
+    lines = filepath.read_text(encoding="utf-8").split("\n")
+    out: list[str] = []
+    removed = False
+    in_rel = False
+    for line in lines:
+        s = line.strip()
+        if s.startswith("## ") or s.startswith("### "):
+            in_rel = "Relationships" in s
+        if (not removed) and in_rel and s.startswith("- ") and s[2:].strip() == target:
+            removed = True
+            continue  # drop this bullet
+        out.append(line)
+
+    if removed:
+        filepath.write_text("\n".join(out), encoding="utf-8")
+    return {"status": "ok" if removed else "not_found", "removed": removed}
+
+
+def _build_rel_bullet(rel: RelationshipEnrichment) -> str:
+    """Render a relationship as a canonical bullet line (without leading '- ')."""
+    desc = f" — {rel.description}" if rel.description else ""
+    return (
+        f"`{rel.source_column}` → `{rel.target_table}.{rel.target_column}` "
+        f"({rel.relationship_type}){desc}"
+    )
+
+
+def append_relationship(
+    vault_base_path: str | Path,
+    workspace_id: str,
+    table_name: str,
+    rel: RelationshipEnrichment,
+) -> dict[str, Any]:
+    """Append a relationship to the SINGLE canonical '## Relationships' section
+    (created if missing), de-duplicated. This is the only writer for
+    relationships, so sections never stack. Returns {status, added}.
+    """
+    vault_path = Path(vault_base_path) / workspace_id / "tables"
+    filepath = _resolve_vault_file(vault_path, table_name)
+    if not filepath.exists():
+        return {
+            "status": "error",
+            "error": f"Vault file not found: {filepath.name}",
+            "added": False,
+        }
+
+    bullet = _build_rel_bullet(rel)
+    content = filepath.read_text(encoding="utf-8")
+    lines = content.split("\n")
+
+    # already present anywhere in a Relationships section?
+    in_rel = False
+    for line in lines:
+        s = line.strip()
+        if s.startswith("## ") or s.startswith("### "):
+            in_rel = "Relationships" in s
+        if in_rel and s.startswith("- ") and s[2:].strip() == bullet:
+            return {"status": "exists", "added": False}
+
+    # find an existing canonical "## Relationships" header to append under
+    rel_idx = next((i for i, ln in enumerate(lines) if ln.strip() == "## Relationships"), None)
+    if rel_idx is not None:
+        # insert after the header's bullet list (before next header / EOF)
+        j = rel_idx + 1
+        while j < len(lines) and not (lines[j].startswith("## ") or lines[j].startswith("### ")):
+            j += 1
+        # back up over trailing blanks
+        k = j
+        while k > rel_idx + 1 and lines[k - 1].strip() == "":
+            k -= 1
+        lines.insert(k, f"- {bullet}")
+        new_content = "\n".join(lines)
+    else:
+        new_content = content.rstrip() + "\n\n## Relationships\n\n- " + bullet + "\n"
+
+    filepath.write_text(new_content, encoding="utf-8")
+    return {"status": "ok", "added": True}
+
+
+def parse_example_queries(filepath: Path) -> list[dict[str, str]]:
+    """Parse the '## Example Queries' section into [{question, answer, sql}].
+
+    Format per item:  ### Q: <question>  then optional explanation text (the
+    "answer" shown alongside results)  then a ```sql ... ``` fence.
+    """
+    if not filepath.exists():
+        return []
+    content = filepath.read_text(encoding="utf-8")
+    # isolate the Example Queries section (## Example Queries .. next ## )
+    m = re.search(r"^## Example Queries\s*\n(.*?)(?=^## |\Z)", content, re.DOTALL | re.MULTILINE)
+    if not m:
+        return []
+    section = m.group(1)
+    out: list[dict[str, str]] = []
+    # each ### Q: question  ... ```sql ... ```
+    for q in re.finditer(
+        r"^###\s*Q:\s*(.+?)\s*\n(.*?)(?=^###\s*Q:|\Z)", section, re.DOTALL | re.MULTILINE
+    ):
+        question = q.group(1).strip()
+        body = q.group(2)
+        sm = re.search(r"```(?:sql)?\s*\n(.*?)```", body, re.DOTALL)
+        sql = sm.group(1).strip() if sm else ""
+        # explanation = the markdown text BEFORE the code fence
+        answer = body[: sm.start()].strip() if sm else body.strip()
+        out.append({"question": question, "answer": answer, "sql": sql})
+    return out
+
+
+def add_example_query(
+    vault_base_path: str | Path,
+    workspace_id: str,
+    table_name: str,
+    question: str,
+    sql: str,
+    answer: str = "",
+) -> dict[str, Any]:
+    """Append a Q→(answer)→SQL example under '## Example Queries' (created if missing)."""
+    vault_path = Path(vault_base_path) / workspace_id / "tables"
+    filepath = _resolve_vault_file(vault_path, table_name)
+    if not filepath.exists():
+        return {"status": "error", "error": f"Vault file not found: {filepath.name}"}
+    question = (question or "").strip()
+    sql = (sql or "").strip()
+    answer = (answer or "").strip()
+    if not question or not sql:
+        return {"status": "error", "error": "question and sql are required"}
+
+    answer_part = f"{answer}\n\n" if answer else ""
+    block = f"\n### Q: {question}\n\n{answer_part}```sql\n{sql}\n```\n"
+    content = filepath.read_text(encoding="utf-8")
+    if "## Example Queries" in content:
+        # insert at the end of the Example Queries section (before next ## / EOF)
+        lines = content.split("\n")
+        start = next(i for i, ln in enumerate(lines) if ln.strip() == "## Example Queries")
+        j = start + 1
+        while j < len(lines) and not lines[j].startswith("## "):
+            j += 1
+        k = j
+        while k > start + 1 and lines[k - 1].strip() == "":
+            k -= 1
+        lines[k:k] = block.split("\n")
+        new_content = "\n".join(lines)
+    else:
+        new_content = content.rstrip() + "\n\n## Example Queries\n" + block
+    filepath.write_text(new_content, encoding="utf-8")
+    return {"status": "ok"}
+
+
+def remove_example_query(
+    vault_base_path: str | Path, workspace_id: str, table_name: str, question: str
+) -> dict[str, Any]:
+    """Remove the '### Q: <question>' block (matched by question text)."""
+    vault_path = Path(vault_base_path) / workspace_id / "tables"
+    filepath = _resolve_vault_file(vault_path, table_name)
+    if not filepath.exists():
+        return {
+            "status": "error",
+            "error": f"Vault file not found: {filepath.name}",
+            "removed": False,
+        }
+    target = (question or "").strip()
+    content = filepath.read_text(encoding="utf-8")
+    # remove a ### Q: <target> block up to the next ### or ## or EOF
+    pattern = re.compile(
+        r"\n?###\s*Q:\s*" + re.escape(target) + r"\s*\n.*?(?=\n###\s*Q:|\n## |\Z)",
+        re.DOTALL,
+    )
+    new_content, n = pattern.subn("", content, count=1)
+    if n:
+        new_content = re.sub(r"\n{3,}", "\n\n", new_content)
+        filepath.write_text(new_content, encoding="utf-8")
+    return {"status": "ok" if n else "not_found", "removed": bool(n)}
 
 
 def enrich_vault_table(
     vault_base_path: str | Path,
     workspace_id: str,
     enrichment: TableEnrichment,
+    replace_keywords: bool = False,
 ) -> dict[str, Any]:
     """Enrich a single table's vault file with metadata.
+
+    ``replace_keywords``: when False (default — LLM enrichment / Excel / JSON
+    import) keywords are UNIONed with existing so an auto-pass never clobbers
+    curation. When True (explicit user edit via the PATCH endpoint) the provided
+    list REPLACES the frontmatter keywords — including clearing to ``[]`` — so a
+    keyword the user deleted in the UI does not reappear from the old set.
 
     Returns:
         Status dict with success/error info
     """
     vault_path = Path(vault_base_path) / workspace_id / "tables"
-    filename = f"{enrichment.table_name.lower()}.md"
-    filepath = vault_path / filename
+    filepath = _resolve_vault_file(vault_path, enrichment.table_name)
 
     if not filepath.exists():
         return {
@@ -365,8 +591,25 @@ def enrich_vault_table(
     try:
         frontmatter, body = _parse_vault_file(filepath)
 
+        # Drop any legacy body "**Description:** No description provided yet."
+        # placeholder. We set frontmatter `description` below (the single source of
+        # truth the RAG pipeline reads), so leaving the body line is the exact
+        # stale-placeholder drift the vault contract forbids.
+        body = re.sub(
+            r"^\*\*Description:\*\* No description provided yet\.\s*$\n?",
+            "",
+            body,
+            flags=re.MULTILINE,
+        )
+
         # Update frontmatter keywords
-        if enrichment.keywords:
+        if replace_keywords:
+            # Explicit user edit: the provided list IS the new set (None = leave
+            # untouched, [] = clear). No union, so deletions stick.
+            if enrichment.keywords is not None:
+                frontmatter["keywords"] = sorted(set(enrichment.keywords))
+        elif enrichment.keywords:
+            # Enrichment pass: union with existing so we never clobber curation.
             existing_keywords = frontmatter.get("keywords", [])
             if isinstance(existing_keywords, str):
                 existing_keywords = [k.strip() for k in existing_keywords.strip("[]").split(",")]
@@ -397,11 +640,20 @@ def enrich_vault_table(
         new_content = _rebuild_vault_file(frontmatter, body)
         filepath.write_text(new_content, encoding="utf-8")
 
+        # Relationships go into the single canonical "## Relationships" section
+        # (append_relationship re-reads the file), so they never stack.
+        rels_added = 0
+        for rel in enrichment.relationships:
+            if append_relationship(vault_base_path, workspace_id, enrichment.table_name, rel).get(
+                "added"
+            ):
+                rels_added += 1
+
         return {
             "table": enrichment.table_name,
             "status": "success",
             "columns_enriched": len([c for c in enrichment.columns if c.description]),
-            "relationships_added": len(enrichment.relationships),
+            "relationships_added": rels_added,
         }
 
     except Exception as e:
@@ -502,3 +754,43 @@ def enrich_from_json(
     )
 
     return enrich_vault_bulk(vault_base_path, payload)
+
+
+def enrich_from_metadata_json(
+    json_path: str | Path,
+    vault_base_path: str | Path,
+    workspace_id: str,
+) -> dict[str, Any]:
+    """Import a ``scripts/extract-db-metadata.py`` JSON into the vault.
+
+    Two passes:
+    1. Standard enrichment (description / keywords / column descriptions /
+       relationships) via ``enrich_from_json`` — the extra ``enum_values`` /
+       ``sample_rows`` / ``row_count`` / ``data_type`` keys are ignored by
+       ``parse_json_metadata`` (Pydantic ignores unknown fields).
+    2. Enum-value blocks written via ``inject_enum_block`` — the canonical enum
+       rendering the SQL pipeline relies on. ``sample_rows`` are intentionally
+       NOT written into the vault (PII; the LLM needs enum literals, not raw
+       rows — they live only in the extraction JSON for human review).
+    """
+    import json as _json
+
+    from backend.app.services.vault_enum_sampler import inject_enum_block
+
+    base = enrich_from_json(json_path, vault_base_path, workspace_id)
+
+    with open(json_path, encoding="utf-8") as f:
+        data = _json.load(f)
+
+    tables_dir = Path(vault_base_path) / workspace_id / "tables"
+    enum_updates = 0
+    for t in data.get("tables", []):
+        enums = t.get("enum_values")
+        if not enums:
+            continue
+        fp = _resolve_vault_file(tables_dir, t["table_name"])
+        if fp.exists() and inject_enum_block(fp, enums):
+            enum_updates += 1
+
+    base["enum_blocks_updated"] = enum_updates
+    return base

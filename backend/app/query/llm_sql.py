@@ -59,8 +59,15 @@ def _build_schema_context(tables: list[dict], table_columns: dict[str, list[dict
     coded categories, e.g. SERVER_ROLE = Node/Mcache/Feda) so the model can scope
     filters to a named segment and never has to guess a value.
     """
+    import os
+
+    # ARIA_MAX_TABLES_IN_LLM caps the schema slice handed to the LLM. The old
+    # hard-coded 10 was tight for vaults with 20-40 tables (e.g. STC), causing
+    # the correct table to be dropped from context before the model ever saw it.
+    # Bump to 30 by default; tune higher only if prompts become token-heavy.
+    max_tables = int(os.environ.get("ARIA_MAX_TABLES_IN_LLM", "30"))
     parts = ["Available tables and columns:"]
-    for tbl in tables[:10]:  # Limit to 10 tables
+    for tbl in tables[:max_tables]:
         name = tbl["name"]
         cols = table_columns.get(name, [])
         parts.append(f"\n{name}:")
@@ -107,6 +114,45 @@ def _build_history_context(history: list[dict] | None) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _build_reference_context(
+    workspace_id: str | None, tables: list[dict], top_k: int = 3, max_chars: int = 7000
+) -> str:
+    """Pull the Domain Mapping + Example Queries md sections for the top-ranked
+    tables and render them as few-shot guidance. This is what carries the
+    CANONICAL verified queries (e.g. the recharge MoM bucket query) into the LLM
+    prompt — without it the model only sees columns and re-invents wrong SQL.
+    """
+    if not workspace_id:
+        return ""
+    import pathlib
+
+    from backend.app.core.config import get_settings
+    from backend.app.services.vault_md import read_sections, resolve_vault_file
+
+    vault_dir = pathlib.Path(get_settings().vault_base_path) / workspace_id / "tables"
+    if not vault_dir.exists():
+        return ""
+
+    blocks: list[str] = []
+    used = 0
+    for tbl in tables[:top_k]:
+        fp = resolve_vault_file(vault_dir, tbl["name"])
+        guidance = read_sections(fp, ["Domain Mapping", "Example Queries"])
+        if guidance:
+            block = f"\n--- Guidance for {tbl['name']} ---\n{guidance}"
+            blocks.append(block)
+            used += len(block)
+            if used >= max_chars:
+                break
+    if not blocks:
+        return ""
+    return (
+        "\nReference domain mappings and VERIFIED example queries for the most relevant "
+        "tables. Strongly PREFER adapting these example queries (correct table, columns, "
+        "bucket logic, entity grain) over writing SQL from scratch:\n" + "\n".join(blocks)
+    )
+
+
 async def generate_sql_with_llm(
     question: str,
     tables: list[dict],
@@ -114,6 +160,8 @@ async def generate_sql_with_llm(
     memory_context: MemoryContext | None = None,
     db_type: str = "oracle",
     history: list[dict] | None = None,
+    llm=None,
+    workspace_id: str | None = None,
 ) -> tuple[str, str, dict]:
     """Generate SQL using LLM.
 
@@ -123,6 +171,9 @@ async def generate_sql_with_llm(
         table_columns: Dict mapping table names to column lists
         memory_context: Optional memory context for better accuracy
         db_type: Database type (oracle, postgresql, mysql, mssql)
+        llm: Optional ResolvedLLM (model/api_base/api_key/temperature/max_tokens).
+            When provided, its values win over ``settings`` — this is how BYOK and
+            per-operation ("sql_generation") model routing reach SQL generation.
 
     Returns:
         Tuple of (sql, explanation, token_usage) where token_usage is a dict
@@ -130,14 +181,38 @@ async def generate_sql_with_llm(
     """
     settings = get_settings()
 
+    # Resolve effective model/credentials: ResolvedLLM wins, else platform settings.
+    model = (llm.model if llm and llm.model else None) or settings.llm_model
+    api_base = (llm.api_base if llm and llm.api_base else None) or settings.litellm_api_base
+    api_key = (
+        (llm.api_key if llm and llm.api_key else None)
+        or settings.litellm_api_key
+        or "sk-placeholder"
+    )
+    temperature = (
+        llm.temperature if llm and llm.temperature is not None else settings.llm_temperature
+    )
+    max_tokens = llm.max_tokens if llm and llm.max_tokens is not None else settings.llm_max_tokens
+
     # Build the prompt
     schema_ctx = _build_schema_context(tables, table_columns)
+    reference_ctx = _build_reference_context(workspace_id, tables)
+    join_keys_ctx = ""
+    if workspace_id:
+        try:
+            from backend.app.services.vault_join_keys import build_join_keys_context
+
+            join_keys_ctx = build_join_keys_context(workspace_id)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("join-keys context unavailable: %s", e)
     memory_ctx = _build_memory_context(memory_context)
     history_ctx = _build_history_context(history)
 
     user_prompt = f"""Database type: {db_type.upper()}
 
 {schema_ctx}
+{join_keys_ctx}
+{reference_ctx}
 {memory_ctx}
 {history_ctx}
 User question: {question}
@@ -148,19 +223,19 @@ Generate the SQL query:"""
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{settings.litellm_api_base}/chat/completions",
+                f"{api_base}/chat/completions",
                 headers={
-                    "Authorization": f"Bearer {settings.litellm_api_key or 'sk-placeholder'}",
+                    "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": settings.llm_model,
+                    "model": model,
                     "messages": [
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "temperature": settings.llm_temperature,
-                    "max_tokens": settings.llm_max_tokens,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
                 },
             )
             response.raise_for_status()
@@ -179,7 +254,7 @@ Generate the SQL query:"""
         token_usage = {
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
-            "model": settings.llm_model,
+            "model": model,
         }
 
         logger.info(

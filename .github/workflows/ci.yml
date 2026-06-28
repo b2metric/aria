@@ -235,6 +235,19 @@ jobs:
           path: codegraph/graph.html
           retention-days: 14
 
+  vault-validate:
+    # Vault schema-contract gate (see docs/vault-format-analysis.md). The vault is
+    # ARIA's semantic layer; this BLOCKS the duplicated/stale-section drift that
+    # silently degrades every NL→SQL answer. Pure stdlib — no install step.
+    # Remediate locally with: python3 scripts/dedup-vault-sections.py <workspace>
+    name: "Vault Schema Contract"
+    runs-on: ubuntu-latest
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate vault markdown against the schema contract
+        run: python3 scripts/validate-vault.py
+
   docs-build:
     # Dual-audience docs portal (docs-site/, Docusaurus) must build — keeps developer +
     # end-user (Academy) docs from rotting. Screenshots are committed artifacts; refresh

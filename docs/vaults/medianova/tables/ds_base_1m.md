@@ -48,6 +48,10 @@ enriched_at: '2026-06-19T13:10:53.228380+00:00'
 ## Keywords
 
 bandwidth, country, data, date, demographic, geography, internet, lifecycle, nationality, state, status, temporal, time, usage
+## Business Metadata
+
+**Notes:** Önbellek İsabet Oranı = SUM(REQUEST_NUMBER) WHERE PROXY_CACHE_STATUS='HIT' / SUM(REQUEST_NUMBER). Edge/uç katmanı = SERVER_ROLE='Node'.
+
 ## Column Descriptions
 
 - **START_DATE**: Start of the 1-minute bucket (use for time series).
@@ -69,38 +73,6 @@ bandwidth, country, data, date, demographic, geography, internet, lifecycle, nat
 - **HTTP_HOST**: Delivered host.
 - **ACCOUNT_TYPE**: Customer account tier.
 
-### Manual Relationships
+## Relationships
 
 - `DATACENTER` → `ALL_RAW.DATACENTER` (lookup) — Aggregated from the raw request log.
-## Column Descriptions
-
-- **START_DATE**: 1 dakikalık kovanın başlangıcı (zaman serisi için kullanın).
-- **REQUEST_NUMBER**: Kovadaki istek sayısı — İstek hacmi metriği.
-- **BYTES_SENT**: Kovada teslim edilen toplam bayt — Bant genişliği / veri aktarımı.
-- **AVG_REQUEST_TIME**: Kova için ortalama istek gecikmesi (saniye).
-- **AVG_TCPINFO_RTT**: Ortalama TCP gidiş-dönüş süresi (mikrosaniye) — ağ mesafesi.
-- **REQUEST_TIME_QUANTILES_P50**: Medyan istek gecikmesi (p50), saniye.
-- **REQUEST_TIME_QUANTILES_P95**: %95. yüzdelik istek gecikmesi (kuyruk gecikmesi).
-- **REQUEST_TIME_QUANTILES_P99**: %99. yüzdelik istek gecikmesi (en kötü durum kuyruğu).
-- **PROXY_CACHE_STATUS**: Gruplandırılmış satırlar için önbellek sonucu (HIT/MISS/EXPIRED/boş). Önbellek İsabet Oranı için kullanılır.
-- **SERVER_ROLE**: Önbellek katmanı (Node/Mcache/Feda).
-- **DATACENTER**: Trafiği sunan PoP (şehir.sağlayıcı).
-- **COUNTRY_CODE**: İstemci ülkesi (ISO-2).
-- **STATUS**: HTTP durum kodu gruplaması (200/410/304/...).
-- **ASN**: İstemci ağ ASN'si.
-- **ORG_NAME**: Kuruluş / kiracı.
-- **SERVER_NAME**: Edge sunucu FQDN'si.
-- **HTTP_HOST**: Teslim edilen sunucu adı.
-- **ACCOUNT_TYPE**: Müşteri hesap katmanı.
-
-### Manual Relationships
-
-- `DATACENTER` → `ALL_RAW.DATACENTER` (lookup) — Aggregated from the raw request log.
-## Business Metadata
-
-**Notes:** Önbellek İsabet Oranı = SUM(REQUEST_NUMBER) WHERE PROXY_CACHE_STATUS='HIT' / SUM(REQUEST_NUMBER). Edge/uç katmanı = SERVER_ROLE='Node'.
-
-### Column Descriptions
-
-- **SERVER_ROLE**: Önbellek katmanı (cache tier). Değerler SADECE: 'Node' (= Edge / uç katman), 'Mcache' (orta katman), 'Feda' (origin-fetch). Edge/uç katmanı sorulduğunda SERVER_ROLE='Node' ile filtrele.
-- **PROXY_CACHE_STATUS**: Önbellek sonucu. Değerler SADECE: 'HIT', 'MISS', 'EXPIRED', '' (boş = önbelleklenemez). Başka değer YOKTUR (STALE_HIT yoktur). İsabet = PROXY_CACHE_STATUS='HIT'.

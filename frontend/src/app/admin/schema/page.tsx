@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Search, Database, Table as TableIcon, Edit2, Check, X, FileText, Link as LinkIcon, Key, ChevronRight, RefreshCw } from "lucide-react";
+import { Search, Database, Table as TableIcon, Edit2, Check, X, FileText, Link as LinkIcon, Key, ChevronRight, RefreshCw, Trash2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -40,8 +40,36 @@ type TableDetail = {
   column_count: number;
   columns: TableColumn[];
   relationships: TableRelationship[];
+  example_queries: { question: string; answer: string; sql: string }[];
   enriched_at: string;
   generated_at: string;
+};
+
+type LlmColumnDraft = {
+  name: string;
+  current_description: string | null;
+  suggested_description: string | null;
+  is_empty: boolean;
+};
+
+type LlmDraft = {
+  table_name: string;
+  current_description: string | null;
+  suggested_description: string | null;
+  current_keywords: string[];
+  suggested_keywords: string[];
+  columns: LlmColumnDraft[];
+  relationships: {
+    source_column: string;
+    target_table: string;
+    target_column: string;
+    relationship_type: string;
+    description: string | null;
+    confidence: number;
+  }[];
+  language: string;
+  status: string;
+  error: string | null;
 };
 
 export default function SchemaPage() {
@@ -141,10 +169,32 @@ export default function SchemaPage() {
     }
   };
 
-  const handleAddRelationship = async (sourceTable: string) => {
+  const handleAddRelationship = async (
+    sourceTable: string,
+    sourceColArg?: string,
+    targetTableArg?: string,
+    targetColArg?: string,
+  ) => {
     if (!isAdmin) return;
+    // Accept explicit args (e.g. from an LLM-draft Accept click). Falling back
+    // to state would read STALE values because setState is async — that was the
+    // bug that wrote empty `` -> `.` relationships.
+    const sourceCol = (sourceColArg ?? relSourceCol).trim();
+    const targetTable = (targetTableArg ?? relTargetTable).trim();
+    const targetCol = (targetColArg ?? relTargetCol).trim();
+    if (!sourceTable || !sourceCol || !targetTable || !targetCol) {
+      alert("Relationship needs source column, target table and target column.");
+      return;
+    }
     try {
-      const res = await fetch(`${API_BASE}/api/workspaces/vault/enrich/relationship?source_table=${sourceTable}&source_column=${relSourceCol}&target_table=${relTargetTable}&target_column=${relTargetCol}&workspace_id=${workspaceId}`, {
+      const qs = new URLSearchParams({
+        source_table: sourceTable,
+        source_column: sourceCol,
+        target_table: targetTable,
+        target_column: targetCol,
+        workspace_id: workspaceId,
+      });
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/enrich/relationship?${qs.toString()}`, {
         method: 'POST',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -163,6 +213,81 @@ export default function SchemaPage() {
       }
     } catch (err) {
       console.error("Failed to add relationship", err);
+    }
+  };
+
+  const handleDeleteRelationship = async (sourceTable: string, raw: string) => {
+    if (!isAdmin) return;
+    if (!confirm(`Remove this relationship?\n\n${raw}`)) return;
+    try {
+      const qs = new URLSearchParams({
+        source_table: sourceTable,
+        raw,
+        workspace_id: workspaceId,
+      });
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/relationship?${qs.toString()}`, {
+        method: "DELETE",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (res.ok) {
+        fetchTableDetail(sourceTable);
+      } else {
+        alert("Failed to remove relationship");
+      }
+    } catch (err) {
+      console.error("Failed to remove relationship", err);
+    }
+  };
+
+  // ── Example queries (add / remove) ──────────────────────────────────────
+  const [addingEq, setAddingEq] = useState(false);
+  const [eqQuestion, setEqQuestion] = useState("");
+  const [eqAnswer, setEqAnswer] = useState("");
+  const [eqSql, setEqSql] = useState("");
+
+  const handleAddExampleQuery = async () => {
+    if (!isAdmin || !selectedTable) return;
+    if (!eqQuestion.trim() || !eqSql.trim()) {
+      alert("Question and SQL are both required.");
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/example-query?workspace_id=${workspaceId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ source_table: selectedTable.table_name, question: eqQuestion, answer: eqAnswer, sql: eqSql }),
+      });
+      if (res.ok) {
+        setAddingEq(false);
+        setEqQuestion("");
+        setEqAnswer("");
+        setEqSql("");
+        fetchTableDetail(selectedTable.table_name);
+      } else {
+        alert("Failed to add example query");
+      }
+    } catch (err) {
+      console.error("Failed to add example query", err);
+    }
+  };
+
+  const handleDeleteExampleQuery = async (question: string) => {
+    if (!isAdmin || !selectedTable) return;
+    if (!confirm(`Remove this example query?\n\n${question}`)) return;
+    try {
+      const qs = new URLSearchParams({
+        source_table: selectedTable.table_name,
+        question,
+        workspace_id: workspaceId,
+      });
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/example-query?${qs.toString()}`, {
+        method: "DELETE",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (res.ok) fetchTableDetail(selectedTable.table_name);
+      else alert("Failed to remove example query");
+    } catch (err) {
+      console.error("Failed to remove example query", err);
     }
   };
 
@@ -224,8 +349,62 @@ export default function SchemaPage() {
     }
   };
 
-  const filteredTables = tables.filter(t => 
-    t.table_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+  // ── LLM auto-fill (draft → review → accept) ──────────────────────────────
+  const [llmDraft, setLlmDraft] = useState<LlmDraft | null>(null);
+  const [llmLoading, setLlmLoading] = useState(false);
+
+  const handleAutoFillLlm = async () => {
+    if (!isAdmin || !selectedTable) return;
+    try {
+      setLlmLoading(true);
+      setLlmDraft(null);
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/enrich/llm?workspace_id=${workspaceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ tables: [selectedTable.table_name], mode: "fill_empty" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLlmDraft((data.drafts && data.drafts[0]) || null);
+      } else {
+        alert("LLM auto-fill failed");
+      }
+    } catch (err) {
+      console.error("LLM auto-fill failed", err);
+      alert("LLM auto-fill failed");
+    } finally {
+      setLlmLoading(false);
+    }
+  };
+
+  const acceptDraftDescription = async () => {
+    if (!selectedTable || !llmDraft?.suggested_description) return;
+    await handleUpdateTableDescription(selectedTable.table_name, llmDraft.suggested_description);
+    setLlmDraft((d) => (d ? { ...d, suggested_description: null } : d));
+  };
+
+  const acceptDraftKeywords = async () => {
+    if (!selectedTable || !llmDraft?.suggested_keywords?.length) return;
+    const merged = Array.from(
+      new Set([...(selectedTable.keywords || []), ...llmDraft.suggested_keywords]),
+    );
+    await handleUpdateKeywords(selectedTable.table_name, merged.join(", "));
+    setLlmDraft((d) => (d ? { ...d, suggested_keywords: [] } : d));
+  };
+
+  const acceptDraftColumn = async (col: LlmColumnDraft) => {
+    if (!selectedTable || !col.suggested_description) return;
+    await handleUpdateColumnDescription(selectedTable.table_name, col.name, col.suggested_description);
+    setLlmDraft((d) =>
+      d ? { ...d, columns: d.columns.filter((c) => c.name !== col.name) } : d,
+    );
+  };
+
+  const filteredTables = tables.filter(t =>
+    t.table_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     (t.description && t.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
@@ -331,11 +510,25 @@ export default function SchemaPage() {
                         <p className="text-sm font-medium text-gray-500">{selectedTable.business_name}</p>
                       )}
                     </div>
-                    {selectedTable.data_domain && (
-                      <span className="px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-100">
-                        {selectedTable.data_domain}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {selectedTable.data_domain && (
+                        <span className="px-2.5 py-1 text-xs font-medium bg-blue-50 text-blue-700 rounded-full border border-blue-100">
+                          {selectedTable.data_domain}
+                        </span>
+                      )}
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleAutoFillLlm}
+                          disabled={llmLoading}
+                          title="Use the LLM to draft descriptions/keywords/relationships for empty fields (review before applying)"
+                        >
+                          <RefreshCw className={`w-4 h-4 mr-1.5 ${llmLoading ? "animate-spin" : ""}`} />
+                          {llmLoading ? "Drafting..." : "Auto-fill empty (LLM)"}
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0">
@@ -432,6 +625,113 @@ export default function SchemaPage() {
                   )}
                 </CardContent>
               </Card>
+
+              {/* LLM draft review card */}
+              {llmDraft && llmDraft.table_name === selectedTable.table_name && (
+                <Card className="border-amber-200 shadow-sm bg-amber-50/40">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-base font-semibold text-amber-900 flex items-center gap-2">
+                        <FileText className="w-4 h-4" />
+                        LLM Draft — review before applying ({llmDraft.language.toUpperCase()})
+                      </CardTitle>
+                      <Button variant="ghost" size="sm" onClick={() => setLlmDraft(null)}>
+                        <X className="w-4 h-4 mr-1" /> Dismiss
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {llmDraft.status === "error" && (
+                      <p className="text-sm text-red-600">Error: {llmDraft.error}</p>
+                    )}
+                    {llmDraft.status === "skipped" && (
+                      <p className="text-sm text-gray-600">Nothing empty to fill for this table.</p>
+                    )}
+
+                    {llmDraft.suggested_description && (
+                      <div className="rounded-lg border border-amber-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Description</p>
+                            <p className="text-sm text-gray-700">{llmDraft.suggested_description}</p>
+                          </div>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 flex-shrink-0" onClick={acceptDraftDescription}>
+                            <Check className="w-4 h-4 mr-1" /> Accept
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {llmDraft.suggested_keywords?.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-white p-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-semibold uppercase text-gray-500 mb-1">Keywords</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {llmDraft.suggested_keywords.map((kw, i) => (
+                                <span key={i} className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-md border border-gray-200">#{kw}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <Button size="sm" className="bg-green-600 hover:bg-green-700 flex-shrink-0" onClick={acceptDraftKeywords}>
+                            <Check className="w-4 h-4 mr-1" /> Accept
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {llmDraft.columns?.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Column descriptions ({llmDraft.columns.length})</p>
+                        <div className="space-y-2">
+                          {llmDraft.columns.map((col) => (
+                            <div key={col.name} className="flex items-start justify-between gap-3 border-b border-gray-100 pb-2 last:border-0">
+                              <div>
+                                <span className="text-sm font-mono text-gray-900">{col.name}</span>
+                                <p className="text-sm text-gray-600">{col.suggested_description}</p>
+                              </div>
+                              <Button size="sm" variant="outline" className="flex-shrink-0" onClick={() => acceptDraftColumn(col)}>
+                                <Check className="w-4 h-4 mr-1" /> Accept
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {llmDraft.relationships?.length > 0 && (
+                      <div className="rounded-lg border border-amber-200 bg-white p-3">
+                        <p className="text-xs font-semibold uppercase text-gray-500 mb-2">Suggested relationships</p>
+                        <div className="space-y-1">
+                          {llmDraft.relationships.map((r, i) => (
+                            <div key={i} className="flex items-center justify-between gap-3 text-sm">
+                              <span className="font-mono text-gray-700">
+                                {r.source_column} → {r.target_table}.{r.target_column}
+                                <span className="ml-2 text-xs text-gray-400">({Math.round(r.confidence * 100)}%)</span>
+                              </span>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="flex-shrink-0"
+                                onClick={() =>
+                                  handleAddRelationship(
+                                    selectedTable.table_name,
+                                    r.source_column,
+                                    r.target_table,
+                                    r.target_column,
+                                  )
+                                }
+                              >
+                                <Check className="w-4 h-4 mr-1" /> Accept
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Columns Section */}
               <Card className="border-gray-200 shadow-sm">
@@ -531,13 +831,22 @@ export default function SchemaPage() {
                   {selectedTable.relationships && selectedTable.relationships.length > 0 ? (
                     <ul className="space-y-3 mb-4">
                       {selectedTable.relationships.map((rel, idx) => (
-                        <li key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+                        <li key={idx} className="group flex items-start gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
                           <div className="mt-0.5 w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0">
                             <LinkIcon className="w-3 h-3" />
                           </div>
-                          <span className="text-sm text-gray-700 font-medium">
+                          <span className="flex-1 text-sm text-gray-700 font-medium break-words">
                             {rel.raw}
                           </span>
+                          {isAdmin && (
+                            <button
+                              onClick={() => handleDeleteRelationship(selectedTable.table_name, rel.raw)}
+                              title="Remove relationship"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-red-600"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </li>
                       ))}
                     </ul>
@@ -576,6 +885,87 @@ export default function SchemaPage() {
                       ) : (
                         <Button variant="outline" size="sm" onClick={() => setAddingRel(true)}>
                           + Add Relationship
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Example Queries Section */}
+              <Card className="border-gray-200 shadow-sm">
+                <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
+                  <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-gray-500" />
+                    Example Queries
+                    <span className="text-xs font-medium text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                      {selectedTable.example_queries?.length ?? 0}
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  {selectedTable.example_queries && selectedTable.example_queries.length > 0 ? (
+                    <ul className="space-y-4 mb-4">
+                      {selectedTable.example_queries.map((eq, idx) => (
+                        <li key={idx} className="group rounded-lg border border-gray-100 bg-gray-50/60 overflow-hidden">
+                          <div className="flex items-start justify-between gap-3 px-3 py-2 border-b border-gray-100">
+                            <span className="text-sm font-medium text-gray-800">{eq.question}</span>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteExampleQuery(eq.question)}
+                                title="Remove example query"
+                                className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-red-600"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                          {eq.answer && (
+                            <p className="text-sm text-gray-600 whitespace-pre-wrap px-3 pt-2">{eq.answer}</p>
+                          )}
+                          <pre className="text-xs font-mono text-gray-700 p-3 overflow-x-auto whitespace-pre">{eq.sql}</pre>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic mb-4">No example queries yet.</p>
+                  )}
+
+                  {isAdmin && (
+                    <div className="mt-2 p-4 border border-dashed border-gray-300 rounded-lg">
+                      {addingEq ? (
+                        <div className="flex flex-col gap-3">
+                          <h4 className="text-sm font-semibold">Add Example Query</h4>
+                          <Input
+                            value={eqQuestion}
+                            onChange={(e) => setEqQuestion(e.target.value)}
+                            placeholder="Natural-language question (e.g. Top 10 customers by recharge)"
+                          />
+                          <textarea
+                            value={eqAnswer}
+                            onChange={(e) => setEqAnswer(e.target.value)}
+                            placeholder="Explanation / answer text shown with the result (optional) — rules, caveats, which columns to use…"
+                            className="w-full min-h-[80px] rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <textarea
+                            value={eqSql}
+                            onChange={(e) => setEqSql(e.target.value)}
+                            placeholder="SELECT ..."
+                            spellCheck={false}
+                            className="w-full min-h-[140px] rounded-md border border-gray-200 bg-white p-3 text-xs font-mono text-gray-800 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <div className="flex gap-2">
+                            <Button size="sm" onClick={handleAddExampleQuery} disabled={!eqQuestion.trim() || !eqSql.trim()}>
+                              <Check className="w-4 h-4 mr-1" /> Save Query
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setAddingEq(false)}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => setAddingEq(true)}>
+                          + Add Example Query
                         </Button>
                       )}
                     </div>

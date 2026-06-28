@@ -77,14 +77,18 @@ async def require_sql_access(user: CurrentUser) -> None:
     from backend.app.db.session import get_sessionmaker
     from backend.app.query.sql_visibility import resolve_effective_sql_visibility
 
+    # users.id is UUID. Compare on id::text so a non-UUID identifier (legacy
+    # `admin-001` claim, `unknown-user` fallback) binds as TEXT and matches no
+    # row instead of crashing asyncpg's UUID encoder. The DB lookup STILL runs so
+    # the per-user override is respected and a DB error still fails closed.
     if user.user_id:
         try:
             maker = get_sessionmaker()
             async with maker() as session:
                 row = (
                     await session.execute(
-                        _text("SELECT sql_visibility FROM users WHERE id = :uid"),
-                        {"uid": user.user_id},
+                        _text("SELECT sql_visibility FROM users WHERE id::text = :uid"),
+                        {"uid": str(user.user_id)},
                     )
                 ).fetchone()
             override = row[0] if row is not None else None

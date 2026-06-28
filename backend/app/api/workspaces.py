@@ -28,9 +28,14 @@ from backend.app.schema_discovery.enrichment import (
     RelationshipEnrichment,
     TableEnrichment,
     VaultEnrichmentPayload,
+    add_example_query,
     enrich_from_excel,
+    enrich_from_metadata_json,
     enrich_vault_bulk,
     enrich_vault_table,
+    parse_example_queries,
+    remove_example_query,
+    remove_relationship,
 )
 from backend.app.schema_discovery.suggestions import generate_vault_suggestions
 from backend.app.schema_discovery.vault_generator import (
@@ -47,6 +52,18 @@ router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 # ══════════════════════════════════════════════════════════════════════════════
 
 from pydantic import BaseModel, Field  # noqa: E402
+
+
+class VaultSyncRequest(BaseModel):
+    """Optional body for POST /vault/sync to scope enum sampling."""
+
+    tables: list[str] | None = Field(
+        None, description="Explicit table names to scope enum sampling to."
+    )
+    active_only: bool = Field(
+        False,
+        description="Scope to the union of active TeamVaultPolicy.allowed_tables.",
+    )
 
 
 class DBConnectionRequest(BaseModel):
@@ -143,6 +160,12 @@ class VaultTableResponse(BaseModel):
     column_count: int = 0
     columns: list[dict[str, Any]] = Field(default_factory=list)
     relationships: list[dict[str, Any]] = Field(default_factory=list)
+    # Without these, the response_model silently drops them from the payload even
+    # though _parse_vault_file_for_api populates them — the bug that hid curated
+    # Example Queries from the admin UI.
+    example_queries: list[dict[str, Any]] = Field(default_factory=list)
+    enriched_at: str | None = None
+    generated_at: str | None = None
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -283,16 +306,24 @@ async def generate_vault_from_schema(
 async def sync_vault_with_db(
     workspace_id: WorkspaceID,
     user: CurrentUser,
+    body: VaultSyncRequest | None = None,
 ):
     """Sync Vault Markdown schemas by introspecting the live DB.
 
     Only available to admins. Uses the credentials saved in Tenant Config.
+
+    Optional JSON body scopes the expensive enum sampling:
+    - ``{"tables": [...]}``   — sample only these tables (explicit, highest precedence)
+    - ``{"active_only": true}`` — sample only the union of active TeamVaultPolicy
+      allowed_tables; falls back to a full sync (with a warning) if none exist
+    - no body                  — full sync (back-compat)
     """
     from sqlalchemy import select
 
     from backend.app.db.session import get_sessionmaker
     from backend.app.models.database import CustomerDBConfig
     from backend.app.models.organization import Customer
+    from backend.app.query.pipeline import get_active_tables
     from backend.app.services.vault_sync import VaultSyncService
 
     if not user.can_admin:
@@ -345,8 +376,22 @@ async def sync_vault_with_db(
                 max_row_limit=getattr(db_config, "max_row_limit", 1000),
             )
 
+            # Resolve table scope: explicit list > active_only > full.
+            active_tables: set[str] | None = None
+            if body and body.tables:
+                active_tables = {t.lower() for t in body.tables}
+            elif body and body.active_only:
+                active_tables = await get_active_tables(workspace_id, session)
+                if not active_tables:
+                    logger.warning(
+                        "active_only sync requested for %s but no active policy "
+                        "tables found; falling back to full sync",
+                        workspace_id,
+                    )
+                    active_tables = None
+
             sync_svc = VaultSyncService(workspace_id, safe_db_config)
-            stats = await sync_svc.sync()
+            stats = await sync_svc.sync(active_tables=active_tables)
 
             return {"message": "Vault synchronization complete.", "stats": stats}
 
@@ -530,6 +575,61 @@ async def enrich_from_excel_upload(
 
 
 @router.post(
+    "/vault/import-metadata",
+    summary="Import extracted DB metadata JSON (from extract-db-metadata.py) into the vault",
+)
+async def import_metadata_upload(
+    file: Annotated[UploadFile, File(description="JSON produced by extract-db-metadata.py")],
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    """Upload the JSON produced offline by ``scripts/extract-db-metadata.py``.
+
+    Applies descriptions / keywords / column descriptions / relationships AND
+    writes enum-value blocks per table. Re-indexes embeddings afterward so
+    semantic retrieval reflects the new metadata. Requires admin role.
+    """
+    if not file.filename or not file.filename.endswith(".json"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a .json file produced by extract-db-metadata.py",
+        )
+
+    settings = get_settings()
+    vault_base_path = Path(settings.vault_base_path)
+
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        result = enrich_from_metadata_json(
+            json_path=tmp_path,
+            vault_base_path=vault_base_path,
+            workspace_id=workspace_id,
+        )
+        # Best-effort embedding refresh (hash-idempotent — only changed md re-embed).
+        try:
+            from backend.app.services.vault_retrieval import index_workspace_vault
+
+            result["embeddings"] = await index_workspace_vault(workspace_id)
+        except Exception as embed_err:  # noqa: BLE001
+            logger.warning("Embedding refresh after import failed: %s", embed_err)
+            result["embeddings"] = {"error": str(embed_err)}
+        return result
+    except Exception as e:
+        logger.exception("Metadata import failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Metadata import failed: {str(e)}",
+        ) from e
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+@router.post(
     "/vault/enrich/relationship",
     summary="Add a manual relationship between tables",
 )
@@ -548,6 +648,18 @@ async def add_manual_relationship(
     Use this for tables that don't have formal FK constraints
     but have logical relationships (e.g., CONTRNO in multiple tables).
     """
+    # Reject empty parts — otherwise a blank `` -> `.` relationship gets written.
+    if not (
+        source_table.strip()
+        and source_column.strip()
+        and target_table.strip()
+        and target_column.strip()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="source_table, source_column, target_table and target_column are all required.",
+        )
+
     settings = get_settings()
     vault_base_path = Path(settings.vault_base_path)
 
@@ -555,9 +667,9 @@ async def add_manual_relationship(
         table_name=source_table,
         relationships=[
             RelationshipEnrichment(
-                source_column=source_column,
-                target_table=target_table,
-                target_column=target_column,
+                source_column=source_column.strip(),
+                target_table=target_table.strip(),
+                target_column=target_column.strip(),
                 relationship_type=relationship_type,
                 description=description,
             )
@@ -577,6 +689,299 @@ async def add_manual_relationship(
         )
 
     return result
+
+
+class JoinKeysSaveRequest(BaseModel):
+    """Curated conformed join keys: which shared columns are real join keys."""
+
+    keys: list[dict[str, Any]] = Field(default_factory=list)
+
+
+@router.get(
+    "/vault/join-keys",
+    summary="List conformed join-key candidates (shared columns) + curation",
+)
+async def list_join_keys(
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+) -> dict[str, Any]:
+    """Columns shared by >= 2 tables, merged with saved is_join_key/grain/note."""
+    from backend.app.services.vault_join_keys import get_join_keys
+
+    return {"workspace_id": workspace_id, "keys": get_join_keys(workspace_id)}
+
+
+@router.put(
+    "/vault/join-keys",
+    summary="Save curated conformed join keys",
+)
+async def save_join_keys(
+    request: JoinKeysSaveRequest,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    from backend.app.services.vault_join_keys import save_curation
+
+    result = save_curation(workspace_id, request.keys)
+    return {"workspace_id": workspace_id, **result}
+
+
+@router.post(
+    "/vault/join-keys/infer-grains",
+    summary="LLM-infer free-text grain for shared columns (vault processing)",
+)
+async def infer_join_key_grains(
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    overwrite: bool = False,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    """Fill each shared column's grain via the LLM (only empty ones unless overwrite)."""
+    from backend.app.db.session import get_sessionmaker
+    from backend.app.services.llm_resolver import resolve_llm
+    from backend.app.services.vault_join_keys import get_join_keys, infer_grains
+
+    sessionmaker = get_sessionmaker()
+    async with sessionmaker() as session:
+        llm = await resolve_llm(workspace_id, session, operation="suggestion")
+    result = await infer_grains(workspace_id, llm=llm, overwrite=overwrite)
+    return {"workspace_id": workspace_id, **result, "keys": get_join_keys(workspace_id)}
+
+
+class ExampleQueryRequest(BaseModel):
+    """A natural-language question + optional explanation + its SQL."""
+
+    source_table: str
+    question: str
+    sql: str
+    answer: str = ""
+
+
+@router.post(
+    "/vault/example-query",
+    summary="Add an example question→SQL to a table",
+)
+async def add_example_query_endpoint(
+    request: ExampleQueryRequest,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    settings = get_settings()
+    result = add_example_query(
+        vault_base_path=Path(settings.vault_base_path),
+        workspace_id=workspace_id,
+        table_name=request.source_table,
+        question=request.question,
+        sql=request.sql,
+        answer=request.answer,
+    )
+    if result["status"] == "error":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Failed to add example query"),
+        )
+    return result
+
+
+@router.delete(
+    "/vault/example-query",
+    summary="Remove an example query from a table (matched by question)",
+)
+async def delete_example_query_endpoint(
+    source_table: str,
+    question: str,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    settings = get_settings()
+    result = remove_example_query(
+        vault_base_path=Path(settings.vault_base_path),
+        workspace_id=workspace_id,
+        table_name=source_table,
+        question=question,
+    )
+    if result["status"] == "error":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Failed to remove example query"),
+        )
+    return result
+
+
+@router.delete(
+    "/vault/relationship",
+    summary="Remove a manual relationship from a table",
+)
+async def delete_manual_relationship(
+    source_table: str,
+    raw: str,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    """Remove a relationship bullet (matched by its rendered ``raw`` text)."""
+    settings = get_settings()
+    result = remove_relationship(
+        vault_base_path=Path(settings.vault_base_path),
+        workspace_id=workspace_id,
+        table_name=source_table,
+        raw=raw,
+    )
+    if result["status"] == "error":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Failed to remove relationship"),
+        )
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# LLM-assisted metadata backfill (draft → review → apply)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+class LLMEnrichRequest(BaseModel):
+    """Generate LLM draft enrichment for (empty) table metadata."""
+
+    tables: list[str] = Field(
+        default_factory=list, description="Empty → active-table union → all vault"
+    )
+    mode: str = Field("fill_empty", description="fill_empty | overwrite")
+    fields: list[str] | None = Field(
+        None, description="Subset of description/keywords/columns/relationships"
+    )
+
+
+class LLMEnrichApplyRequest(BaseModel):
+    """Apply (possibly edited) LLM drafts to the vault."""
+
+    drafts: list[dict[str, Any]] = Field(default_factory=list)
+    mode: str = "fill_empty"
+    fields: list[str] | None = None
+
+
+def _list_vault_table_names(workspace_id: str) -> list[str]:
+    settings = get_settings()
+    tables_dir = Path(settings.vault_base_path) / workspace_id / "tables"
+    if not tables_dir.exists():
+        return []
+    return sorted(p.stem for p in tables_dir.glob("*.md"))
+
+
+_LLM_ENRICH_MAX_TABLES = 50
+
+
+@router.post(
+    "/vault/enrich/llm",
+    summary="Generate LLM draft enrichment for empty table metadata (no write)",
+)
+async def enrich_vault_llm(
+    request: LLMEnrichRequest,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    """Return review DRAFTS — does NOT write. Default scope = active-table union."""
+    from backend.app.db.session import get_sessionmaker
+    from backend.app.query.pipeline import get_active_tables
+    from backend.app.services.llm_resolver import resolve_llm
+    from backend.app.services.vault_llm_enrich import generate_table_enrichment
+
+    all_names = _list_vault_table_names(workspace_id)
+    targets = list(request.tables)
+    if not targets:
+        sessionmaker = get_sessionmaker()
+        async with sessionmaker() as session:
+            active = await get_active_tables(workspace_id, session)
+        targets = [n for n in all_names if n.lower() in active] if active else all_names
+
+    truncated = len(targets) > _LLM_ENRICH_MAX_TABLES
+    remaining = targets[_LLM_ENRICH_MAX_TABLES:] if truncated else []
+    targets = targets[:_LLM_ENRICH_MAX_TABLES]
+
+    sessionmaker = get_sessionmaker()
+    async with sessionmaker() as session:
+        llm = await resolve_llm(workspace_id, session)
+
+    sem = asyncio.Semaphore(5)
+
+    async def _one(name: str):
+        async with sem:
+            return await generate_table_enrichment(
+                workspace_id=workspace_id,
+                table_name=name,
+                mode=request.mode,
+                fields=request.fields,
+                llm=llm,
+                neighbor_tables=all_names,
+            )
+
+    drafts = await asyncio.gather(*[_one(n) for n in targets])
+    return {
+        "workspace_id": workspace_id,
+        "mode": request.mode,
+        "drafts": [d.model_dump() for d in drafts],
+        "truncated": truncated,
+        "remaining": remaining,
+    }
+
+
+@router.post(
+    "/vault/enrich/llm/apply",
+    summary="Apply reviewed LLM enrichment drafts to the vault",
+)
+async def apply_vault_llm(
+    request: LLMEnrichApplyRequest,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
+) -> dict[str, Any]:
+    """Write reviewed drafts via the existing enrich_vault_table merge path."""
+    from backend.app.services.vault_llm_enrich import (
+        TableEnrichmentDraft,
+        draft_to_enrichment,
+    )
+
+    settings = get_settings()
+    vault_base_path = Path(settings.vault_base_path)
+
+    results = []
+    success = 0
+    for raw in request.drafts:
+        try:
+            draft = TableEnrichmentDraft(**raw)
+            enrichment = draft_to_enrichment(draft, request.mode, request.fields)
+            res = enrich_vault_table(
+                vault_base_path=vault_base_path,
+                workspace_id=workspace_id,
+                enrichment=enrichment,
+            )
+            results.append(res)
+            if res.get("status") != "error":
+                success += 1
+        except Exception as e:  # noqa: BLE001
+            results.append(
+                {"table": raw.get("table_name", "?"), "status": "error", "error": str(e)}
+            )
+
+    # Refresh embeddings so retrieval reflects the new metadata (best-effort).
+    try:
+        from backend.app.services.vault_retrieval import index_workspace_vault
+
+        await index_workspace_vault(workspace_id)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Embedding refresh after LLM apply failed: %s", e)
+
+    return {
+        "workspace_id": workspace_id,
+        "tables_processed": len(request.drafts),
+        "success_count": success,
+        "error_count": len(request.drafts) - success,
+        "results": results,
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -651,6 +1056,7 @@ def _parse_vault_file_for_api(filepath: Path) -> dict[str, Any]:
         "column_count": len(columns),
         "columns": columns,
         "relationships": relationships,
+        "example_queries": parse_example_queries(filepath),
         "enriched_at": frontmatter.get("enriched_at"),
         "generated_at": frontmatter.get("generated_at"),
     }
@@ -766,6 +1172,10 @@ async def update_vault_table(
         vault_base_path=vault_base_path,
         workspace_id=workspace_id,
         enrichment=enrichment,
+        # Explicit user edit: replace keywords with exactly what the editor sent
+        # (None = untouched, [] = cleared) so deletions stick instead of being
+        # re-unioned with the old set.
+        replace_keywords=True,
     )
 
     if result["status"] == "error":

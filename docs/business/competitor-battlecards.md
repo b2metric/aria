@@ -1,6 +1,10 @@
 # ARIA Competitor Battlecards
 
-> **Target Audience:** Sales, Pre-sales, Product Management  
+> **MOVED:** Canonical copy → `~/projects/b2metric-aria-gtm/docs/competitor-battlecards.md`
+> (competitive/market content belongs in GTM workspace per AGENTS.md design).
+> Edit the GTM copy, not this one.
+
+> **Target Audience:** Sales, Pre-sales, Product Management
 > **Purpose:** How to position ARIA against major market alternatives during pitches.
 
 ---

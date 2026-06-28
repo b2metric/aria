@@ -23,17 +23,56 @@ class VaultSyncService:
         self.vault_path = Path(self.settings.vault_base_path) / workspace_id / "tables"
         self.vault_path.mkdir(parents=True, exist_ok=True)
 
-    async def sync(self) -> dict:
-        """Run the full synchronization process."""
-        logger.info("Starting vault sync for workspace %s", self.workspace_id)
+    async def sync(self, active_tables: set[str] | None = None) -> dict:
+        """Run the full synchronization process.
 
-        # 1. Fetch live DB schema
+        ``active_tables`` (lowercased table names) scopes the EXPENSIVE per-table
+        work — enum-value DISTINCT sampling — to just those tables. Schema
+        column-introspection stays full (one cheap ``ALL_TAB_COLUMNS`` query) so
+        the whole vault's markdown stays complete and semantic retrieval keeps
+        working for every table. ``None`` = sample everything (back-compat).
+
+        For a 500-table Oracle over VPN, scoping turns ~10k enum queries into a
+        few hundred — this is the fix for slow/timeout re-syncs.
+        """
+        from backend.app.services.vault_enum_sampler import (
+            inject_enum_block,
+            sample_enum_values,
+        )
+
+        logger.info(
+            "Starting vault sync for workspace %s (scope=%s)",
+            self.workspace_id,
+            "active" if active_tables else "all",
+        )
+
+        # 1. Fetch live DB schema (full — cheap single query).
         live_tables = await self._fetch_live_schema()
+
+        # 1b. Live-sample DISTINCT values for low-cardinality VARCHAR columns
+        # so the LLM sees real enum literals (e.g. "Bundles" not "Bundle").
+        # Scope sampling to active tables when provided — this is the ~10k-query
+        # hotspot. Per-column errors are swallowed inside sample_enum_values.
+        if active_tables:
+            sample_targets = {
+                name: cols for name, cols in live_tables.items() if name.lower() in active_tables
+            }
+        else:
+            sample_targets = live_tables
+        enum_map = await sample_enum_values(self.db_config, sample_targets)
 
         # 2. Parse existing markdown files
         existing_tables = self._read_existing_vault()
 
-        stats = {"added": 0, "updated": 0, "unchanged": 0, "deleted": 0}
+        stats = {
+            "added": 0,
+            "updated": 0,
+            "unchanged": 0,
+            "deleted": 0,
+            "enum_updated": 0,
+            "scope": "active" if active_tables else "all",
+            "scoped_table_count": len(active_tables) if active_tables else len(live_tables),
+        }
 
         # 3. Compare and generate markdown
         for table_name, live_columns in live_tables.items():
@@ -50,6 +89,26 @@ class VaultSyncService:
                 # New table
                 self._generate_new_markdown(table_name, live_columns)
                 stats["added"] += 1
+
+            # 3b. Inject sampled enum-value block (idempotent — skips if unchanged).
+            table_enums = enum_map.get(table_name)
+            if table_enums:
+                file_path = self.vault_path / f"{table_name}.md"
+                if inject_enum_block(file_path, table_enums):
+                    stats["enum_updated"] += 1
+
+        # 4. Refresh Qdrant embeddings for the workspace's vault so semantic
+        # table retrieval stays in sync with the (just-updated) md files.
+        # Best-effort — sync still succeeds even if Qdrant or the embedding
+        # endpoint is unreachable.
+        try:
+            from backend.app.services.vault_retrieval import index_workspace_vault
+
+            embed_stats = await index_workspace_vault(self.workspace_id)
+            stats["embeddings"] = embed_stats
+        except Exception as e:
+            logger.warning("Vault embedding refresh failed: %s", e)
+            stats["embeddings"] = {"error": str(e)}
 
         return stats
 
@@ -209,8 +268,10 @@ class VaultSyncService:
             "",
             f"# {table_name}",
             "",
-            "**Description:** No description provided yet.",
-            "",
+            # No body "**Description:**" line: frontmatter `description` is the
+            # single authority (the RAG pipeline reads frontmatter, not the body).
+            # The table is a skeleton until enriched — validate-vault.py WARNs on
+            # the missing description rather than blocking the sync.
             "## Columns",
             "",
             "| Column | Type | Nullable | PK | Description |",
@@ -222,7 +283,8 @@ class VaultSyncService:
             pk_mark = "✓" if col["is_pk"] else ""
             lines.append(f"| {col['name']} | {col['type']} | {null_mark} | {pk_mark} |  |")
 
-        lines.extend(["", "## Keywords", "", "## Business Metadata", "", "### Column Descriptions"])
+        # No empty "## Keywords" body section — keywords live in frontmatter.
+        lines.extend(["", "## Business Metadata", "", "### Column Descriptions"])
 
         for col in live_columns:
             lines.append(f"- **{col['name']}**: ")
