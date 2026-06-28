@@ -81,9 +81,7 @@ async def sample_enum_values(
                     f"SELECT COUNT(DISTINCT {_quote_ident(col_name)}) AS C "
                     f"FROM {_quote_ident(table_name)}"
                 )
-                rows = await loop.run_in_executor(
-                    None, lambda s=count_sql: executor.execute(s, {})
-                )
+                rows = await loop.run_in_executor(None, lambda s=count_sql: executor.execute(s, {}))
                 if not rows:
                     continue
                 count_val = next(iter(rows[0].values()))
@@ -102,21 +100,23 @@ async def sample_enum_values(
                 drows = await loop.run_in_executor(
                     None, lambda s=distinct_sql: executor.execute(s, {})
                 )
-                values = sorted({
-                    str(next(iter(r.values()))).strip()
-                    for r in drows
-                    if r and next(iter(r.values()), None) is not None
-                })
+                values = sorted(
+                    {
+                        str(next(iter(r.values()))).strip()
+                        for r in drows
+                        if r and next(iter(r.values()), None) is not None
+                    }
+                )
                 if values:
                     out.setdefault(table_name, {})[col_name] = values
                     logger.info(
                         "sampled %d enum values for %s.%s",
-                        len(values), table_name, col_name,
+                        len(values),
+                        table_name,
+                        col_name,
                     )
             except Exception as e:
-                logger.warning(
-                    "enum sample failed for %s.%s: %s", table_name, col_name, e
-                )
+                logger.warning("enum sample failed for %s.%s: %s", table_name, col_name, e)
                 continue
 
     return out

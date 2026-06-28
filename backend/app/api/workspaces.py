@@ -649,8 +649,12 @@ async def add_manual_relationship(
     but have logical relationships (e.g., CONTRNO in multiple tables).
     """
     # Reject empty parts — otherwise a blank `` -> `.` relationship gets written.
-    if not (source_table.strip() and source_column.strip()
-            and target_table.strip() and target_column.strip()):
+    if not (
+        source_table.strip()
+        and source_column.strip()
+        and target_table.strip()
+        and target_column.strip()
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="source_table, source_column, target_table and target_column are all required.",
@@ -842,7 +846,9 @@ async def delete_manual_relationship(
 class LLMEnrichRequest(BaseModel):
     """Generate LLM draft enrichment for (empty) table metadata."""
 
-    tables: list[str] = Field(default_factory=list, description="Empty → active-table union → all vault")
+    tables: list[str] = Field(
+        default_factory=list, description="Empty → active-table union → all vault"
+    )
     mode: str = Field("fill_empty", description="fill_empty | overwrite")
     fields: list[str] | None = Field(
         None, description="Subset of description/keywords/columns/relationships"
@@ -890,10 +896,7 @@ async def enrich_vault_llm(
         sessionmaker = get_sessionmaker()
         async with sessionmaker() as session:
             active = await get_active_tables(workspace_id, session)
-        if active:
-            targets = [n for n in all_names if n.lower() in active]
-        else:
-            targets = all_names
+        targets = [n for n in all_names if n.lower() in active] if active else all_names
 
     truncated = len(targets) > _LLM_ENRICH_MAX_TABLES
     remaining = targets[_LLM_ENRICH_MAX_TABLES:] if truncated else []
@@ -960,7 +963,9 @@ async def apply_vault_llm(
             if res.get("status") != "error":
                 success += 1
         except Exception as e:  # noqa: BLE001
-            results.append({"table": raw.get("table_name", "?"), "status": "error", "error": str(e)})
+            results.append(
+                {"table": raw.get("table_name", "?"), "status": "error", "error": str(e)}
+            )
 
     # Refresh embeddings so retrieval reflects the new metadata (best-effort).
     try:

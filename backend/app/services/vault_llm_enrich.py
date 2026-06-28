@@ -194,9 +194,7 @@ async def generate_table_enrichment(
     desc_empty = not (parsed.get("description") or "").strip()
     kw_empty = len(parsed.get("keywords") or []) == 0
     rels_empty = len(parsed.get("relationships") or []) == 0
-    empty_cols = {
-        c["name"] for c in parsed["columns"] if not (c.get("description") or "").strip()
-    }
+    empty_cols = {c["name"] for c in parsed["columns"] if not (c.get("description") or "").strip()}
 
     # Decide what to actually ask for.
     ask = set()
@@ -225,7 +223,12 @@ async def generate_table_enrichment(
         else []
     )
     prompt = _build_prompt(
-        table_name, parsed, enum_values, ask, neighbor_tables, heuristics,
+        table_name,
+        parsed,
+        enum_values,
+        ask,
+        neighbor_tables,
+        heuristics,
         language_directive(language),
     )
 
@@ -276,7 +279,11 @@ async def generate_table_enrichment(
                 ColumnDraft(
                     name=real,
                     current_description=next(
-                        (col.get("description") for col in parsed["columns"] if col["name"] == real),
+                        (
+                            col.get("description")
+                            for col in parsed["columns"]
+                            if col["name"] == real
+                        ),
                         None,
                     ),
                     suggested_description=str(c.get("description", "")).strip() or None,
@@ -323,9 +330,12 @@ def draft_to_enrichment(
     want = set(fields) & VALID_FIELDS if fields else set(VALID_FIELDS)
 
     description = None
-    if "description" in want and draft.suggested_description:
-        if mode == "overwrite" or not (draft.current_description or "").strip():
-            description = draft.suggested_description
+    if (
+        "description" in want
+        and draft.suggested_description
+        and (mode == "overwrite" or not (draft.current_description or "").strip())
+    ):
+        description = draft.suggested_description
 
     keywords = None
     if "keywords" in want and draft.suggested_keywords:

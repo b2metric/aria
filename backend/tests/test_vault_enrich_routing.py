@@ -316,7 +316,8 @@ def test_replace_keywords_drops_deleted(tmp_path):
     base, md = _seed_table_with_keywords(tmp_path, ["recharge", "topup", "stale"])
     # user edits the list down to two — the deleted "stale" must NOT come back
     enrich_vault_table(
-        base, "ws-test",
+        base,
+        "ws-test",
         TableEnrichment(table_name="FCT_K", keywords=["recharge", "topup"]),
         replace_keywords=True,
     )
@@ -326,7 +327,8 @@ def test_replace_keywords_drops_deleted(tmp_path):
 def test_replace_keywords_empty_clears(tmp_path):
     base, md = _seed_table_with_keywords(tmp_path, ["a", "b"])
     enrich_vault_table(
-        base, "ws-test",
+        base,
+        "ws-test",
         TableEnrichment(table_name="FCT_K", keywords=[]),
         replace_keywords=True,
     )
@@ -337,7 +339,8 @@ def test_enrichment_union_keeps_existing(tmp_path):
     # default (LLM/import) path must still UNION, never clobber curation
     base, md = _seed_table_with_keywords(tmp_path, ["recharge", "topup"])
     enrich_vault_table(
-        base, "ws-test",
+        base,
+        "ws-test",
         TableEnrichment(table_name="FCT_K", keywords=["balance"]),
     )
     assert set(_kw(md)) == {"recharge", "topup", "balance"}

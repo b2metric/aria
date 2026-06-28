@@ -263,13 +263,17 @@ async def get_active_tables(workspace_id: str, db: AsyncSession) -> set[str]:
         return set()
 
     rows = (
-        await db.execute(
-            sa_select(TeamVaultPolicy.allowed_tables).where(
-                TeamVaultPolicy.customer_id == cust_id,
-                TeamVaultPolicy.is_active == True,  # noqa: E712
+        (
+            await db.execute(
+                sa_select(TeamVaultPolicy.allowed_tables).where(
+                    TeamVaultPolicy.customer_id == cust_id,
+                    TeamVaultPolicy.is_active == True,  # noqa: E712
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     active: set[str] = set()
     for allowed in rows:
@@ -1297,8 +1301,17 @@ async def _execute_sql(
     upper_sql = clean_sql_for_check.upper()
 
     dml_keywords = [
-        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER",
-        "TRUNCATE", "REPLACE", "MERGE", "GRANT", "REVOKE", "CREATE",
+        "INSERT",
+        "UPDATE",
+        "DELETE",
+        "DROP",
+        "ALTER",
+        "TRUNCATE",
+        "REPLACE",
+        "MERGE",
+        "GRANT",
+        "REVOKE",
+        "CREATE",
     ]
 
     async def _block(msg: str) -> None:
@@ -1316,8 +1329,14 @@ async def _execute_sql(
         )
         statements = [s for s in sqlglot.parse(clean_sql_for_check, read=dialect) if s is not None]
         write_nodes = (
-            _sg.Insert, _sg.Update, _sg.Delete, _sg.Drop, _sg.Alter,
-            _sg.Create, _sg.Merge, _sg.Command,
+            _sg.Insert,
+            _sg.Update,
+            _sg.Delete,
+            _sg.Drop,
+            _sg.Alter,
+            _sg.Create,
+            _sg.Merge,
+            _sg.Command,
         )
         if len(statements) == 1 and isinstance(statements[0], _sg.Select):
             if statements[0].find(*write_nodes) is not None:

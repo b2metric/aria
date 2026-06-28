@@ -68,11 +68,7 @@ def _scan(workspace_id: str) -> tuple[dict[str, set[str]], dict[str, str]]:
 def derive_candidates(workspace_id: str) -> dict[str, list[str]]:
     """Return {COLUMN: [member_table, ...]} for columns shared by >= _MIN_TABLES tables."""
     col_to_tables, _ = _scan(workspace_id)
-    return {
-        col: sorted(tbls)
-        for col, tbls in col_to_tables.items()
-        if len(tbls) >= _MIN_TABLES
-    }
+    return {col: sorted(tbls) for col, tbls in col_to_tables.items() if len(tbls) >= _MIN_TABLES}
 
 
 def load_curation(workspace_id: str) -> dict[str, dict[str, Any]]:
@@ -127,9 +123,7 @@ def get_join_keys(workspace_id: str) -> list[dict[str, Any]]:
     return out
 
 
-async def infer_grains(
-    workspace_id: str, llm=None, overwrite: bool = False
-) -> dict[str, Any]:
+async def infer_grains(workspace_id: str, llm=None, overwrite: bool = False) -> dict[str, Any]:
     """LLM-infer a SHORT free-text grain for each shared-column candidate, using
     the column's vault description + the tables it appears in. One batched call.
 
@@ -148,8 +142,7 @@ async def infer_grains(
 
     curation = load_curation(workspace_id)
     targets = [
-        c for c in candidates
-        if overwrite or not (curation.get(c, {}).get("grain") or "").strip()
+        c for c in candidates if overwrite or not (curation.get(c, {}).get("grain") or "").strip()
     ]
     if not targets:
         return {"filled": 0, "total": len(candidates)}
@@ -171,14 +164,20 @@ async def infer_grains(
         "transaction', 'cell / network element'. 2-4 words max. If the column is a "
         "descriptive attribute rather than an identifier (e.g. a status or region "
         "name), return 'attribute (not a join key)'.\n\n"
-        "Return ONLY JSON: {\"COLUMN\": \"grain label\", ...}.\n\n"
+        'Return ONLY JSON: {"COLUMN": "grain label", ...}.\n\n'
         f"Columns:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
     settings = get_settings()
     model = (llm.model if llm and getattr(llm, "model", None) else None) or settings.llm_model
-    api_base = (llm.api_base if llm and getattr(llm, "api_base", None) else None) or settings.litellm_api_base
-    api_key = (llm.api_key if llm and getattr(llm, "api_key", None) else None) or settings.litellm_api_key or "sk-dummy"
+    api_base = (
+        llm.api_base if llm and getattr(llm, "api_base", None) else None
+    ) or settings.litellm_api_base
+    api_key = (
+        (llm.api_key if llm and getattr(llm, "api_key", None) else None)
+        or settings.litellm_api_key
+        or "sk-dummy"
+    )
 
     try:
         resp = await litellm.acompletion(
@@ -228,6 +227,8 @@ def build_join_keys_context(workspace_id: str) -> str:
         grain = f" [{k['grain']} grain]" if k.get("grain") else ""
         note = f" — {k['note']}" if k.get("note") else ""
         tbls = ", ".join(k["member_tables"][:12])
-        lines.append(f"- `{k['column']}`{grain}: join on a.{k['column']} = b.{k['column']}. "
-                     f"Present in: {tbls}.{note}")
+        lines.append(
+            f"- `{k['column']}`{grain}: join on a.{k['column']} = b.{k['column']}. "
+            f"Present in: {tbls}.{note}"
+        )
     return "\n".join(lines)

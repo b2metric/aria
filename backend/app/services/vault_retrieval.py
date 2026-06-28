@@ -124,9 +124,7 @@ async def index_workspace_vault(workspace_id: str) -> dict[str, Any]:
     if not client.collection_exists(collection):
         client.create_collection(
             collection_name=collection,
-            vectors_config=models.VectorParams(
-                size=_EMBED_DIM, distance=models.Distance.COSINE
-            ),
+            vectors_config=models.VectorParams(size=_EMBED_DIM, distance=models.Distance.COSINE),
         )
         logger.info("Created vault collection: %s (dim=%d)", collection, _EMBED_DIM)
 
@@ -138,9 +136,7 @@ async def index_workspace_vault(workspace_id: str) -> dict[str, Any]:
 
         # Skip if the stored point already has this hash
         try:
-            existing = client.retrieve(
-                collection_name=collection, ids=[pid], with_payload=True
-            )
+            existing = client.retrieve(collection_name=collection, ids=[pid], with_payload=True)
             if existing and existing[0].payload.get("hash") == file_hash:
                 skipped += 1
                 continue
@@ -187,9 +183,7 @@ async def index_workspace_vault(workspace_id: str) -> dict[str, Any]:
     }
 
 
-async def top_n_tables(
-    workspace_id: str, question: str, n: int = 30
-) -> list[tuple[str, float]]:
+async def top_n_tables(workspace_id: str, question: str, n: int = 30) -> list[tuple[str, float]]:
     """Return top-N table names by semantic similarity to the question.
 
     Returns ``[(table_name, score), ...]`` sorted descending by score.

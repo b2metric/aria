@@ -56,7 +56,9 @@ export default function JoinKeysPage() {
   }, [token]);
 
   useEffect(() => {
-    load();
+    // fetch-on-mount: load() is async; its setState lands after the await
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, [load]);
 
   const update = (column: string, patch: Partial<JoinKey>) =>

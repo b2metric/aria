@@ -260,6 +260,8 @@ function ChatPageContent() {
     const target =
       lastId && conversations.some((c) => c.id === lastId) ? lastId : conversations[0]?.id;
     if (target) {
+      // restore-on-mount: deliberately seeding state from the persisted id
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setConversationId(target);
       router.replace(`/chat?cid=${target}`, { scroll: false });
     }
