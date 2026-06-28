@@ -134,21 +134,32 @@ async def _mock_process_query(
 
 @pytest.fixture
 def client(jwks):
-    """Create a test client with mocked pipeline and auth."""
-    mock_redis = AsyncMock()
-    mock_redis.aclose.return_value = None
-    # Rate limiter does numeric comparisons on these (count > limit), so the
-    # mock must return ints rather than bare AsyncMock sentinels.
-    mock_redis.incr = AsyncMock(return_value=1)
-    mock_redis.expire = AsyncMock(return_value=True)
-    mock_redis.ttl = AsyncMock(return_value=60)
+    """Create a test client with mocked pipeline and auth.
+
+    ``_get_redis`` returns a NEW fakeredis connection over a SHARED FakeServer
+    on every call — mirroring production, where each call is a fresh connection
+    to the same Redis. The durable-run path (producer + tailer) opens several
+    connections per request and one closing must not close the others, so a
+    bare ``AsyncMock`` (no ``xadd``/``xread``) is insufficient.
+    """
+    from fakeredis import FakeServer
+    from fakeredis.aioredis import FakeRedis as AioFakeRedis
+
+    server = FakeServer()
+
     mock_engine = AsyncMock()
     mock_engine.dispose.return_value = None
 
     with (
         patch("backend.app.auth.jwt._fetch_jwks", return_value=jwks),
-        patch("backend.app.api.query._get_redis", return_value=mock_redis),
+        patch(
+            "backend.app.api.query._get_redis",
+            AsyncMock(side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)),
+        ),
         patch("backend.app.api.query._get_engine", return_value=mock_engine),
+        # SQL visibility hits the (mock) engine; pin it so the route does not
+        # depend on a real metadata DB. Default role behaviour is preserved.
+        patch("backend.app.api.query._resolve_sql_visible", AsyncMock(return_value=True)),
         patch("backend.app.api.query.process_query", side_effect=_mock_process_query),
         patch("backend.app.api.query.list_conversations", return_value=[]),
         patch(

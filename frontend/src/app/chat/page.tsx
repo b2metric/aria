@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { streamQuery, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions } from "@/lib/api";
+import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions } from "@/lib/api";
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
@@ -204,6 +204,151 @@ function ChatPageContent() {
     inputRef.current?.focus();
   }, []);
 
+  // Consume an SSE reader, applying events to the assistant message `targetId`.
+  // Shared by the live POST path and the resume-on-load path. Declared before the
+  // load effect so that effect can list it as a dependency without a const TDZ.
+  const consumeStream = useCallback(
+    async (
+      reader: ReadableStreamDefaultReader<Uint8Array>,
+      targetId: string,
+    ): Promise<void> => {
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE events
+        const events = parseSSEChunk(buffer);
+        // Keep the last incomplete chunk in buffer
+        const lastNewline = buffer.lastIndexOf("\n\n");
+        if (lastNewline >= 0) {
+          buffer = buffer.slice(lastNewline + 2);
+        }
+
+        for (const { event, data } of events) {
+          try {
+            const payload = JSON.parse(data);
+
+            switch (event) {
+              case "status": {
+                const statusMsg = payload.message || "";
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? {
+                          ...m,
+                          content: m.content ? `${m.content}\n${statusMsg}` : statusMsg,
+                          status:
+                            payload.status === "complete" ? "complete" : "streaming",
+                        }
+                      : m,
+                  ),
+                );
+                if (payload.conversation_id) {
+                  setConversationId(payload.conversation_id);
+                }
+                break;
+              }
+
+              case "sql": {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? { ...m, sql: payload.sql, content: payload.explanation || m.content }
+                      : m,
+                  ),
+                );
+                break;
+              }
+
+              case "chart": {
+                const cfg = payload.chart_config || payload.chart_spec || {};
+                const spec: ChartSpec = {
+                  type: cfg.type || payload.chart_type || "bar",
+                  title: cfg.title,
+                  xKey: cfg.xKey,
+                  yKeys: cfg.yKeys,
+                  colors: cfg.colors,
+                  data: payload.chart_data || cfg.data || [],
+                  chart_url: payload.chart_url,
+                  csv_url: payload.csv_url,
+                  row_count: payload.row_count,
+                };
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? { ...m, chartSpec: spec, chartUrl: payload.chart_url }
+                      : m,
+                  ),
+                );
+                // Auto-open the artifact panel on first render of a new chart.
+                setActiveArtifactMsgId(targetId);
+                break;
+              }
+
+              case "insight": {
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? {
+                          ...m,
+                          summary: payload.summary,
+                          suggestions: payload.suggestions,
+                        }
+                      : m,
+                  ),
+                );
+                break;
+              }
+
+              case "error": {
+                setError(payload.error);
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? {
+                          ...m,
+                          status: "error",
+                          error: payload.error,
+                        }
+                      : m,
+                  ),
+                );
+                setIsStreaming(false);
+                break;
+              }
+
+              case "done": {
+                if (payload.conversation_id) {
+                  setConversationId(payload.conversation_id);
+                  router.replace(`/chat?cid=${payload.conversation_id}`, {
+                    scroll: false,
+                  });
+                }
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? { ...m, status: "complete" }
+                      : m,
+                  ),
+                );
+                setIsStreaming(false);
+                break;
+              }
+            }
+          } catch {
+            // Malformed event data — skip
+          }
+        }
+      }
+    },
+    [router],
+  );
+
   // Load specific conversation if cid changes
   useEffect(() => {
     if (conversationId && token) {
@@ -233,6 +378,43 @@ function ChatPageContent() {
               (m: any) => m.role === "assistant" && m.chartSpec,
             );
             setActiveArtifactMsgId(lastChartMsg ? lastChartMsg.id : null);
+
+            // If a run is still generating server-side (e.g. user refreshed
+            // mid-answer), re-attach to its live stream and finish the turn.
+            const last = formattedMessages[formattedMessages.length - 1];
+            const danglingUser = last && last.role === "user";
+            getRunStatus(conversationId, token)
+              .then(({ status }) => {
+                if (status !== "running" || !danglingUser) return;
+                const assistantId = `resume-${conversationId}-${Date.now()}`;
+                const assistantMsg: ChatMessage = {
+                  id: assistantId,
+                  role: "assistant",
+                  content: "",
+                  status: "streaming",
+                };
+                setMessages((prev) => [...prev, assistantMsg]);
+                setIsStreaming(true);
+                const { reader, abort } = streamResume(conversationId, token);
+                abortRef.current = abort;
+                consumeStream(reader, assistantId)
+                  .catch(() => {
+                    setMessages((prev) =>
+                      prev.map((m) =>
+                        m.id === assistantId
+                          ? { ...m, status: "error", error: "Connection lost while resuming." }
+                          : m,
+                      ),
+                    );
+                  })
+                  .finally(() => {
+                    abortRef.current = null;
+                    setIsStreaming(false);
+                  });
+              })
+              // A failed status check (401 / network) should silently skip resume —
+              // the conversation history is already rendered.
+              .catch(() => {});
           }
         })
         .catch((err) => {
@@ -240,7 +422,7 @@ function ChatPageContent() {
           setError("Failed to load conversation history.");
         });
     }
-  }, [conversationId, token]);
+  }, [conversationId, token, consumeStream]);
 
   // Auto-restore the last conversation when the user returns to /chat without a
   // ?cid= (e.g. via sidebar nav or a plain link). The conversation lives in Redis
@@ -315,141 +497,8 @@ function ChatPageContent() {
 
         const { reader, abort } = streamQuery(q, conversationId || undefined, workspaceId, token);
         abortRef.current = abort;
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Process complete SSE events
-          const events = parseSSEChunk(buffer);
-          // Keep the last incomplete chunk in buffer
-          const lastNewline = buffer.lastIndexOf("\n\n");
-          if (lastNewline >= 0) {
-            buffer = buffer.slice(lastNewline + 2);
-          }
-
-          for (const { event, data } of events) {
-            console.log("SSE EVENT:", event, data.substring(0, 100));
-            try {
-              const payload = JSON.parse(data);
-
-              switch (event) {
-                case "status": {
-                  const statusMsg = payload.message || "";
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsg.id
-                        ? {
-                            ...m,
-                            content: m.content ? `${m.content}\n${statusMsg}` : statusMsg,
-                            status:
-                              payload.status === "complete" ? "complete" : "streaming",
-                          }
-                        : m,
-                    ),
-                  );
-                  if (payload.conversation_id) {
-                    setConversationId(payload.conversation_id);
-                  }
-                  break;
-                }
-
-                case "sql": {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsg.id
-                        ? { ...m, sql: payload.sql, content: payload.explanation || m.content }
-                        : m,
-                    ),
-                  );
-                  break;
-                }
-
-                case "chart": {
-                  const cfg = payload.chart_config || payload.chart_spec || {};
-                  const spec: ChartSpec = {
-                    type: cfg.type || payload.chart_type || "bar",
-                    title: cfg.title,
-                    xKey: cfg.xKey,
-                    yKeys: cfg.yKeys,
-                    colors: cfg.colors,
-                    data: payload.chart_data || cfg.data || [],
-                    chart_url: payload.chart_url,
-                    csv_url: payload.csv_url,
-                    row_count: payload.row_count,
-                  };
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsg.id
-                        ? { ...m, chartSpec: spec, chartUrl: payload.chart_url }
-                        : m,
-                    ),
-                  );
-                  // Auto-open the artifact panel on first render of a new chart.
-                  setActiveArtifactMsgId(assistantMsg.id);
-                  break;
-                }
-
-                case "insight": {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsg.id
-                        ? {
-                            ...m,
-                            summary: payload.summary,
-                            suggestions: payload.suggestions,
-                          }
-                        : m,
-                    ),
-                  );
-                  break;
-                }
-
-                case "error": {
-                  setError(payload.error);
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsg.id
-                        ? {
-                            ...m,
-                            status: "error",
-                            error: payload.error,
-                          }
-                        : m,
-                    ),
-                  );
-                  setIsStreaming(false);
-                  break;
-                }
-
-                case "done": {
-                  if (payload.conversation_id) {
-                    setConversationId(payload.conversation_id);
-                    router.replace(`/chat?cid=${payload.conversation_id}`, {
-                      scroll: false,
-                    });
-                  }
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantMsg.id
-                        ? { ...m, status: "complete" }
-                        : m,
-                    ),
-                  );
-                  setIsStreaming(false);
-                  break;
-                }
-              }
-            } catch {
-              // Malformed event data — skip
-            }
-          }
-        }
+        await consumeStream(reader, assistantMsg.id);
+        setIsStreaming(false);
       } catch (err: unknown) {
         if (err instanceof DOMException && err.name === "AbortError") {
           // User cancelled
@@ -474,7 +523,7 @@ function ChatPageContent() {
         setIsStreaming(false); // <--- HER ZAMAN STREAMING'I KAPAT
       }
     },
-    [inputValue, isStreaming, conversationId, router, token],
+    [inputValue, isStreaming, conversationId, router, token, consumeStream],
   );
 
   // Submit initial query from URL

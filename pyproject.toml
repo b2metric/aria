@@ -87,6 +87,7 @@ dev = [
     "pre-commit>=4.0,<5",
     "faker>=35,<41",
     "factory-boy>=3.3,<4",
+    "fakeredis>=2.21,<3",
     "coverage[toml]>=7.6,<8",
     "pip-audit>=2.8,<3",
 ]

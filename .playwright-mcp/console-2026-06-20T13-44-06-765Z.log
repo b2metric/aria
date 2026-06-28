@@ -1,0 +1,11 @@
+[     262ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3003/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[     278ms] [LOG] [HMR] connected @ http://localhost:3003/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[  110426ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3003/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[  110440ms] [LOG] [HMR] connected @ http://localhost:3003/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[  110692ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  110692ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  110692ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  646203ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  646204ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  646204ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  646204ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
