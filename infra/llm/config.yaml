@@ -87,39 +87,63 @@ model_list:
   - model_name: claude-haiku
     litellm_params:
       model: anthropic/claude-haiku-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
   - model_name: custom:litellm:claude-haiku
     litellm_params:
       model: anthropic/claude-haiku-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: claude-sonnet
     litellm_params:
       model: anthropic/claude-sonnet-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
   - model_name: custom:litellm:claude-sonnet
     litellm_params:
       model: anthropic/claude-sonnet-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: claude-opus-chat
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
   - model_name: custom:litellm:claude-opus-chat
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
 
   - model_name: claude-opus-reasoner
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       thinking: {"type": "enabled", "budget_tokens": 16000}
       max_tokens: 32000
   - model_name: custom:litellm:claude-opus-reasoner
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       thinking: {"type": "enabled", "budget_tokens": 16000}
       max_tokens: 32000
@@ -128,10 +152,16 @@ model_list:
   - model_name: claude-opus
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
   - model_name: custom:litellm:claude-opus
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
 
   # --- Google Gemini ---
@@ -216,6 +246,9 @@ model_list:
   - model_name: role-architect
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       thinking: {"type": "enabled", "budget_tokens": 16000}
       max_tokens: 32000
@@ -227,6 +260,9 @@ model_list:
   - model_name: role-lead-dev
     litellm_params:
       model: anthropic/claude-sonnet-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000003
       output_cost_per_token: 0.000015
@@ -263,6 +299,9 @@ model_list:
   - model_name: role-debugger
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       thinking: {"type": "enabled", "budget_tokens": 16000}
       max_tokens: 32000
@@ -274,6 +313,9 @@ model_list:
   - model_name: role-reviewer
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
@@ -283,6 +325,9 @@ model_list:
   - model_name: role-qa-gate
     litellm_params:
       model: anthropic/claude-haiku-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000001
       output_cost_per_token: 0.000005
@@ -310,12 +355,18 @@ model_list:
   - model_name: review-of-deepseek          # author=DeepSeek -> review with Claude
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
   - model_name: review-of-gemini            # author=Gemini -> review with Claude
     litellm_params:
       model: anthropic/claude-opus-4-5
+      cache_control_injection_points:
+        - location: message
+          role: system
       api_key: os.environ/ANTHROPIC_API_KEY
       input_cost_per_token: 0.000005
       output_cost_per_token: 0.000025
