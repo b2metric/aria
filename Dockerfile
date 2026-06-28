@@ -47,11 +47,15 @@ FROM python:3.12-slim-bookworm AS runtime
 
 WORKDIR /app
 
-# System deps including Oracle client runtime dependencies
+# System deps including Oracle client runtime dependencies + Chromium for
+# Kaleido 1.x (Plotly static PNG export needs a real browser at render time;
+# the `chromium` package pulls in the headless shared-lib + font deps).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     curl \
     libaio1 \
+    chromium \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Oracle Instant Client from oracle-client stage
@@ -61,8 +65,10 @@ COPY --from=oracle-client /opt/oracle/instantclient /opt/oracle/instantclient
 RUN echo "/opt/oracle/instantclient" > /etc/ld.so.conf.d/oracle-instantclient.conf \
     && ldconfig
 
-# Create non-root user
-RUN groupadd -r aria && useradd -r -g aria aria
+# Create non-root user WITH a real home directory. Headless Chromium (Kaleido)
+# writes crashpad/config under $HOME; without an existing writable /home/aria it
+# crashes immediately ("browser seemed to close immediately after starting").
+RUN groupadd -r aria && useradd -r -g aria -m -d /home/aria aria
 
 # Copy virtualenv from builder
 COPY --from=builder /app/.venv /app/.venv
@@ -82,6 +88,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV ORACLE_CLIENT_LIB_DIR=/opt/oracle/instantclient
 ENV LD_LIBRARY_PATH=/opt/oracle/instantclient:$LD_LIBRARY_PATH
+# Kaleido/choreographer picks the browser from BROWSER_PATH; point it at the
+# system chromium installed above (launched headless + --no-sandbox by default).
+ENV BROWSER_PATH=/usr/bin/chromium
 
 EXPOSE 8000
 
