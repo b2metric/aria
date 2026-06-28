@@ -65,12 +65,17 @@ async def _resolve_sql_visible(engine: AsyncEngine, user: CurrentUser) -> bool:
     if not user.user_id:
         return resolve_effective_sql_visibility(user.role, sql_visibility=None)
 
+    # users.id is UUID. Compare on id::text so a non-UUID identifier (legacy
+    # `admin-001` custom claim, `unknown-user` auth fallback) binds as TEXT and
+    # simply matches no row — instead of crashing asyncpg's UUID encoder. The DB
+    # lookup STILL runs so the per-user override is respected and a transient DB
+    # error still fails closed (security invariant — never silently grant).
     try:
         async with engine.connect() as conn:
             row = (
                 await conn.execute(
-                    _text("SELECT sql_visibility FROM users WHERE id = :uid"),
-                    {"uid": user.user_id},
+                    _text("SELECT sql_visibility FROM users WHERE id::text = :uid"),
+                    {"uid": str(user.user_id)},
                 )
             ).fetchone()
         override = row[0] if row is not None else None

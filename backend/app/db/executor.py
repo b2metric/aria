@@ -328,14 +328,17 @@ def explain_query_sync(
 ) -> dict[str, Any]:
     """Explain a SQL query synchronously.
 
-    Args:
-        sql: SQL query string
-        config: Database configuration
-        params: Query parameters (optional)
-
-    Returns:
-        Dict containing estimated_rows, estimated_cost
+    Honors `ARIA_SKIP_EXPLAIN=1` to bypass the cost-estimate round-trip entirely
+    — useful for remote databases (e.g. STC Oracle over VPN) where the extra
+    connect + 4 EXPLAIN statements add several seconds per request. The
+    pipeline's safety guards (`FETCH FIRST N ROWS ONLY`, row-limit cap on
+    fetched results) remain in effect.
     """
+    import os
+
+    if os.environ.get("ARIA_SKIP_EXPLAIN") == "1":
+        return {"estimated_rows": 0, "estimated_cost": 0, "raw": None, "skipped": True}
+
     executor = get_executor(config)
     return executor.explain(sql, params)
 

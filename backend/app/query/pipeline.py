@@ -240,6 +240,44 @@ async def _resolve_vault_policy(
     return policy
 
 
+async def get_active_tables(workspace_id: str, db: AsyncSession) -> set[str]:
+    """Union of ``allowed_tables`` across all ACTIVE TeamVaultPolicy rows for the
+    workspace's customer (team-specific policies AND the customer-wide default).
+
+    These are the tables at least one team can query — the only ones worth the
+    expensive per-table work (enum sampling, sample-data extraction, LLM
+    enrichment). Returns LOWERCASED names. An empty set means "no active scoping
+    policy exists"; callers MUST treat that as 'fall back to all tables', never
+    as 'process nothing' (scoping is a performance optimization, not a security
+    boundary — RLS/CLS remain the enforcement points).
+    """
+    from sqlalchemy import select as sa_select
+
+    from backend.app.models.governance import TeamVaultPolicy
+    from backend.app.models.organization import Customer
+
+    cust_id = (
+        await db.execute(sa_select(Customer.id).where(Customer.slug == workspace_id))
+    ).scalar_one_or_none()
+    if cust_id is None:
+        return set()
+
+    rows = (
+        await db.execute(
+            sa_select(TeamVaultPolicy.allowed_tables).where(
+                TeamVaultPolicy.customer_id == cust_id,
+                TeamVaultPolicy.is_active == True,  # noqa: E712
+            )
+        )
+    ).scalars().all()
+
+    active: set[str] = set()
+    for allowed in rows:
+        if allowed:
+            active.update(t.lower() for t in allowed)
+    return active
+
+
 async def _get_available_tables(
     engine: AsyncEngine,
     workspace_id: str,
@@ -462,11 +500,36 @@ async def _generate_sql(
             {},
         )
 
-    # Get columns for each table (up to 10 tables for performance)
-    # Get columns for each table (up to 10 tables for performance)
+    # ── Semantic re-rank (Qdrant) before column fetch ───────────────────────
+    # If the workspace has its vault embedded into Qdrant, ask which tables are
+    # closest to the user's question and re-order `tables` accordingly. The
+    # column-fetch limit below then picks the SEMANTICALLY relevant top-N
+    # instead of whatever order the vault traversal returned. Falls back
+    # silently to the existing order if Qdrant is down or the collection
+    # doesn't exist yet (the next call auto-indexes).
+    try:
+        from backend.app.services.vault_retrieval import top_n_tables
+
+        semantic_ranked = await top_n_tables(workspace_id, question, n=30)
+        if semantic_ranked:
+            rank_map = {name: i for i, (name, _) in enumerate(semantic_ranked)}
+            tables.sort(key=lambda t: rank_map.get(t["name"], 999))
+            logger.info(
+                "Semantic re-rank applied for workspace=%s (top3=%s)",
+                workspace_id,
+                [r[0] for r in semantic_ranked[:3]],
+            )
+    except Exception as _rerank_err:
+        logger.warning("Semantic rerank skipped: %s", _rerank_err)
+
+    # Get columns for the top-N most relevant tables. Capped by
+    # ARIA_MAX_TABLES_IN_LLM so the LLM schema slice and column-fetch agree.
+    import os as _os_pipe
+
+    _max_tables_for_columns = int(_os_pipe.environ.get("ARIA_MAX_TABLES_IN_LLM", "30"))
     table_columns: dict[str, list[dict]] = {}
     schema_info: list[str] = []
-    for tbl in tables[:10]:
+    for tbl in tables[:_max_tables_for_columns]:
         cols = await _get_table_columns(engine, tbl["name"], workspace_id)
         table_columns[tbl["name"]] = cols
 
@@ -487,7 +550,7 @@ async def _generate_sql(
 
             table_columns = strip_denied_columns_from_schema(table_columns, deny_columns)
 
-    for tbl in tables[:10]:
+    for tbl in tables[:_max_tables_for_columns]:
         cols = table_columns.get(tbl["name"], [])
         col_str = ", ".join(f"{c['name']} ({c['type']})" for c in cols[:15])
         schema_info.append(f"  {tbl['name']}: {col_str}")
@@ -558,15 +621,25 @@ async def _generate_sql(
             if tbl_order < tables[0].get("order", 999):
                 tables[0] = tbl
 
-    # If score is too low, our simple lexical heuristic failed to find a confident match
-    # This means the question requires semantic understanding (e.g. synonyms, cross-language)
-    # Forward to LLM instead of guessing blindly.
-    if best_score < 15:
-        from backend.app.query.llm_sql import generate_sql_with_llm
+    # If score is too low OR the question is structurally complex (MoM, bucket,
+    # compare, growth, JOIN, subquery, window), forward to LLM. The old rule-based
+    # path picks ONE table by keyword overlap and slaps SUM(first_numeric) GROUP BY
+    # date on it — fine for "total sales by month", wrong for anything analytical.
+    # Threshold + complex-question gate are env-configurable so we can tune without
+    # a code change.
+    import os as _os
 
+    from backend.app.query.llm_sql import generate_sql_with_llm, is_complex_query
+
+    keyword_threshold = int(_os.environ.get("ARIA_KEYWORD_SCORE_THRESHOLD", "30"))
+    is_complex = is_complex_query(question)
+    force_llm = best_score < keyword_threshold or is_complex
+    if force_llm:
         logger.info(
-            "Low confidence in rule-based table selection (score=%d). Delegating to LLM.",
+            "Delegating to LLM (score=%d, threshold=%d, complex=%s)",
             best_score,
+            keyword_threshold,
+            is_complex,
         )
         try:
             sql, explanation, token_usage = await generate_sql_with_llm(
@@ -576,6 +649,8 @@ async def _generate_sql(
                 memory_context=memory_context,
                 db_type="oracle",
                 history=history,
+                llm=llm,
+                workspace_id=workspace_id,
             )
             return sql, explanation, True, token_usage
         except Exception as e:
@@ -1207,43 +1282,60 @@ async def _execute_sql(
         ):
             transformed_sql += f"\nLIMIT {row_limit + 1}"
 
-    # ── Security Guard: Enforce SELECT-only queries ─────────────────────
-    # We strip comments and whitespace to securely check the first word
+    # ── Security Guard: read-only queries only (SELECT incl. WITH/CTE) ───────
+    # Strip comments/whitespace first, then validate. A `WITH ... SELECT` CTE is
+    # a valid read-only query (it starts with WITH, not SELECT) — the old
+    # startswith("SELECT") check wrongly rejected it. We parse with sqlglot and
+    # require a SINGLE statement that is a SELECT (CTEs parse as Select) with no
+    # write/DDL nodes anywhere; if the parser is unavailable we fall back to a
+    # lexical check that allows SELECT/WITH and scans for DML keywords.
     import re
 
     clean_sql_for_check = re.sub(r"--.*$", "", transformed_sql, flags=re.MULTILINE)
     clean_sql_for_check = re.sub(r"/\*.*?\*/", "", clean_sql_for_check, flags=re.DOTALL)
     clean_sql_for_check = clean_sql_for_check.strip()
-
-    if not clean_sql_for_check.upper().startswith("SELECT"):
-        error_msg = "Security Exception: Only SELECT queries are permitted."
-        logger.warning("Blocked DML/DDL query: %s", transformed_sql[:200])
-        await _audit(success=False, error=error_msg, mem_trace=mem_trace)
-        raise ValueError(error_msg)
-
-    # Optional deep-scan for hidden DML inside CTEs (WITH)
-    dml_keywords = [
-        "INSERT",
-        "UPDATE",
-        "DELETE",
-        "DROP",
-        "ALTER",
-        "TRUNCATE",
-        "REPLACE",
-        "MERGE",
-        "GRANT",
-        "REVOKE",
-    ]
     upper_sql = clean_sql_for_check.upper()
 
-    # We want to be careful not to block column names like 'update_date'.
-    # A simple regex looking for DML commands starting a statement or after a semicolon
-    for kw in dml_keywords:
-        if re.search(r"(?:^|;|\s+)" + kw + r"\s+", upper_sql):
-            error_msg = f"Security Exception: Query contains forbidden keyword '{kw}'."
-            logger.warning("Blocked DML/DDL keyword in query: %s", transformed_sql[:200])
-            await _audit(success=False, error=error_msg, mem_trace=mem_trace)
-            raise ValueError(error_msg)
+    dml_keywords = [
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER",
+        "TRUNCATE", "REPLACE", "MERGE", "GRANT", "REVOKE", "CREATE",
+    ]
+
+    async def _block(msg: str) -> None:
+        logger.warning("Blocked non-read-only query: %s", transformed_sql[:200])
+        await _audit(success=False, error=msg, mem_trace=mem_trace)
+        raise ValueError(msg)
+
+    parsed_ok = False
+    try:
+        import sqlglot
+        from sqlglot import expressions as _sg
+
+        dialect = _sqlglot_dialect(
+            config.db_type.value if hasattr(config.db_type, "value") else str(config.db_type)
+        )
+        statements = [s for s in sqlglot.parse(clean_sql_for_check, read=dialect) if s is not None]
+        write_nodes = (
+            _sg.Insert, _sg.Update, _sg.Delete, _sg.Drop, _sg.Alter,
+            _sg.Create, _sg.Merge, _sg.Command,
+        )
+        if len(statements) == 1 and isinstance(statements[0], _sg.Select):
+            if statements[0].find(*write_nodes) is not None:
+                await _block("Security Exception: Only read-only SELECT queries are permitted.")
+            parsed_ok = True
+        else:
+            await _block("Security Exception: Only read-only SELECT queries are permitted.")
+    except ValueError:
+        raise  # propagate our own block
+    except Exception as _parse_err:  # parser unavailable / unsupported syntax → lexical fallback
+        logger.info("SQL guard falling back to lexical check: %s", _parse_err)
+
+    if not parsed_ok:
+        if not (upper_sql.startswith("SELECT") or upper_sql.startswith("WITH")):
+            await _block("Security Exception: Only SELECT queries are permitted.")
+        for kw in dml_keywords:
+            if re.search(r"(?:^|;|\s+)" + kw + r"\s+", upper_sql):
+                await _block(f"Security Exception: Query contains forbidden keyword '{kw}'.")
 
     logger.info(
         "Executing query on %s://%s:%d/%s",
@@ -1936,7 +2028,8 @@ async def _process_query_impl(
             # ── Resolve LLM ────────────────────────────────────────────────
             from backend.app.services.llm_resolver import resolve_llm
 
-            resolved_llm = await resolve_llm(workspace_id, sess)
+            resolved_llm = await resolve_llm(workspace_id, sess, operation="sql_generation")
+            insight_llm = await resolve_llm(workspace_id, sess, operation="insight")
             logger.info("Using LLM configuration: %s", resolved_llm)
 
             # ── Token quota enforcement ────────────────────────────────────
@@ -2173,7 +2266,7 @@ async def _process_query_impl(
         sample_rows = _json_safe_rows(rows[:10])
         language = await get_workspace_language(workspace_id)
         insight_res = await generate_insight_and_suggestions(
-            request.question, sql, sample_rows, language=language
+            request.question, sql, sample_rows, llm=insight_llm, language=language
         )
         summary = insight_res.get("summary", "")
         suggestions = insight_res.get("suggestions", [])
