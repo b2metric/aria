@@ -51,9 +51,18 @@ Result Sample:
 """
 
     try:
-        model_name = llm.model if llm else settings.llm_model
-        api_base = llm.api_base if llm else settings.litellm_api_base
-        api_key = llm.api_key if llm else (settings.litellm_api_key or "sk-dummy")
+        # Mirror llm_sql.py's credential derivation: a resolved LLM with an EMPTY
+        # api_key must still fall back to the platform key / placeholder. Passing
+        # "" to litellm (custom_llm_provider="openai") fails client-side with
+        # "Missing credentials", which silently degrades every answer to the
+        # generic fallback summary with no suggestions.
+        model_name = (llm.model if llm and llm.model else None) or settings.llm_model
+        api_base = (llm.api_base if llm and llm.api_base else None) or settings.litellm_api_base
+        api_key = (
+            (llm.api_key if llm and llm.api_key else None)
+            or settings.litellm_api_key
+            or "sk-placeholder"
+        )
 
         response = await litellm.acompletion(
             model=model_name,
