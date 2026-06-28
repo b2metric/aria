@@ -4,6 +4,7 @@ A "run" is one assistant turn (one pipeline execution) for a conversation.
 Its events are appended to a Redis Stream so any process can replay/tail them,
 which is what makes an in-flight answer survive a client refresh.
 """
+
 from __future__ import annotations
 
 from redis.asyncio import Redis
@@ -16,7 +17,7 @@ LOCK_PREFIX = "aria:run_lock:"
 # cover long-running queries. True lock renewal/heartbeat (so an in-flight run
 # can outlive even this) is deferred to Plan 2 (Prefect deploy-durability).
 LOCK_TTL_S = 900
-STREAM_TTL_S = 3600    # keep the event log ~1h after the run ends (replay window)
+STREAM_TTL_S = 3600  # keep the event log ~1h after the run ends (replay window)
 
 RUNNING = "running"
 COMPLETE = "complete"

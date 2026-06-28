@@ -154,7 +154,9 @@ def client(jwks):
         patch("backend.app.auth.jwt._fetch_jwks", return_value=jwks),
         patch(
             "backend.app.api.query._get_redis",
-            AsyncMock(side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)),
+            AsyncMock(
+                side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)
+            ),
         ),
         patch("backend.app.api.query._get_engine", return_value=mock_engine),
         # SQL visibility hits the (mock) engine; pin it so the route does not

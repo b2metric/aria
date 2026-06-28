@@ -1,4 +1,5 @@
 """Producer writes pipeline events into run_store; tailer reads them back."""
+
 from __future__ import annotations
 
 import asyncio
@@ -33,8 +34,14 @@ async def test_run_producer_writes_all_events_and_marks_complete(redis, monkeypa
     await run_store.acquire_run(redis, "cid-1", "run-a")
 
     await query_api._run_producer(
-        redis=redis, engine=None, body=None, workspace_id="ws", user_id="u",
-        team_id=None, sql_visible=True, cid="cid-1",
+        redis=redis,
+        engine=None,
+        body=None,
+        workspace_id="ws",
+        user_id="u",
+        team_id=None,
+        sql_visible=True,
+        cid="cid-1",
     )
 
     events, _ = await run_store.read_events(redis, "cid-1", "0", block_ms=0)
@@ -51,8 +58,14 @@ async def test_run_producer_records_error_event_on_exception(redis, monkeypatch)
     await run_store.acquire_run(redis, "cid-2", "run-b")
 
     await query_api._run_producer(
-        redis=redis, engine=None, body=None, workspace_id="ws", user_id="u",
-        team_id=None, sql_visible=True, cid="cid-2",
+        redis=redis,
+        engine=None,
+        body=None,
+        workspace_id="ws",
+        user_id="u",
+        team_id=None,
+        sql_visible=True,
+        cid="cid-2",
     )
 
     events, _ = await run_store.read_events(redis, "cid-2", "0", block_ms=0)
@@ -80,9 +93,7 @@ from jose import jwt as jose_jwt  # noqa: E402
 
 @pytest.fixture(scope="session")
 def rsa_key():
-    return rsa.generate_private_key(
-        public_exponent=65537, key_size=2048, backend=default_backend()
-    )
+    return rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
 
 
 @pytest.fixture(scope="session")
@@ -140,7 +151,9 @@ def test_post_query_creates_run_and_streams(auth_token, jwks):
         patch.object(
             query_api,
             "_get_redis",
-            AsyncMock(side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)),
+            AsyncMock(
+                side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)
+            ),
         ),
         patch.object(query_api, "_get_engine", AsyncMock(return_value=AsyncMock())),
         patch.object(query_api, "_resolve_sql_visible", AsyncMock(return_value=True)),
@@ -232,7 +245,9 @@ def test_status_endpoint_reports_running_then_done(auth_token, jwks):
         patch.object(
             query_api,
             "_get_redis",
-            AsyncMock(side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)),
+            AsyncMock(
+                side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)
+            ),
         ),
     ):
         client = TestClient(app)
@@ -263,9 +278,7 @@ def test_get_endpoints_reject_non_owner_with_404(auth_token, jwks):
     async def _setup():
         r = AioFakeRedis(server=server, decode_responses=True)
         await run_store.acquire_run(r, "cid-other", "run-o")
-        await run_store.append_event(
-            r, "cid-other", {"event": "sql", "data": '{"sql":"SECRET"}'}
-        )
+        await run_store.append_event(r, "cid-other", {"event": "sql", "data": '{"sql":"SECRET"}'})
         await run_store.finish_run(r, "cid-other", "complete")
         await r.aclose()
 
@@ -278,7 +291,9 @@ def test_get_endpoints_reject_non_owner_with_404(auth_token, jwks):
         patch.object(
             query_api,
             "_get_redis",
-            AsyncMock(side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)),
+            AsyncMock(
+                side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)
+            ),
         ),
     ):
         client = TestClient(app)
@@ -304,7 +319,9 @@ def test_resume_stream_replays_buffered_events(auth_token, jwks):
     async def _populate():
         r = AioFakeRedis(server=server, decode_responses=True)
         await run_store.acquire_run(r, "cid-7", "run-7")
-        await run_store.append_event(r, "cid-7", {"event": "status", "data": '{"status":"thinking"}'})
+        await run_store.append_event(
+            r, "cid-7", {"event": "status", "data": '{"status":"thinking"}'}
+        )
         await run_store.append_event(r, "cid-7", {"event": "sql", "data": '{"sql":"SELECT 1"}'})
         await run_store.append_event(r, "cid-7", {"event": "done", "data": "{}"})
         await run_store.finish_run(r, "cid-7", "complete")
@@ -318,7 +335,9 @@ def test_resume_stream_replays_buffered_events(auth_token, jwks):
         patch.object(
             query_api,
             "_get_redis",
-            AsyncMock(side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)),
+            AsyncMock(
+                side_effect=lambda *a, **k: AioFakeRedis(server=server, decode_responses=True)
+            ),
         ),
     ):
         client = TestClient(app)
@@ -362,8 +381,7 @@ async def test_tail_events_terminates_on_unknown_cid(redis, monkeypatch):
     monkeypatch.setattr(run_store, "read_events", _nonblocking_read)
 
     collected = [
-        event
-        async for event in query_api._tail_events(redis, "no-such-run", _NeverDisconnected())
+        event async for event in query_api._tail_events(redis, "no-such-run", _NeverDisconnected())
     ]
     assert collected == []
 
@@ -384,8 +402,14 @@ async def test_run_producer_marks_error_and_reraises_on_cancel(redis, monkeypatc
 
     task = asyncio.create_task(
         query_api._run_producer(
-            redis=redis, engine=None, body=None, workspace_id="ws", user_id="u",
-            team_id=None, sql_visible=True, cid="cid-cancel",
+            redis=redis,
+            engine=None,
+            body=None,
+            workspace_id="ws",
+            user_id="u",
+            team_id=None,
+            sql_visible=True,
+            cid="cid-cancel",
         )
     )
     # Let the producer start and append its first event, then cancel it.

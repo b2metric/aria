@@ -5,6 +5,7 @@ caused ``litellm.acompletion`` (forced ``custom_llm_provider="openai"``) to fail
 client-side with "Missing credentials", silently degrading every answer to the
 fallback summary "Data retrieved successfully." with no suggestions.
 """
+
 from __future__ import annotations
 
 import json
@@ -53,9 +54,7 @@ async def test_empty_resolved_key_falls_back_to_a_usable_key():
 
 
 async def test_happy_path_returns_parsed_summary_and_three_suggestions():
-    payload = json.dumps(
-        {"summary": "Revenue grew.", "suggestions": ["a", "b", "c", "d"]}
-    )
+    payload = json.dumps({"summary": "Revenue grew.", "suggestions": ["a", "b", "c", "d"]})
     with patch(
         "backend.app.query.llm_insight.litellm.acompletion",
         new=AsyncMock(return_value=_completion(payload)),

@@ -241,9 +241,14 @@ async def query(
             async def _producer_with_cleanup():
                 try:
                     await _run_producer(
-                        redis=prod_redis, engine=prod_engine, body=body,
-                        workspace_id=workspace_id, user_id=user.user_id,
-                        team_id=user.team_id, sql_visible=sql_visible, cid=cid,
+                        redis=prod_redis,
+                        engine=prod_engine,
+                        body=body,
+                        workspace_id=workspace_id,
+                        user_id=user.user_id,
+                        team_id=user.team_id,
+                        sql_visible=sql_visible,
+                        cid=cid,
                     )
                 finally:
                     await prod_redis.aclose()

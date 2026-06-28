@@ -1,4 +1,5 @@
 """Unit tests for the durable run event log (Redis Streams)."""
+
 from __future__ import annotations
 
 import pytest
@@ -41,7 +42,9 @@ async def test_get_status_none_when_unknown(redis):
 
 async def test_append_and_read_events_replays_in_order(redis):
     await run_store.acquire_run(redis, "cid-1", "run-a")
-    await run_store.append_event(redis, "cid-1", {"event": "status", "data": '{"status":"thinking"}'})
+    await run_store.append_event(
+        redis, "cid-1", {"event": "status", "data": '{"status":"thinking"}'}
+    )
     await run_store.append_event(redis, "cid-1", {"event": "sql", "data": '{"sql":"SELECT 1"}'})
 
     events, last_id = await run_store.read_events(redis, "cid-1", "0", block_ms=0)
