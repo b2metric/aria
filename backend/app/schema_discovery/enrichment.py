@@ -775,14 +775,46 @@ def enrich_from_metadata_json(
     """
     import json as _json
 
+    from backend.app.schema_discovery.models import ColumnInfo, TableInfo
+    from backend.app.schema_discovery.vault_generator import generate_table_markdown
     from backend.app.services.vault_enum_sampler import inject_enum_block
-
-    base = enrich_from_json(json_path, vault_base_path, workspace_id)
 
     with open(json_path, encoding="utf-8") as f:
         data = _json.load(f)
 
     tables_dir = Path(vault_base_path) / workspace_id / "tables"
+    tables_dir.mkdir(parents=True, exist_ok=True)
+
+    # Pass 0: create vault files that don't exist yet, straight from the JSON
+    # columns. For an air-gapped customer DB the offline extractor JSON is the
+    # ONLY schema source — there is no live discovery to /vault/generate from.
+    # Existing files are left untouched (the enrich passes below update them).
+    db_type = data.get("db_type") or "oracle"
+    tables_created = 0
+    for t in data.get("tables", []):
+        cols = t.get("columns") or []
+        fp = _resolve_vault_file(tables_dir, t["table_name"])
+        if not cols or fp.exists():
+            continue
+        table = TableInfo(
+            name=t["table_name"],
+            schema_name=data.get("owner"),
+            row_count_estimate=t.get("row_count"),
+            columns=[
+                ColumnInfo(
+                    name=c["name"],
+                    data_type=c.get("data_type") or "",
+                    nullable=bool(c.get("nullable", True)),
+                    is_primary_key=bool(c.get("is_pk", False)),
+                )
+                for c in cols
+            ],
+        )
+        fp.write_text(generate_table_markdown(table, workspace_id, db_type), encoding="utf-8")
+        tables_created += 1
+
+    base = enrich_from_json(json_path, vault_base_path, workspace_id)
+
     enum_updates = 0
     for t in data.get("tables", []):
         enums = t.get("enum_values")
@@ -792,5 +824,6 @@ def enrich_from_metadata_json(
         if fp.exists() and inject_enum_block(fp, enums):
             enum_updates += 1
 
+    base["tables_created"] = tables_created
     base["enum_blocks_updated"] = enum_updates
     return base

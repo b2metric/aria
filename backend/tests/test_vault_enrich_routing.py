@@ -410,3 +410,62 @@ async def test_enrich_empty_resolved_key_falls_back_to_platform_key(tmp_path, mo
 
     # The call must have happened with the platform key, never an empty string.
     assert captured.get("api_key") == "sk-platform-key-123"
+
+
+# ── import-metadata: create vault from offline JSON (air-gapped, no live DB) ──
+# The offline extractor JSON must be able to CREATE the vault tables from scratch
+# (columns/types/pk), not only enrich existing ones — there is no live schema
+# discovery reachable for an air-gapped customer DB.
+
+
+def test_import_metadata_json_creates_missing_vault_files(tmp_path):
+    import json
+
+    from backend.app.schema_discovery.enrichment import enrich_from_metadata_json
+
+    ws = "ws-test"
+    (tmp_path / ws / "tables").mkdir(parents=True)
+    payload = {
+        "schema_version": "1.0",
+        "db_type": "oracle",
+        "owner": "STC",
+        "tables": [
+            {
+                "table_name": "FCT_DEMO",
+                "description": "Demo fact table.",
+                "row_count": 123,
+                "columns": [
+                    {
+                        "name": "ID",
+                        "data_type": "NUMBER",
+                        "nullable": False,
+                        "is_pk": True,
+                        "description": "Primary key",
+                    },
+                    {
+                        "name": "STATUS",
+                        "data_type": "VARCHAR2",
+                        "nullable": True,
+                        "is_pk": False,
+                        "description": "Row status",
+                    },
+                ],
+                "relationships": [],
+                "enum_values": {"STATUS": ["ACTIVE", "CLOSED"]},
+            }
+        ],
+        "errors": [],
+    }
+    jp = tmp_path / "meta.json"
+    jp.write_text(json.dumps(payload), encoding="utf-8")
+
+    res = enrich_from_metadata_json(jp, tmp_path, ws)
+
+    md_path = tmp_path / ws / "tables" / "FCT_DEMO.md"
+    assert md_path.exists()  # created from JSON columns, no prior vault
+    md = md_path.read_text(encoding="utf-8")
+    assert "ID" in md and "STATUS" in md  # column structure
+    assert "Demo fact table." in md  # description enriched onto the new file
+    assert "ACTIVE" in md and "CLOSED" in md  # enum block injected
+    assert res.get("enum_blocks_updated", 0) >= 1
+    assert _contract_errors(md_path) == []  # contract-clean
