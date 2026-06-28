@@ -10,8 +10,6 @@ enriched_at: '2026-06-16T11:28:21.652685+00:00'
 
 # FCT_PREP_USAGE_BIG
 
-**Description:** No description provided yet.
-
 ## Columns
 
 | Column | Type | Nullable | PK | Description |
@@ -37,7 +35,10 @@ enriched_at: '2026-06-16T11:28:21.652685+00:00'
 
 ## Keywords
 
+## Business Metadata
+
 ## Column Descriptions
+
 - **EXEC_DATE**: 
 - **CONTRNO**: 
 - **SUBNO**: 
@@ -56,5 +57,3 @@ enriched_at: '2026-06-16T11:28:21.652685+00:00'
 - **KPI_TYPE**: 
 - **KPI_NAME**: 
 - **KPI_VALUE**:
-## Business Metadata
-

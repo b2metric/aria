@@ -4,11 +4,12 @@ database: oracle
 workspace: stc-kuwait
 keywords: []
 generated_at: '2026-06-18T04:51:46.208554+00:00'
+description: Historical snapshot of the prepaid subscriber master (FCT_PREP_MASTER).
+  Each row captures the state of a line/contract as of a point in time, for
+  point-in-time / as-was analysis. Use FCT_PREP_MASTER for the current state.
 ---
 
 # FCT_PREP_MASTER_HIST
-
-**Description:** No description provided yet.
 
 ## Columns
 
@@ -119,7 +120,8 @@ generated_at: '2026-06-18T04:51:46.208554+00:00'
 
 ## Business Metadata
 
-### Column Descriptions
+## Column Descriptions
+
 - **EXEC_DATE**: 
 - **SNAPSHOT_DATE**: 
 - **CONTRNO**: 
@@ -219,4 +221,4 @@ generated_at: '2026-06-18T04:51:46.208554+00:00'
 - **L30D_ACTIVITY_SOURCES**: 
 - **L90D_ACTIVITY_SOURCES**: 
 - **L120D_ACTIVITY_SOURCES**: 
-- **ACTIVITY_STATUS**: 
+- **ACTIVITY_STATUS**:

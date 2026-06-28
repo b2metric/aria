@@ -1,0 +1,619 @@
+{
+  "keys": {
+    "SUBNO": {
+      "is_join_key": true,
+      "grain": "line (MSISDN)",
+      "note": "MSISDN/line; one CONTRNO has many SUBNO"
+    },
+    "CONTRNO": {
+      "is_join_key": true,
+      "grain": "customer / contract",
+      "note": "contract/customer; join facts to FCT_PREP_MASTER for demographics (REGION, NATIONALITY)"
+    },
+    "OFFER_ID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "PROD_OFFERING_ID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "PRODUCT_OFFER_NAME": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "EQUIPID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "PRODUCT_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "EXEC_DATE": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "SNAPSHOT_DATE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "APPDATE": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "NEXT_APPDATE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "PREPOST_PAID": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ID_NO": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ID_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ICC_NUMBER": {
+      "is_join_key": false,
+      "grain": "line (MSISDN)",
+      "note": null
+    },
+    "IMSI_NUMBER": {
+      "is_join_key": false,
+      "grain": "line (MSISDN)",
+      "note": null
+    },
+    "CONTRACT_CATEGORY": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "CONTRACT_CATEGORY_GROUP": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "CATEGORY_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NATIONALITY": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NATIONALITY_LANG": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NATIONALITY_GROUP": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NATIONALITY_SUB_GROUP": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "BS_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "BS_FLAG": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NUM_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "RETAILER": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "REGION": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "MNP_SUB": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "CREDIT_RISK_PROFILE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "PREPAID_STATE_GROUP": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "MAIN_PLAN_PROD_OFFERING_ID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "MAIN_PLAN_NAME": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "MAIN_PLAN_EQUIPID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "MAIN_PLAN_RENTAL": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "MAIN_PLAN_START_DATE": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "PREP_BAL_AT_MONTH_START": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "PREP_BAL_AT_PREV_MONTH_START": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "PREP_BAL_AS_OF_TODAY": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_ACTIVITY_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_DATA_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_VOICE_OUTGOING_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_VOICE_INCOMING_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_SMS_OUTGOING_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_RECHARGE_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_ROAMING_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_REVENUE_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_SGWCDR_ACTIVITY_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_PAID_SUBSCRIPTION_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_PR_ID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_OFFER_ID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_OFFER_NAME": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_VALIDIY": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_PRICE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_ACTV_CHANNEL": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_TRIGGERMODE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_TRANSACTION_TYP": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_PROV_DATE": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_CYCLEENDTIME": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_ELAPSECYCLES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_TERMINATION_DT": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_DATA_GPRS_LOCAL": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_DATA_ROAMING_MB": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_FREE_DATA_MB": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_VOICE_LOCAL_ONN": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_VOICE_LOCAL_OFF": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_VOICE_ALL_NET_M": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_VOICE_INTERNATI": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_FREE_ONNET_DURA": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_FREE_OFFNET_DUR": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_FREE_INTERCALL_": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_ROAMING_VOICE_M": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_SMS_LOCAL_CNT": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_SMS_ALL_NET_CNT": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_SMS_INTL_CNT": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LT_LAST_BUNDLE_ROAMING_SMS_CNT": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_ADDONS": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_OFFERS": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_FREEBIES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_DISCOUNTOFFERS": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_VASSERVICES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_ROAMINGBUNDLES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_BUNDLES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_ROAMINGPAYGO": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_ROAMING_ACCESS": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTV_ROAMINGLANDINGPAGE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L1D_IS_REVENUE_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L7D_IS_REVENUE_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L15D_IS_REVENUE_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L30D_IS_REVENUE_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L90D_IS_REVENUE_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L120D_IS_REVENUE_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L1D_IS_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L7D_IS_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L15D_IS_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L30D_IS_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L90D_IS_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L120D_IS_ACTIVE_BASE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L1D_ACTIVITY_SOURCES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L7D_ACTIVITY_SOURCES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L15D_ACTIVITY_SOURCES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L30D_ACTIVITY_SOURCES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L90D_ACTIVITY_SOURCES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "L120D_ACTIVITY_SOURCES": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "ACTIVITY_STATUS": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "SUBSCRIBERID": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "LOGDATE": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "BILLAMOUNT": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "CDR_SERIALNO": {
+      "is_join_key": false,
+      "grain": "usage transaction",
+      "note": null
+    },
+    "PLAN_ID": {
+      "is_join_key": false,
+      "grain": "product / plan",
+      "note": null
+    },
+    "CALLTYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "CALLINGCELLID": {
+      "is_join_key": false,
+      "grain": "cell / network element",
+      "note": null
+    },
+    "CALLEDCELLID": {
+      "is_join_key": false,
+      "grain": "cell / network element",
+      "note": null
+    },
+    "CDR_SERIALNO_HASH": {
+      "is_join_key": false,
+      "grain": "usage transaction",
+      "note": null
+    },
+    "TRANSDATE": {
+      "is_join_key": false,
+      "grain": "calendar date",
+      "note": null
+    },
+    "CATEGORY": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NETWORK_DIRECTION": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "OPERATOR_NAME": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "NETWORK_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "BILL_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "KPI_TYPE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "KPI_NAME": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    },
+    "KPI_VALUE": {
+      "is_join_key": false,
+      "grain": "attribute (not a join key)",
+      "note": null
+    }
+  }
+}

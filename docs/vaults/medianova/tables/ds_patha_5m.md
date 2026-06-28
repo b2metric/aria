@@ -47,6 +47,15 @@ enriched_at: '2026-06-19T09:35:41.380338+00:00'
 ## Keywords
 
 acquisition, bandwidth, channel, country, data, date, demographic, geography, internet, lifecycle, nationality, state, status, temporal, time, touchpoint, usage
+## Business Metadata
+
+**Business Name:** CDN İçerik ve İzleyici — 5 Dakikalık Özet
+**Description:** İçerik yolu ve izleyiciye göre anahtarlanmış 5 dakikalık toplam, org/sunucu/kaynak/sunucuadı/önbellekdurumu/durum/yönlendiren/ülke/uri_yolu/cihaz/tarayıcı/işletimsistemi/uygulama'ya göre gruplandırılmıştır. İçerik (URI), izleyici (cihaz/tarayıcı/işletim sistemi) ve yönlendiren analitiği için tablo. ~498.5k satır.
+**Data Domain:** CDN İçerik ve İzleyici
+**Business Owner:** Analytics / Product
+**Update Frequency:** 5-minute batches
+**Notes:** 'Bayta göre en iyi URL'ler/kanallar', cihaz/tarayıcı/işletim sistemi dağılımları ve yönlendiren analizi için kullanın. Manifestler (.mpd) = yüksek istek sayısı, düşük bayt; medya (.m3u8/segmentler) = yüksek bayt.
+
 ## Column Descriptions
 
 - **START_DATE**: Start of the 5-minute bucket.
@@ -66,37 +75,6 @@ acquisition, bandwidth, channel, country, data, date, demographic, geography, in
 - **RESOURCE_NAME**: CDN property/resource.
 - **SERVER_ROLE**: Cache tier (Node/Mcache/Feda).
 
-### Manual Relationships
-
-- `RESOURCE_NAME` → `ALL_RAW.RESOURCE_NAME` (lookup) — Aggregated from the raw request log.
-## Business Metadata
-
-**Business Name:** CDN İçerik ve İzleyici — 5 Dakikalık Özet
-**Description:** İçerik yolu ve izleyiciye göre anahtarlanmış 5 dakikalık toplam, org/sunucu/kaynak/sunucuadı/önbellekdurumu/durum/yönlendiren/ülke/uri_yolu/cihaz/tarayıcı/işletimsistemi/uygulama'ya göre gruplandırılmıştır. İçerik (URI), izleyici (cihaz/tarayıcı/işletim sistemi) ve yönlendiren analitiği için tablo. ~498.5k satır.
-**Data Domain:** CDN İçerik ve İzleyici
-**Business Owner:** Analytics / Product
-**Update Frequency:** 5-minute batches
-**Notes:** 'Bayta göre en iyi URL'ler/kanallar', cihaz/tarayıcı/işletim sistemi dağılımları ve yönlendiren analizi için kullanın. Manifestler (.mpd) = yüksek istek sayısı, düşük bayt; medya (.m3u8/segmentler) = yüksek bayt.
-
-### Column Descriptions
-
-- **START_DATE**: 5 dakikalık kovanın başlangıcı.
-- **URI_PATH**: İstenen içerik yolu (kanal manifestleri/oynatma listeleri/segmentler). En iyi içerik analizi için buna göre gruplandırın.
-- **REQUEST_NUMBER**: Kovadaki istekler — İstek metriği.
-- **BYTES_SENT**: Teslim edilen toplam bayt — Bant genişliği.
-- **BODY_BYTES_SENT**: Yanıt gövde baytları (yük).
-- **AVG_REQUEST_TIME**: Ortalama istek gecikmesi (saniye).
-- **DEVICE_TYPE**: İzleyici cihazı: Desktop, Mobil, Tablet (kullanıcı aracısından türetilmiştir).
-- **BROWSER_FAMILY**: İzleyici tarayıcı ailesi (Chrome, Safari, AppleCoreMedia, ...).
-- **OS_FAMILY**: İzleyici işletim sistemi ailesi (Android, iOS, Windows, MacOS, ...). Android en büyük.
-- **APP_FAMILY**: Uygulama ailesi (Browser, AppleCoreMedia).
-- **HTTP_REFERRER**: Yönlendiren site/uygulama (örn. app.b2metric.com).
-- **PROXY_CACHE_STATUS**: Önbellek sonucu (HIT/MISS/EXPIRED/boş).
-- **STATUS**: HTTP durum kodu.
-- **COUNTRY_CODE**: İstemci ülkesi (ISO-2).
-- **RESOURCE_NAME**: CDN özelliği/kaynağı.
-- **SERVER_ROLE**: Önbellek katmanı (Node/Mcache/Feda).
-
-### Manual Relationships
+## Relationships
 
 - `RESOURCE_NAME` → `ALL_RAW.RESOURCE_NAME` (lookup) — Aggregated from the raw request log.
