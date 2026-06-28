@@ -108,6 +108,15 @@ class CustomerLLMConfig(Base, UUIDMixin, TimestampMixin):
     extra_params: Mapped[dict | None] = mapped_column(
         JSONB, default=None, comment="Extra provider params as JSON"
     )
+    operation_models: Mapped[dict | None] = mapped_column(
+        JSONB,
+        default=None,
+        comment=(
+            "Per-operation model routing: "
+            "{operation: {model, temperature?, max_tokens?}} where operation is one of "
+            "sql_generation/insight/suggestion/chart. Absent → inherit model_name."
+        ),
+    )
 
     # relationships
     customer: Mapped["Customer"] = relationship(back_populates="llm_configs")

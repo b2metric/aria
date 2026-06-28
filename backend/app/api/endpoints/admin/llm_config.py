@@ -23,6 +23,9 @@ class LLMConfigModel(BaseModel):
     model_name: str
     deployment_or_version: str | None = None
     enabled: bool = True
+    # Per-operation model routing: {operation: {model, temperature?, max_tokens?}}
+    # operation ∈ sql_generation/insight/suggestion/chart. Absent → inherit model_name.
+    operation_models: dict[str, Any] | None = None
 
 
 class LLMConfigResponse(BaseModel):
@@ -32,6 +35,7 @@ class LLMConfigResponse(BaseModel):
     model_name: str
     deployment_or_version: str | None = None
     enabled: bool
+    operation_models: dict[str, Any] | None = None
 
 
 @router.get("", response_model=LLMConfigResponse)
@@ -64,6 +68,7 @@ async def get_llm_config(current_user: Any = Depends(get_current_user)):
                         model_name=llm_config.model_name,
                         deployment_or_version=llm_config.deployment_or_version,
                         enabled=llm_config.enabled,
+                        operation_models=llm_config.operation_models,
                     )
     except Exception as exc:
         log.warning(f"Failed to fetch LLM config: {exc}")
@@ -76,6 +81,7 @@ async def get_llm_config(current_user: Any = Depends(get_current_user)):
         model_name="gpt-4",
         deployment_or_version=None,
         enabled=False,
+        operation_models=None,
     )
 
 
@@ -116,6 +122,8 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                 llm_config.model_name = body.model_name
                 llm_config.deployment_or_version = body.deployment_or_version
                 llm_config.enabled = body.enabled
+                if body.operation_models is not None:
+                    llm_config.operation_models = body.operation_models or None
             else:
                 llm_config = CustomerLLMConfig(
                     customer_id=customer.id,
@@ -130,6 +138,7 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                     model_name=body.model_name,
                     deployment_or_version=body.deployment_or_version,
                     enabled=body.enabled,
+                    operation_models=body.operation_models or None,
                 )
                 session.add(llm_config)
 
@@ -144,6 +153,7 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                 model_name=llm_config.model_name,
                 deployment_or_version=llm_config.deployment_or_version,
                 enabled=llm_config.enabled,
+                operation_models=llm_config.operation_models,
             )
     except Exception as exc:
         log.error(f"Failed to update LLM config: {exc}")
