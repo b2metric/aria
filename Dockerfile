@@ -12,8 +12,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies (cache-friendly layer)
-RUN uv sync --no-dev --no-editable
+# Install dependencies (cache-friendly layer). --extra nlp pulls spaCy + fastembed
+# for mem0 hybrid retrieval (kept out of the mandatory deps so `uv sync` works on
+# cp314 hosts where spaCy has no wheel).
+RUN uv sync --no-dev --no-editable --extra nlp
 
 # spaCy lemmatizer model for mem0 2.x hybrid retrieval. The model is not on PyPI,
 # so install the wheel matching the locked spaCy 3.8.x directly into the venv

@@ -42,11 +42,11 @@ dependencies = [
 
     # ── Vector DB ──
     "qdrant-client>=1.13,<2",
-    # mem0[nlp] pulls spaCy for lemmatization; fastembed provides the BM25 sparse
-    # encoder. Together they enable mem0 2.x's hybrid (semantic + keyword) retrieval
-    # over the Qdrant store and silence the "spaCy/fastembed not installed" warnings.
-    "mem0ai[nlp]>=2.0.1,<3",  # Memory/context recall over Qdrant + LiteLLM (>=2.0.1: CVE-2026-7597)
-    "fastembed>=0.3.1,<1",    # BM25 sparse encoder for mem0 hybrid keyword search
+    "mem0ai>=2.0.1,<3",     # Memory/context recall over Qdrant + LiteLLM (>=2.0.1: CVE-2026-7597)
+    # NOTE: spaCy + fastembed (mem0 hybrid retrieval) live in the optional `nlp`
+    # extra, NOT here — spaCy has no cp314 wheel, so making them mandatory breaks
+    # `uv sync` on Python 3.14 hosts. The Docker image installs them via --extra nlp;
+    # without them mem0 degrades gracefully to pure semantic search.
 
     # ── Object Storage ──
     "minio>=7.2,<8",
@@ -98,6 +98,14 @@ dev = [
 chart-export = [
     # Kaleido: static PNG export for Plotly charts (cross-platform wheels in 1.x)
     "kaleido>=1,<2",
+]
+nlp = [
+    # mem0 2.x hybrid (semantic + keyword) retrieval over Qdrant. Optional because
+    # spaCy ships no cp314 wheel — keep it OUT of the mandatory deps so `uv sync`
+    # works on 3.14 hosts. The Docker image installs this extra (--extra nlp) +
+    # the en_core_web_sm model; absent, mem0 falls back to pure semantic search.
+    "spacy>=3.7,<4",        # lemmatization for keyword matching
+    "fastembed>=0.3.1,<1",  # BM25 sparse encoder
 ]
 
 # ── Build System ────────────────────────────────────────────────────────
