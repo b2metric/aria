@@ -1,0 +1,80 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - banner [ref=e52]:
+      - generic [ref=e53]:
+        - link "B2Metric Cockpit" [ref=e54] [cursor=pointer]:
+          - /url: /
+          - img [ref=e56]
+          - generic [ref=e63]: B2Metric Cockpit
+        - combobox "Select project" [ref=e65]:
+          - img [ref=e66]
+          - generic: B2Metric ARIA
+          - img [ref=e68]
+      - generic [ref=e70]:
+        - generic [ref=e71]:
+          - generic [ref=e72]: software
+          - generic [ref=e73]: ·
+          - generic [ref=e74]: admin
+        - button "Switch to light theme" [ref=e75]:
+          - img [ref=e76]
+          - img [ref=e82]
+        - generic "admin@cockpit.local" [ref=e84]: AD
+        - button "Sign out" [ref=e85]:
+          - img [ref=e86]
+    - main [ref=e3]:
+      - generic [ref=e89]:
+        - complementary [ref=e90]:
+          - navigation [ref=e91]:
+            - paragraph [ref=e92]: Workspace
+            - link "Run pipeline" [ref=e93] [cursor=pointer]:
+              - /url: /b2metric-aria/pipelines/business-gtm/run
+              - img [ref=e94]
+              - text: Run pipeline
+            - link "Runs" [ref=e96] [cursor=pointer]:
+              - /url: /b2metric-aria/runs
+              - img [ref=e97]
+              - text: Runs
+            - generic [ref=e100]:
+              - img [ref=e101]
+              - generic [ref=e104]: Credentials
+              - generic [ref=e105]: Soon
+            - generic [ref=e106]:
+              - img [ref=e107]
+              - generic [ref=e111]: Flow board
+              - generic [ref=e112]: Soon
+          - generic [ref=e113]:
+            - generic [ref=e114]:
+              - img [ref=e115]
+              - text: Teams
+            - paragraph [ref=e120]: You are operating in the software team.
+        - generic [ref=e122]:
+          - generic [ref=e123]:
+            - generic [ref=e124]:
+              - heading "Runs" [level=1] [ref=e125]:
+                - img [ref=e127]
+                - text: Runs
+              - paragraph [ref=e130]: Pipeline runs for b2metric-aria, newest first.
+            - generic [ref=e131]:
+              - button "Refresh" [ref=e132]:
+                - img
+                - text: Refresh
+              - link "Run pipeline" [ref=e133] [cursor=pointer]:
+                - /url: /b2metric-aria/pipelines/business-gtm/run
+                - img
+                - text: Run pipeline
+          - table [ref=e136]:
+            - rowgroup [ref=e137]:
+              - row "Run ID Pipeline Status Created" [ref=e138]:
+                - columnheader "Run ID" [ref=e139]
+                - columnheader "Pipeline" [ref=e140]
+                - columnheader "Status" [ref=e141]
+                - columnheader "Created" [ref=e142]
+                - columnheader [ref=e143]
+            - rowgroup [ref=e144]:
+              - row "No runs yet. Start one with “Run pipeline”." [ref=e145]:
+                - cell "No runs yet. Start one with “Run pipeline”." [ref=e146]:
+                  - img [ref=e147]
+                  - paragraph [ref=e150]: No runs yet. Start one with “Run pipeline”.
+  - button "Open Next.js Dev Tools" [ref=e47] [cursor=pointer]:
+    - img [ref=e48]
+  - alert [ref=e41]

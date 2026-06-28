@@ -236,6 +236,65 @@ export async function fetchConversation(conversationId: string, tokenOverride?: 
 }
 
 /**
+ * Get the run status for a conversation: "running" | "complete" | "error" | null.
+ * Used on load to decide whether to resume the live stream or render history.
+ */
+export async function getRunStatus(
+  conversationId: string,
+  tokenOverride?: string,
+): Promise<{ status: string | null }> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/query/${conversationId}/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) return { status: null };
+  return res.json();
+}
+
+/**
+ * Re-attach to an in-flight run's SSE stream (GET). Mirrors streamQuery's
+ * reader/abort contract so the same SSE-consume loop can drive it.
+ */
+export function streamResume(
+  conversationId: string,
+  token: string = "",
+): { reader: ReadableStreamDefaultReader<Uint8Array>; abort: () => void } {
+  const controller = new AbortController();
+  const responsePromise = fetch(`${API_BASE}/api/query/${conversationId}/stream`, {
+    method: "GET",
+    headers: { Authorization: `Bearer ${token}` },
+    signal: controller.signal,
+    credentials: "omit",
+  });
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        const response = await responsePromise;
+        if (!response.ok || !response.body) {
+          controller.error(new Error(`HTTP ${response.status}`));
+          return;
+        }
+        const reader = response.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            controller.close();
+            break;
+          }
+          controller.enqueue(value);
+        }
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+  });
+
+  return { reader: stream.getReader(), abort: () => controller.abort() };
+}
+
+/**
  * Delete a conversation.
  */
 export async function deleteConversation(conversationId: string, tokenOverride?: string): Promise<void> {

@@ -30,3 +30,23 @@ def _pin_keycloak_issuer(monkeypatch: pytest.MonkeyPatch):
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_sse_app_status():
+    """Reset sse_starlette's process-global shutdown Event between tests.
+
+    ``EventSourceResponse`` lazily binds a module-global ``anyio.Event`` to the
+    running loop the first time it streams. TestClient spins up a fresh loop per
+    request, so a leftover Event from an earlier test is bound to a dead loop and
+    a later SSE test fails with "bound to a different event loop". Clearing it to
+    ``None`` makes sse_starlette recreate the Event on the current loop.
+    """
+    try:
+        from sse_starlette.sse import AppStatus
+
+        AppStatus.should_exit_event = None
+        yield
+        AppStatus.should_exit_event = None
+    except ImportError:  # pragma: no cover - sse_starlette always installed
+        yield

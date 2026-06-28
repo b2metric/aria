@@ -8,8 +8,10 @@ DELETE /api/conversations/{id} — delete a conversation.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request, status
 from redis.asyncio import Redis
@@ -18,11 +20,12 @@ from sse_starlette.sse import EventSourceResponse
 
 from backend.app.auth.dependencies import CurrentUser, WorkspaceID
 from backend.app.core.config import get_settings
-from backend.app.query import QueryRequest
+from backend.app.query import Conversation, QueryRequest, run_store
 from backend.app.query.conversation import (
     delete_conversation,
     get_conversation,
     list_conversations,
+    save_conversation,
 )
 from backend.app.query.pipeline import process_query
 from backend.app.query.sql_visibility import resolve_effective_sql_visibility
@@ -91,6 +94,85 @@ async def _resolve_sql_visible(engine: AsyncEngine, user: CurrentUser) -> bool:
     return resolve_effective_sql_visibility(user.role, sql_visibility=override)
 
 
+# ── Durable run: producer + tailer ────────────────────────────────────────
+
+# Hold strong references to detached producer tasks so they are not GC'd
+# mid-flight (asyncio only keeps weak refs to bare tasks).
+_PRODUCERS: set[asyncio.Task] = set()
+
+
+async def _run_producer(
+    *,
+    redis: Redis,
+    engine: AsyncEngine,
+    body: QueryRequest,
+    workspace_id: str,
+    user_id: str,
+    team_id: str | None,
+    sql_visible: bool,
+    cid: str,
+) -> None:
+    """Drive the (already SQL-visibility-gated) pipeline into the run stream.
+
+    Runs detached from the HTTP request, so a client disconnect does not kill
+    generation. Every event is appended to ``aria:run:{cid}``; the run is then
+    marked terminal and its lock released.
+    """
+    try:
+        async for event in process_query(
+            redis=redis,
+            engine=engine,
+            request=body,
+            workspace_id=workspace_id,
+            user_id=user_id,
+            team_id=team_id,
+            sql_visible=sql_visible,
+        ):
+            await run_store.append_event(redis, cid, event)
+        await run_store.finish_run(redis, cid, run_store.COMPLETE)
+    except asyncio.CancelledError:
+        # Deploy/shutdown cancelled the detached task: mark the run terminal so
+        # it is not left RUNNING until the lock TTL expires, then re-raise so
+        # cancellation propagates correctly.
+        await run_store.finish_run(redis, cid, run_store.ERROR)
+        raise
+    except Exception as exc:  # noqa: BLE001 — surface as a terminal error event
+        logger.exception("Producer failed for conversation %s", cid)
+        await run_store.append_event(
+            redis, cid, {"event": "error", "data": json.dumps({"error": str(exc)})}
+        )
+        await run_store.finish_run(redis, cid, run_store.ERROR)
+
+
+async def _tail_events(redis: Redis, cid: str, request: Request):
+    """Yield SSE events from the run stream until the run is terminal.
+
+    Replays from the start (id ``0``) so a reconnecting client sees the whole
+    in-flight turn, then live-tails. Stops on a ``done``/``error`` event, or
+    when the run record is terminal and the stream is drained.
+    """
+    last_id = "0"
+    while True:
+        if await request.is_disconnected():
+            return
+        events, last_id = await run_store.read_events(redis, cid, last_id, block_ms=15000)
+        for event in events:
+            yield event
+            if event["event"] in ("done", "error"):
+                return
+        if not events:
+            status = await run_store.get_status(redis, cid)
+            # None ⇒ no run record (unknown / expired cid): there is nothing to
+            # tail, so terminate instead of looping forever.
+            if status in (run_store.COMPLETE, run_store.ERROR, None):
+                return
+            # Yield control so the detached producer task gets scheduled. Real
+            # Redis XREAD blocks server-side and already yields; this only fires
+            # after a block timeout / empty read (and under fakeredis, whose
+            # XREAD does not truly block) so it is harmless in production.
+            await asyncio.sleep(0)
+
+
 # ── Query endpoint (SSE) ──────────────────────────────────────────────────
 
 
@@ -128,30 +210,57 @@ async def query(
 
     engine = await _get_engine()
 
-    # Resolve the per-user SQL-visibility override (DB) over the role default.
-    sql_visible = await _resolve_sql_visible(engine, user)
+    # Any failure during setup must release the request's redis+engine: the
+    # event_generator's finally only runs if we reach the return below.
+    try:
+        # Resolve the per-user SQL-visibility override (DB) over the role default.
+        sql_visible = await _resolve_sql_visible(engine, user)
+
+        # Ensure we have a conversation id BEFORE spawning the producer, so the
+        # run stream/lock can be keyed on it. A brand-new conversation is created
+        # empty here; process_query() then loads it and appends the user message
+        # (no dup).
+        cid = body.conversation_id
+        if not cid:
+            conv = Conversation(workspace_id=workspace_id, user_id=user.user_id)
+            await save_conversation(redis, conv)
+            cid = conv.id
+            body.conversation_id = cid
+
+        # One run per conversation. If a run is already active (e.g. a duplicate
+        # submit / refresh re-POST), do NOT start a second generation — just tail.
+        run_id = uuid.uuid4().hex
+        started = await run_store.acquire_run(redis, cid, run_id)
+
+        if started:
+            # Producer owns its OWN redis+engine: the request's connections close
+            # when the tailer ends, but generation must outlive the request.
+            prod_redis = await _get_redis()
+            prod_engine = await _get_engine()
+
+            async def _producer_with_cleanup():
+                try:
+                    await _run_producer(
+                        redis=prod_redis, engine=prod_engine, body=body,
+                        workspace_id=workspace_id, user_id=user.user_id,
+                        team_id=user.team_id, sql_visible=sql_visible, cid=cid,
+                    )
+                finally:
+                    await prod_redis.aclose()
+                    await prod_engine.dispose()
+
+            task = asyncio.create_task(_producer_with_cleanup())
+            _PRODUCERS.add(task)
+            task.add_done_callback(_PRODUCERS.discard)
+    except Exception:
+        await redis.aclose()
+        await engine.dispose()
+        raise
 
     async def event_generator():
         try:
-            async for event in process_query(
-                redis=redis,
-                engine=engine,
-                request=body,
-                workspace_id=workspace_id,
-                user_id=user.user_id,
-                team_id=user.team_id,
-                sql_visible=sql_visible,
-            ):
-                if await request.is_disconnected():
-                    logger.info("Client disconnected during SSE stream")
-                    break
+            async for event in _tail_events(redis, cid, request):
                 yield event
-        except Exception as exc:
-            logger.exception("Unhandled error in query pipeline")
-            yield {
-                "event": "error",
-                "data": json.dumps({"error": str(exc)}),
-            }
         finally:
             await redis.aclose()
             await engine.dispose()
@@ -204,6 +313,70 @@ async def get_conversation_detail(
         return conv.model_dump()
     finally:
         await redis.aclose()
+
+
+@router.get("/query/{conversation_id}/status", summary="Run status for a conversation")
+async def get_run_status(
+    conversation_id: str,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+) -> dict:
+    """Return {"status": "running"|"complete"|"error"|null}.
+
+    The frontend uses this on load to decide: resume the live stream
+    (running) or just render persisted history (complete/null).
+    """
+    redis = await _get_redis()
+    try:
+        # Ownership gate: only the conversation owner may read its run state.
+        # Return 404 (not 403) on mismatch so we never confirm the cid exists.
+        conv = await get_conversation(redis, workspace_id, conversation_id)
+        if conv is None or conv.user_id != user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+        return {"status": await run_store.get_status(redis, conversation_id)}
+    finally:
+        await redis.aclose()
+
+
+@router.get("/query/{conversation_id}/stream", summary="Resume/tail a run's SSE stream")
+async def resume_query_stream(
+    conversation_id: str,
+    request: Request,
+    workspace_id: WorkspaceID,
+    user: CurrentUser,
+) -> EventSourceResponse:
+    """Re-attach to an in-flight (or just-finished) run and replay its events.
+
+    Used by the frontend after a page refresh: it replays everything from the
+    start of the run, then live-tails until the terminal event.
+    """
+    redis = await _get_redis()
+
+    # Ownership gate: only the conversation owner may resume its stream. Return
+    # 404 (not 403) on mismatch so we never confirm the cid exists, and never
+    # replay gated SQL events to a non-owner.
+    try:
+        conv = await get_conversation(redis, workspace_id, conversation_id)
+        if conv is None or conv.user_id != user.user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found",
+            )
+    except BaseException:
+        await redis.aclose()
+        raise
+
+    async def event_generator():
+        try:
+            async for event in _tail_events(redis, conversation_id, request):
+                yield event
+        finally:
+            await redis.aclose()
+
+    return EventSourceResponse(event_generator())
 
 
 @router.delete(

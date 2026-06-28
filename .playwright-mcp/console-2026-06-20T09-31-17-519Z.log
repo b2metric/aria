@@ -1,0 +1,49 @@
+[     354ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[     378ms] [LOG] [HMR] connected @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[  128973ms] [LOG] [fetchConversations] Fetching from: http://api.aria.localhost/api/conversations with token: eyJhbGciOi... @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[  128975ms] [LOG] [fetchConversations] Fetching from: http://api.aria.localhost/api/conversations with token: eyJhbGciOi... @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446756ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[  446757ms] A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+[ 2288229ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2288286ms] [LOG] [Fast Refresh] done in 158ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2292962ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2292980ms] [LOG] [Fast Refresh] done in 31ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2302753ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2302778ms] [LOG] [Fast Refresh] done in 32ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2308137ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2308163ms] [LOG] [Fast Refresh] done in 39ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2313129ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2313152ms] [LOG] [Fast Refresh] done in 28ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2319692ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2319716ms] [LOG] [Fast Refresh] done in 45ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2325021ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2325045ms] [LOG] [Fast Refresh] done in 27ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2334582ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2334609ms] [LOG] [Fast Refresh] done in 23ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2342963ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2342989ms] [LOG] [Fast Refresh] done in 24ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2348275ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2348299ms] [LOG] [Fast Refresh] done in 21ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2359274ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2359374ms] [LOG] [Fast Refresh] done in 177ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2359485ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2359524ms] [LOG] [Fast Refresh] done in 140ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2475475ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 2475518ms] [LOG] [Fast Refresh] done in 143ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 4765740ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 4765808ms] [LOG] [Fast Refresh] done in 171ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 4774230ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 4774274ms] [LOG] [Fast Refresh] done in 149ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 5176660ms] [LOG] [Fast Refresh] rebuilding @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
+[ 5176669ms] [LOG] [Fast Refresh] done in 110ms @ http://aria.localhost/_next/static/chunks/node_modules_next_dist_1ybzpk2._.js:2477
