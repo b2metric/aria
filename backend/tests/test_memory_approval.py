@@ -52,7 +52,7 @@ def test_set_memory_status_updates_metadata() -> None:
     ok = svc.set_memory_status("mem-123", "approved", workspace_id="ws1", team_id="t1")
 
     assert ok is True
-    mem.get_all.assert_called_once_with(user_id="ws1:team:t1")
+    mem.get_all.assert_called_once_with(filters={"user_id": "ws1:team:t1"})
     # status change = delete + re-add (Mem0 2.x update()/get() by id unreliable)
     mem.delete.assert_called_once_with("mem-123")
     mem.add.assert_called_once()

@@ -406,9 +406,7 @@ async def test_enrich_empty_resolved_key_falls_back_to_platform_key(tmp_path, mo
     )
 
     with patch("litellm.acompletion", new=AsyncMock(side_effect=_fake_acompletion)):
-        await mod.generate_table_enrichment(
-            workspace_id="ws-test", table_name="FCT_X", llm=llm
-        )
+        await mod.generate_table_enrichment(workspace_id="ws-test", table_name="FCT_X", llm=llm)
 
     # The call must have happened with the platform key, never an empty string.
     assert captured.get("api_key") == "sk-platform-key-123"

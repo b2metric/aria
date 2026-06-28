@@ -244,11 +244,13 @@ class MemoryService:
         all_memories = []
 
         try:
-            # Search user memories (Mem0 0.1.x API: user_id is a direct parameter)
+            # Search user memories. mem0 2.x: the scope goes inside ``filters=``
+            # (a top-level ``user_id=`` raises "not supported in search()") and the
+            # cap is ``top_k`` rather than ``limit``.
             user_results = self._memory.search(
                 query=question,
-                user_id=f"{workspace_id}:{user_id}",
-                limit=limit,
+                filters={"user_id": f"{workspace_id}:{user_id}"},
+                top_k=limit,
             )
             if user_results and "results" in user_results:
                 user_prefs = user_results["results"]
@@ -275,8 +277,8 @@ class MemoryService:
             if team_id:
                 team_results = self._memory.search(
                     query=question,
-                    user_id=f"{workspace_id}:team:{team_id}",
-                    limit=limit,
+                    filters={"user_id": f"{workspace_id}:team:{team_id}"},
+                    top_k=limit,
                 )
                 if team_results and "results" in team_results:
                     # Only approved conventions feed the LLM context. Entries with
@@ -292,8 +294,8 @@ class MemoryService:
             # Search query cache (workspace-wide)
             cache_results = self._memory.search(
                 query=question,
-                user_id=f"{workspace_id}:query_cache",
-                limit=limit,
+                filters={"user_id": f"{workspace_id}:query_cache"},
+                top_k=limit,
             )
             if cache_results and "results" in cache_results:
                 similar_queries = cache_results["results"]
@@ -335,7 +337,7 @@ class MemoryService:
         if not self._memory:
             return []
         try:
-            result = self._memory.get_all(user_id=f"{workspace_id}:{user_id}")
+            result = self._memory.get_all(filters={"user_id": f"{workspace_id}:{user_id}"})
             rows = result.get("results", []) if isinstance(result, dict) else []
             # Rank by relevance (recency + usage) so the freshest / most-used
             # standing directives win the prompt-context slice (Sprint 15 Task 5).
@@ -497,7 +499,7 @@ class MemoryService:
             else:
                 mem_user_id = f"{workspace_id}:{user_id}"
 
-            result = self._memory.get_all(user_id=mem_user_id)
+            result = self._memory.get_all(filters={"user_id": mem_user_id})
             return result.get("results", []) if isinstance(result, dict) else []
         except Exception as e:
             logger.warning("Failed to get memories: %s", e)
@@ -558,7 +560,7 @@ class MemoryService:
             return False
         try:
             mem_user_id = f"{workspace_id}:team:{team_id}"
-            result = self._memory.get_all(user_id=mem_user_id)
+            result = self._memory.get_all(filters={"user_id": mem_user_id})
             rows = result.get("results", []) if isinstance(result, dict) else []
             entry = next((r for r in rows if r.get("id") == memory_id), None)
             if not entry:
@@ -636,13 +638,13 @@ class MemoryService:
             recent_cutoff = now - timedelta(days=7)
 
             # Get cache memories
-            cache_mems = self._memory.get_all(user_id=f"{workspace_id}:query_cache")
+            cache_mems = self._memory.get_all(filters={"user_id": f"{workspace_id}:query_cache"})
             cache_results = cache_mems.get("results", []) if isinstance(cache_mems, dict) else []
             stats["by_type"]["cache"] = len(cache_results)
             stats["total"] += len(cache_results)
 
             # Get team memories
-            team_mems = self._memory.get_all(user_id=f"{workspace_id}:team:default")
+            team_mems = self._memory.get_all(filters={"user_id": f"{workspace_id}:team:default"})
             team_results = team_mems.get("results", []) if isinstance(team_mems, dict) else []
             stats["by_type"]["team"] = len(team_results)
             stats["total"] += len(team_results)
@@ -652,8 +654,8 @@ class MemoryService:
             try:
                 user_mems = self._memory.search(
                     query="user preference",
-                    user_id=f"{workspace_id}:user",
-                    limit=100,
+                    filters={"user_id": f"{workspace_id}:user"},
+                    top_k=100,
                 )
                 user_results = user_mems.get("results", []) if isinstance(user_mems, dict) else []
                 stats["by_type"]["user"] = len(user_results)

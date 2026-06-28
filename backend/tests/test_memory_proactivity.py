@@ -33,7 +33,7 @@ def test_get_user_preferences_returns_all_user_memories() -> None:
     prefs = svc.get_user_preferences(workspace_id="ws1", user_id="u1")
 
     assert [p["id"] for p in prefs] == ["p1", "p2"]
-    mem.get_all.assert_called_once_with(user_id="ws1:u1")
+    mem.get_all.assert_called_once_with(filters={"user_id": "ws1:u1"})
 
 
 def test_lookup_proactively_injects_standing_preferences() -> None:
