@@ -15,6 +15,12 @@ COPY pyproject.toml uv.lock ./
 # Install dependencies (cache-friendly layer)
 RUN uv sync --no-dev --no-editable
 
+# spaCy lemmatizer model for mem0 2.x hybrid retrieval. The model is not on PyPI,
+# so install the wheel matching the locked spaCy 3.8.x directly into the venv
+# (avoids a fragile runtime `spacy download`). Lands in /app/.venv → copied to runtime.
+RUN uv pip install --python /app/.venv/bin/python \
+    "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+
 # ── Oracle Instant Client Stage ───────────────────────────────────────
 FROM python:3.12-slim-bookworm AS oracle-client
 
