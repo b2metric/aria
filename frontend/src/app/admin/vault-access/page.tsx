@@ -1,10 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Lock, Save, Database, Users, AlertTriangle, Filter, EyeOff } from "lucide-react";
+import {
+  Lock,
+  Save,
+  Database,
+  Users,
+  AlertTriangle,
+  Filter,
+  EyeOff,
+  Search,
+  RefreshCw,
+  CheckCircle,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -50,9 +62,25 @@ export default function VaultAccessPage() {
   // Per-table denied (masked) columns (App-Level CLS). Keyed by table name.
   const [denyColumns, setDenyColumns] = useState<DenyColumns>({});
 
+  // Search / filter for the (potentially 500-row) table list.
+  const [search, setSearch] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "selected" | "unselected">("all");
+
+  // Scoped re-sync of the currently-selected tables.
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
   useEffect(() => {
     if (status === "unauthenticated") router.push("/api/auth/signin");
   }, [status, router]);
+
+  const fetchTables = useCallback(async () => {
+    if (!token) return;
+    const res = await fetch(`${API_BASE}/api/workspaces/vault/tables?workspace_id=default`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) setTables(await res.json());
+  }, [token]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -235,6 +263,76 @@ export default function VaultAccessPage() {
     }
   };
 
+  const isSelected = (name: string) =>
+    Array.from(allowedTables).some((t) => t.toLowerCase() === name.toLowerCase());
+
+  const q = search.trim().toLowerCase();
+  const visibleTables = tables.filter((t) => {
+    const matchesSearch =
+      !q ||
+      t.table_name.toLowerCase().includes(q) ||
+      (t.description ?? "").toLowerCase().includes(q);
+    if (!matchesSearch) return false;
+    if (filterMode === "all") return true;
+    const sel = isSelected(t.table_name);
+    return filterMode === "selected" ? sel : !sel;
+  });
+  const RENDER_CAP = 200;
+  const shown = visibleTables.slice(0, RENDER_CAP);
+
+  const handleSelectAllFiltered = () => {
+    const next = new Set(allowedTables);
+    for (const t of visibleTables) {
+      if (!isSelected(t.table_name)) next.add(t.table_name);
+    }
+    setAllowedTables(next);
+  };
+
+  const handleClearFiltered = () => {
+    const visibleNames = new Set(visibleTables.map((t) => t.table_name.toLowerCase()));
+    setAllowedTables(
+      new Set(Array.from(allowedTables).filter((t) => !visibleNames.has(t.toLowerCase()))),
+    );
+  };
+
+  const handleResyncSelected = async () => {
+    if (!token || allowedTables.size === 0) return;
+    try {
+      setSyncing(true);
+      setSyncResult(null);
+      const res = await fetch(`${API_BASE}/api/workspaces/vault/sync?workspace_id=default`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tables: Array.from(allowedTables) }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const s = data.stats || {};
+        setSyncResult({
+          ok: true,
+          msg: `Synced ${s.scoped_table_count ?? allowedTables.size} table(s) — added ${
+            s.added ?? 0
+          }, updated ${s.updated ?? 0}, enum updated ${s.enum_updated ?? 0}.`,
+        });
+        await fetchTables();
+      } else {
+        let detail = `Re-sync failed (HTTP ${res.status})`;
+        try {
+          const e = await res.json();
+          if (typeof e?.detail === "string") detail = e.detail;
+        } catch {
+          // no JSON body
+        }
+        setSyncResult({ ok: false, msg: detail });
+      }
+    } catch (err) {
+      console.error("Re-sync failed", err);
+      setSyncResult({ ok: false, msg: "Re-sync failed. Please try again." });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -247,15 +345,44 @@ export default function VaultAccessPage() {
             Control table access, per-table row-level filters, and column masking for each team (App-Level RLS/CLS).
           </p>
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={loading || saving}
-          className="bg-blue-600 hover:bg-blue-700"
-        >
-          <Save className={`w-4 h-4 mr-2 ${saving ? "animate-pulse" : ""}`} />
-          {saving ? "Saving..." : "Save Policy"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleResyncSelected}
+            disabled={syncing || allowedTables.size === 0}
+            title="Re-sync only the selected tables (enum sampling scoped to these)"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing..." : `Re-sync selected (${allowedTables.size})`}
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={loading || saving}
+            className="bg-blue-600 hover:bg-blue-700"
+          >
+            <Save className={`w-4 h-4 mr-2 ${saving ? "animate-pulse" : ""}`} />
+            {saving ? "Saving..." : "Save Policy"}
+          </Button>
+        </div>
       </div>
+
+      {syncResult && (
+        <div
+          role="status"
+          className={`flex items-start gap-2 rounded-lg border px-4 py-3 text-sm ${
+            syncResult.ok
+              ? "border-green-200 bg-green-50 text-green-700"
+              : "border-red-200 bg-red-50 text-red-700"
+          }`}
+        >
+          {syncResult.ok ? (
+            <CheckCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          ) : (
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          )}
+          <span className="break-words">{syncResult.msg}</span>
+        </div>
+      )}
 
       {saveError && (
         <div
@@ -324,6 +451,42 @@ export default function VaultAccessPage() {
                 {allowedTables.size} / {tables.length} Selected
               </div>
             </div>
+
+            {/* Search + filter + bulk-select toolbar (handles 500+ tables) */}
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative w-full sm:max-w-xs">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search tables by name or description…"
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex rounded-md border border-gray-200 bg-white p-0.5 text-xs font-medium">
+                  {(["all", "selected", "unselected"] as const).map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setFilterMode(m)}
+                      className={`px-2.5 py-1 rounded ${
+                        filterMode === m
+                          ? "bg-blue-50 text-blue-700"
+                          : "text-gray-600 hover:bg-gray-100"
+                      }`}
+                    >
+                      {m === "all" ? "All" : m === "selected" ? "Selected" : "Unselected"}
+                    </button>
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" onClick={handleSelectAllFiltered}>
+                  Select all (filtered)
+                </Button>
+                <Button variant="outline" size="sm" onClick={handleClearFiltered}>
+                  Clear filtered
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {loading ? (
@@ -332,9 +495,13 @@ export default function VaultAccessPage() {
               <div className="p-8 text-center text-gray-500">
                 No tables found in the vault.
               </div>
+            ) : visibleTables.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">
+                No tables match your search/filter.
+              </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {tables.map((table) => {
+                {shown.map((table) => {
                   const isAllowed = Array.from(allowedTables).some(
                     (t) => t.toLowerCase() === table.table_name.toLowerCase()
                   );
@@ -390,6 +557,12 @@ export default function VaultAccessPage() {
                     </div>
                   );
                 })}
+                {visibleTables.length > RENDER_CAP && (
+                  <div className="p-3 text-center text-xs text-gray-500 bg-gray-50/50">
+                    Showing {RENDER_CAP} of {visibleTables.length} matches — refine your search to
+                    see more.
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

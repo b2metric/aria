@@ -147,6 +147,10 @@ function ChatPageContent() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
+  // True only when the page mounted WITHOUT a ?cid= (fresh nav back to /chat).
+  // Consumed once to auto-restore the last conversation; cleared by New Chat or
+  // by sending a message so an intentional reset is never overridden.
+  const pendingRestoreRef = useRef<boolean>(initialCid === null);
 
 
   // Load workspace suggestions
@@ -238,10 +242,43 @@ function ChatPageContent() {
     }
   }, [conversationId, token]);
 
+  // Auto-restore the last conversation when the user returns to /chat without a
+  // ?cid= (e.g. via sidebar nav or a plain link). The conversation lives in Redis
+  // server-side; only the frontend lost which one was active. Runs once, and is
+  // disabled by New Chat / sending a message so an intentional reset is honored.
+  useEffect(() => {
+    if (!pendingRestoreRef.current) return;
+    if (status !== "authenticated" || !token) return;
+    if (conversationId) {
+      pendingRestoreRef.current = false;
+      return;
+    }
+    if (conversations.length === 0) return; // list not loaded yet — wait
+    pendingRestoreRef.current = false;
+    const lastId =
+      typeof window !== "undefined" ? localStorage.getItem("last_conversation_id") : null;
+    const target =
+      lastId && conversations.some((c) => c.id === lastId) ? lastId : conversations[0]?.id;
+    if (target) {
+      setConversationId(target);
+      router.replace(`/chat?cid=${target}`, { scroll: false });
+    }
+  }, [status, token, conversationId, conversations, router]);
+
+  // Remember the active conversation so a later return can restore it even if the
+  // ?cid= URL param was dropped.
+  useEffect(() => {
+    if (conversationId && typeof window !== "undefined") {
+      localStorage.setItem("last_conversation_id", conversationId);
+    }
+  }, [conversationId]);
+
   const handleSubmit = useCallback(
     async (question?: string) => {
       const q = question || inputValue.trim();
       if (!q || isStreaming) return;
+
+      pendingRestoreRef.current = false; // user is actively chatting — no auto-restore
 
       // Cancel previous stream
       abortRef.current?.();
@@ -447,13 +484,15 @@ function ChatPageContent() {
   }, [initialQuery]);
   const handleNewChat = useCallback(() => {
     abortRef.current?.();
+    pendingRestoreRef.current = false; // explicit reset — do not auto-restore
     setMessages([]);
     setConversationId(null);
     setActiveArtifactMsgId(null);
     setError(null);
     setInputValue("");
+    router.replace("/chat", { scroll: false }); // drop stale ?cid= from the URL
     inputRef.current?.focus();
-  }, []);
+  }, [router]);
 
   const handleDeleteConversation = useCallback(async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
