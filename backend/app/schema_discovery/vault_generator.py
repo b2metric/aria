@@ -186,6 +186,9 @@ def generate_table_markdown(
             f"database: {db_type}",
             f"workspace: {workspace_id}",
             f"keywords: [{', '.join(keywords)}]",
+            # description lives in frontmatter (the RAG pipeline reads it from
+            # here, not the body) — quoted so a ':' in the text stays valid YAML.
+            'description: "{}"'.format(description.replace('"', "'")),
         ]
     )
     if table.row_count_estimate is not None:
@@ -197,10 +200,8 @@ def generate_table_markdown(
     lines.append("---")
     lines.append("")
 
-    # Title and description
+    # Title (description is in frontmatter — no duplicate body line)
     lines.append(f"# {table.name}")
-    lines.append("")
-    lines.append(f"**Description:** {description}")
     lines.append("")
 
     # Columns table
@@ -227,11 +228,8 @@ def generate_table_markdown(
             )
         lines.append("")
 
-    # Keywords section (redundant but helps with grep/search)
-    lines.append("## Keywords")
-    lines.append("")
-    lines.append(", ".join(keywords))
-    lines.append("")
+    # No "## Keywords" body section — keywords live in frontmatter (the pipeline
+    # reads them from there); a body copy only duplicates and drifts.
 
     return "\n".join(lines)
 
