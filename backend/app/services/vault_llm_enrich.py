@@ -232,9 +232,17 @@ async def generate_table_enrichment(
         language_directive(language),
     )
 
-    model = llm.model if llm else settings.llm_model
-    api_base = llm.api_base if llm else settings.litellm_api_base
-    api_key = llm.api_key if llm else (settings.litellm_api_key or "sk-dummy")
+    # Mirror llm_insight.py: a resolved LLM with an EMPTY api_key (e.g. a workspace
+    # BYOK config with no virtual key) must still fall back to the platform key.
+    # Passing "" to litellm with custom_llm_provider="openai" fails client-side with
+    # "OpenAIException - Missing credentials" — which is what broke the auto-fill button.
+    model = (llm.model if llm and llm.model else None) or settings.llm_model
+    api_base = (llm.api_base if llm and llm.api_base else None) or settings.litellm_api_base
+    api_key = (
+        (llm.api_key if llm and llm.api_key else None)
+        or settings.litellm_api_key
+        or "sk-placeholder"
+    )
 
     try:
         resp = await litellm.acompletion(

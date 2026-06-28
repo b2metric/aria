@@ -9,6 +9,9 @@ from __future__ import annotations
 import importlib.util
 import types
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from backend.app.schema_discovery.enrichment import TableEnrichment, enrich_vault_table
 from backend.app.schema_discovery.models import ColumnInfo, TableInfo
@@ -344,3 +347,68 @@ def test_enrichment_union_keeps_existing(tmp_path):
         TableEnrichment(table_name="FCT_K", keywords=["balance"]),
     )
     assert set(_kw(md)) == {"recharge", "topup", "balance"}
+
+
+# ── LLM enrichment credential fallback ───────────────────────────────────────
+# Regression for the "auto-fill" 500: a ResolvedLLM with an EMPTY api_key (e.g.
+# workspace BYOK config with no virtual key) must fall back to the platform key,
+# exactly like llm_insight.py. Passing "" to litellm with custom_llm_provider=
+# "openai" fails with "OpenAIException - Missing credentials".
+
+_ENRICH_MD = """---
+table: FCT_X
+description:
+keywords: []
+---
+
+# FCT_X
+
+## Columns
+
+| Column | Type | Nullable | PK | Description |
+|--------|------|----------|----|-------------|
+| ID | NUMBER |  | ✓ |  |
+"""
+
+
+@pytest.mark.asyncio
+async def test_enrich_empty_resolved_key_falls_back_to_platform_key(tmp_path, monkeypatch):
+    from backend.app.services import vault_llm_enrich as mod
+
+    vault = tmp_path / "ws-test" / "tables"
+    vault.mkdir(parents=True)
+    (vault / "FCT_X.md").write_text(_ENRICH_MD)
+
+    fake_settings = types.SimpleNamespace(
+        vault_base_path=str(tmp_path),
+        llm_model="deepseek-chat",
+        litellm_api_base="http://litellm:4000",
+        litellm_api_key="sk-platform-key-123",
+    )
+    monkeypatch.setattr(mod, "get_settings", lambda: fake_settings)
+    monkeypatch.setattr(mod, "get_workspace_language", AsyncMock(return_value="en"))
+
+    captured: dict = {}
+
+    async def _fake_acompletion(**kwargs):
+        captured.update(kwargs)
+        msg = types.SimpleNamespace(content='{"description": "d"}')
+        return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    llm = ResolvedLLM(
+        api_base="http://litellm:4000",
+        api_key="",  # empty — the BYOK-with-no-key case that broke auto-fill
+        model="deepseek-chat",
+        custom_llm_provider="litellm",
+        source="customer_byok",
+        temperature=0.1,
+        max_tokens=2000,
+    )
+
+    with patch("litellm.acompletion", new=AsyncMock(side_effect=_fake_acompletion)):
+        await mod.generate_table_enrichment(
+            workspace_id="ws-test", table_name="FCT_X", llm=llm
+        )
+
+    # The call must have happened with the platform key, never an empty string.
+    assert captured.get("api_key") == "sk-platform-key-123"
