@@ -197,8 +197,37 @@ no DB harness exists for the ORM endpoints).
 `kc_group_id` is NULL); (b) `delete_user` propagation to Keycloak on user delete.
 Both are follow-ons, not blockers for the team-group fix.
 
-### 31 — user↔team 1–1 not schema-enforced — MEDIUM (migration, risky)
-`User.team_id` is nullable & non-unique; "exactly one team" isn't enforced. Adding NOT NULL/constraints needs a migration + a data-cleanup of existing rows.
+### 31 — user↔team enforcement — SCOPED 2026-06-29, deferred to a focused session
+Decision (owner): create a per-customer **Default** team, backfill NULL-team users
+into it, then make `users.team_id` NOT NULL. Investigation corrected/expanded the
+original framing — it is bigger and more destructive than "add NOT NULL":
+
+- **Constraint = NOT NULL only, NOT unique.** AGENTS.md invariant: "each user
+  belongs to exactly one team." A team has many users (model: "a group of users";
+  dev already has a team with >1 user), so a UNIQUE(team_id) would be wrong.
+- **Dev data:** 4 users, 1 with `team_id IS NULL` (customer_id present), so a bare
+  `SET NOT NULL` would fail — backfill first.
+- **FK conflict (key discovery):** `users.team_id` FK is `ON DELETE SET NULL`,
+  which is incompatible with NOT NULL (deleting a team would try to NULL a NOT NULL
+  column). NOT NULL therefore REQUIRES changing the FK to `ON DELETE RESTRICT`
+  (or CASCADE — rejected, deletes users) AND updating `delete_team` to reassign a
+  team's users to the customer's Default team before delete (and refuse deleting a
+  Default team that still has members).
+- **Enforcement paths:** new users must always get a team_id, in BOTH
+  `admin/users.py:129` (`User(...)`) and `auth/sync.py` (JWT upsert, where the token
+  may carry no team) — else NOT NULL just moves the failure to insert time.
+
+**Plan for the focused session:**
+1. `get_or_create_default_team(customer_id, session)` helper.
+2. Migration: create Default teams for customers with NULL-team users → backfill →
+   drop FK / `ALTER team_id SET NOT NULL` / re-add FK `ON DELETE RESTRICT`. Python
+   (`op.get_bind()`) for clarity; `gen_random_uuid()` is available.
+3. `delete_team`: reassign members to Default before delete; 409 if deleting a
+   Default team with members.
+4. Enforce team assignment in admin user-create + `sync_user_from_token`.
+5. Tests (fake-session for app logic) + apply/verify migration on dev DB.
+Deferred from the 2026-06-29 session because a destructive auth/multi-tenancy
+migration deserves clean context (not the tail of a long session).
 
 ### TIER 4 remaining (low/cosmetic)
 `chart_html` vestigial field (verify FE before removing); `ColumnInfo.comment` never populated (needs discovery-SQL change); telecom-biased regex descriptions + hardcoded fallback suggestions (intentional graceful fallbacks — keep); token dashboard has no charts / memory detail modal (FE features).
