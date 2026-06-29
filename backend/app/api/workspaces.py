@@ -453,6 +453,7 @@ async def enrich_single_table(
     request: EnrichTableRequest,
     workspace_id: WorkspaceID,
     user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
 ) -> dict[str, Any]:
     """Add business metadata to a single table's vault file.
 
@@ -642,6 +643,7 @@ async def add_manual_relationship(
     description: str | None = None,
     workspace_id: WorkspaceID = None,
     user: CurrentUser = None,
+    _: None = Depends(require_role(Role.ADMIN)),
 ) -> dict[str, Any]:
     """Add a manual relationship between two tables.
 
@@ -1138,6 +1140,7 @@ async def update_vault_table(
     update: TableMetadataUpdate,
     workspace_id: WorkspaceID,
     user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
 ) -> dict[str, Any]:
     """Update table and column metadata.
 
@@ -1197,6 +1200,7 @@ async def update_column_description(
     update: ColumnDescriptionUpdate,
     workspace_id: WorkspaceID,
     user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
 ) -> dict[str, Any]:
     """Update description for a single column.
 

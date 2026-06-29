@@ -89,6 +89,7 @@ async def cache_schema(
     snapshot: SchemaSnapshot,
     workspace_id: WorkspaceID,
     _user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
 ) -> dict:
     """Store a schema snapshot in Redis.
 
@@ -118,6 +119,7 @@ async def delete_cached_schema(
     db_config_id: str,
     workspace_id: WorkspaceID,
     _user: CurrentUser,
+    _: None = Depends(require_role(Role.ADMIN)),
 ) -> dict:
     """Delete a cached schema snapshot from Redis."""
     deleted = await invalidate_schema(workspace_id, db_config_id)
