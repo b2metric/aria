@@ -1604,6 +1604,7 @@ def _build_chart(
     question: str,
     conversation_id: str,
     forced_type: str | None = None,
+    chart_llm: object | None = None,
 ) -> dict:
     """Run the chart builder pipeline: heuristic → render → MinIO artifact upload.
 
@@ -1638,6 +1639,13 @@ def _build_chart(
     from backend.app.core.config import get_settings as _get_settings
 
     _s = _get_settings()
+    # Honor the customer's per-operation "chart" model when resolved (BYOK /
+    # operation_models["chart"]); fall back to the platform default otherwise.
+    # chart_llm is a services.llm_resolver.ResolvedLLM (or None) — duck-typed here
+    # to avoid an import cycle.
+    chart_model = getattr(chart_llm, "model", None) or _s.llm_model
+    chart_base = getattr(chart_llm, "api_base", None) or _s.litellm_api_base
+    chart_key = getattr(chart_llm, "api_key", None) or _s.litellm_api_key or "sk-placeholder"
     pipeline_result = run_chart_pipeline_sync(
         rows,
         columns=columns,
@@ -1646,9 +1654,9 @@ def _build_chart(
         # (custom_llm_provider="openai" + api_base). Degrades gracefully to the
         # heuristic/table choice on any LLM/parse error, so it never blocks.
         use_llm=True,
-        model_name=_s.llm_model,
-        llm_base_url=_s.litellm_api_base,
-        llm_api_key=_s.litellm_api_key or "sk-placeholder",
+        model_name=chart_model,
+        llm_base_url=chart_base,
+        llm_api_key=chart_key,
         render_formats=("png", "csv"),
     )
 
@@ -2068,6 +2076,8 @@ async def _process_query_impl(
 
             resolved_llm = await resolve_llm(workspace_id, sess, operation="sql_generation")
             insight_llm = await resolve_llm(workspace_id, sess, operation="insight")
+            # Per-customer/op model for the chart-type picker (item: chart op routing).
+            chart_llm = await resolve_llm(workspace_id, sess, operation="chart")
             logger.info("Using LLM configuration: %s", resolved_llm)
             if resolved_llm is not None:
                 trace_model = getattr(resolved_llm, "model", None)
@@ -2277,6 +2287,7 @@ async def _process_query_impl(
         # New data query: only honor an *explicit* chart request (viz cue), so data
         # words like "number of lines" don't override the heuristic/LLM choice.
         forced_type=_detect_requested_chart_type(request.question, require_viz_cue=True),
+        chart_llm=chart_llm,
     )
 
     yield {
