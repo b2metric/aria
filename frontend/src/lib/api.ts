@@ -375,3 +375,53 @@ export async function fetchWorkspaceSuggestions(workspaceId: string, tokenOverri
   }
   return res.json();
 }
+
+// ── Saved queries (TIER 2 item 14) ──────────────────────────────────────────
+
+export interface SavedQuery {
+  id: string;
+  name: string;
+  question: string;
+  sql: string;
+  created_at: string;
+}
+
+export async function saveQuery(
+  question: string,
+  sql: string,
+  name?: string,
+  tokenOverride?: string,
+): Promise<SavedQuery> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/saved-queries`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    credentials: "omit",
+    body: JSON.stringify({ question, sql, name }),
+  });
+  if (!res.ok) throw new Error(`Failed to save query: ${res.status}`);
+  return res.json();
+}
+
+export async function listSavedQueries(tokenOverride?: string): Promise<SavedQuery[]> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/saved-queries`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) throw new Error(`Failed to list saved queries: ${res.status}`);
+  const data = await res.json();
+  return data.saved_queries ?? [];
+}
+
+export async function deleteSavedQuery(id: string, tokenOverride?: string): Promise<void> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/saved-queries/${id}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Failed to delete saved query: ${res.status}`);
+  }
+}

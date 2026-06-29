@@ -14,6 +14,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request, status
+from pydantic import BaseModel
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sse_starlette.sse import EventSourceResponse
@@ -402,6 +403,73 @@ async def delete_conversation_endpoint(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Conversation {conversation_id} not found",
+            )
+    finally:
+        await redis.aclose()
+
+
+# ── Saved queries (TIER 2 item 14) ─────────────────────────────────────────
+
+
+class SaveQueryRequest(BaseModel):
+    question: str
+    sql: str
+    name: str | None = None
+
+
+@router.post("/saved-queries", status_code=status.HTTP_201_CREATED, summary="Save a query")
+async def save_query_endpoint(
+    body: SaveQueryRequest, workspace_id: WorkspaceID, user: CurrentUser
+):
+    from backend.app.query.saved_queries import save_query
+
+    redis = await _get_redis()
+    try:
+        return await save_query(
+            redis,
+            workspace_id=workspace_id,
+            user_id=user.user_id,
+            question=body.question,
+            sql=body.sql,
+            name=body.name,
+        )
+    finally:
+        await redis.aclose()
+
+
+@router.get("/saved-queries", summary="List the user's saved queries")
+async def list_saved_queries_endpoint(workspace_id: WorkspaceID, user: CurrentUser):
+    from backend.app.query.saved_queries import list_saved_queries
+
+    redis = await _get_redis()
+    try:
+        return {
+            "saved_queries": await list_saved_queries(
+                redis, workspace_id=workspace_id, user_id=user.user_id
+            )
+        }
+    finally:
+        await redis.aclose()
+
+
+@router.delete(
+    "/saved-queries/{query_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a saved query",
+)
+async def delete_saved_query_endpoint(
+    query_id: str, workspace_id: WorkspaceID, user: CurrentUser
+):
+    from backend.app.query.saved_queries import delete_saved_query
+
+    redis = await _get_redis()
+    try:
+        deleted = await delete_saved_query(
+            redis, workspace_id=workspace_id, user_id=user.user_id, query_id=query_id
+        )
+        if not deleted:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Saved query not found"
             )
     finally:
         await redis.aclose()
