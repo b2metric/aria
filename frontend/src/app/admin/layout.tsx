@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare, Boxes, BookOpen } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare, Boxes, BookOpen, KeyRound } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -112,8 +112,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <Settings className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Tenant Config</span>}
             </Link>
-            <Link 
-              href="/admin/llm-config" 
+            <Link
+              href="/admin/encryption"
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/encryption") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Encryption (CMEK)"
+            >
+              <KeyRound className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Encryption</span>}
+            </Link>
+            <Link
+              href="/admin/llm-config"
               className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
                 ${isCollapsed ? "justify-center" : "justify-start gap-3"}
                 ${pathname?.includes("/admin/llm-config") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
