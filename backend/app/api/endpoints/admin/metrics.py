@@ -51,7 +51,7 @@ async def get_dashboard_metrics(current_user: Any = Depends(get_current_user)):
                 select(func.count(DataAuditLog.id)).where(
                     DataAuditLog.customer_id == customer_id,
                     DataAuditLog.action == "query",
-                    DataAuditLog.timestamp >= today,
+                    DataAuditLog.created_at >= today,
                 )
             )
 

@@ -2080,8 +2080,18 @@ async def _process_query_impl(
                         }
                         return
                 except Exception:
-                    logger.exception("Token quota check failed — allowing request to proceed")
-                    token_svc = None
+                    # Fail CLOSED: a quota check that errors must DENY, not silently
+                    # let the request through (which made the hard cap bypassable).
+                    # Redis backs quotas AND conversations, so if it is down the app
+                    # is already degraded — denying here loses little availability.
+                    logger.exception("Token quota check failed — denying request (fail-closed)")
+                    yield {
+                        "event": "error",
+                        "data": json.dumps(
+                            {"error": "Unable to verify your usage quota right now. Please retry shortly."}
+                        ),
+                    }
+                    return
 
             # ── Generate SQL ───────────────────────────────────────────────
             # Always pass the session so Step-1 CLS can resolve the

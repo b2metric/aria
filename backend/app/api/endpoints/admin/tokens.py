@@ -72,6 +72,18 @@ async def create_quota(
     if not current_user.can_admin:
         raise HTTPException(status_code=403, detail="Admin role required")
 
+    # Only DAILY quotas are enforced (the Redis counters are day-keyed). Reject
+    # non-daily periods loudly instead of silently ignoring them at check time.
+    period_value = str(getattr(payload.period, "value", payload.period)).lower()
+    if period_value != "daily":
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Token quota period '{period_value}' is not enforced yet — only 'daily' "
+                "is supported. Create a daily quota (monthly enforcement is a follow-up)."
+            ),
+        )
+
     customer_id = await resolve_customer_id(current_user, db)
 
     # Ensure no duplicate (same scope) exists
