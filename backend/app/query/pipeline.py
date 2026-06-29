@@ -1392,21 +1392,30 @@ async def _execute_sql(
                 UI_RENDER_THRESHOLD,
             )
 
-            # Fire and forget background export task
-            asyncio.create_task(
-                export_massive_query_to_minio(
-                    sql=transformed_sql,
-                    db_config=config,
-                    conversation_id=str(uuid.uuid4())
-                    if not workspace_id
-                    else f"{workspace_id}_{user_id}",
-                    workspace_id=workspace_id or "default",
-                )
+            # Run the export and DELIVER the download link. Previously this was a
+            # fire-and-forget asyncio.create_task whose returned URL was discarded —
+            # the user was promised "a link when ready" that never arrived. We now
+            # await it (the heavy query runs in a thread pool, so the event loop is
+            # not blocked) and surface the URL in the response message.
+            export_result = await export_massive_query_to_minio(
+                sql=transformed_sql,
+                db_config=config,
+                conversation_id=str(uuid.uuid4())
+                if not workspace_id
+                else f"{workspace_id}_{user_id}",
+                workspace_id=workspace_id or "default",
             )
-
-            error_msg = f"Query estimated to return {estimated_rows:,} rows. Processing in background... A download link will be provided when ready."
-            await _audit(success=True, row_count=0, mem_trace=mem_trace)
-            raise ValueError(error_msg)
+            row_count = export_result.get("row_count", estimated_rows)
+            await _audit(success=True, row_count=row_count, mem_trace=mem_trace)
+            if export_result.get("status") == "success" and export_result.get("url"):
+                raise ValueError(
+                    f"Your query returned ~{row_count:,} rows — too large to display here. "
+                    f"Download the full result (CSV, valid 3 days): {export_result['url']}"
+                )
+            raise ValueError(
+                f"Query estimated ~{estimated_rows:,} rows (too large to display) but the "
+                "background export failed — please narrow the query and retry."
+            )
 
         result = await execute_query(transformed_sql, config)
 
