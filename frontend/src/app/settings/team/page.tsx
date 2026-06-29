@@ -37,6 +37,7 @@ export default function TeamSettings() {
   const [inviteRole, setInviteRole] = useState("member");
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
 
   const fetchUsers = async () => {
     if (!token) return;
@@ -84,16 +85,18 @@ export default function TeamSettings() {
           email: inviteEmail,
           display_name: inviteName || inviteEmail.split("@")[0],
           role: inviteRole,
-          password: "TempPassword123!" // Typically you'd send an invite email, but here we hardcode for now
+          // No password: the backend generates a random one-time temporary
+          // password and returns it (the user must reset it on first login).
         })
       });
-      
+
+      const data = await res.json();
       if (!res.ok) {
-        const data = await res.json();
         throw new Error(data.detail || "Failed to invite member");
       }
-      
-      setIsInviteOpen(false);
+
+      // Surface the one-time temporary password so the admin can hand it over.
+      setTempPassword(data.temporary_password || "");
       setInviteEmail("");
       setInviteName("");
       fetchUsers();
@@ -115,8 +118,8 @@ export default function TeamSettings() {
           </h1>
           <p className="text-gray-500 mt-1">Manage members and their roles within your workspace ({workspaceId}).</p>
         </div>
-        <button 
-          onClick={() => setIsInviteOpen(true)}
+        <button
+          onClick={() => { setTempPassword(""); setInviteError(""); setIsInviteOpen(true); }}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
         >
           <UserPlus className="w-4 h-4" />
@@ -203,7 +206,16 @@ export default function TeamSettings() {
                 {inviteError}
               </div>
             )}
-            
+
+            {tempPassword && (
+              <div className="p-3 bg-green-50 text-green-800 text-sm rounded-md space-y-1">
+                <div>User created. Share this one-time password — they must reset it on first login:</div>
+                <code className="block font-mono text-xs break-all bg-white/60 p-2 rounded">
+                  {tempPassword}
+                </code>
+              </div>
+            )}
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Email Address</label>
               <div className="relative">

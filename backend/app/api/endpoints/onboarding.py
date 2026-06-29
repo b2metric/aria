@@ -2,14 +2,17 @@ import logging
 import re
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, EmailStr
+from redis.asyncio import Redis
 from sqlalchemy import select
 
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.enums import UserRole
 from backend.app.models.organization import Customer, User
 from backend.app.services.keycloak_admin import KeycloakAdminService
+from backend.app.services.rate_limit import RateLimitExceeded, check_rate_limit
 
 log = logging.getLogger("aria.onboarding")
 router = APIRouter(prefix="/api/onboarding", tags=["Onboarding"])
@@ -37,8 +40,20 @@ def sluggify(text: str) -> str:
 
 
 @router.post("/register", response_model=RegisterResponse)
-async def register_account(body: RegisterRequest):
+async def register_account(body: RegisterRequest, request: Request):
     """Register a new customer/workspace and admin user."""
+
+    # Anti-abuse: rate-limit public self-registration by client IP (5 / hour).
+    client_ip = request.client.host if request.client else "unknown"
+    redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        await check_rate_limit(redis, f"register:{client_ip}", limit=5, window=3600)
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=exc.message
+        ) from exc
+    finally:
+        await redis.aclose()
 
     workspace_slug = sluggify(body.company_name)
     if not workspace_slug:
