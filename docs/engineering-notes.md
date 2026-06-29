@@ -35,8 +35,15 @@ Detection: `_detect_requested_chart_type`, `_is_chart_type_only_request`, `_want
 - Keycloak 26 runs with `KC_HTTP_RELATIVE_PATH=/auth`, so JWKS lives at
   `http://localhost:8080/auth/realms/aria/protocol/openid-connect/certs`.
   `backend/.env` `KEYCLOAK_URL` **must include `/auth`** (do NOT "fix" by removing it).
-- **Dev login credentials:** username=`admin`, password=`12345`, email=`admin@aria.local`.
-  (NOT `admin@aria.localhost` — the realm JSON and live Keycloak DB must match.)
+- **Dev login credentials:** username=`admin`, password=`12345`, email=`admin@b2metric.com`.
+  (Was `admin@aria.local`, changed for LiteLLM SSO: LiteLLM's strict email validator
+  rejects reserved TLDs like `.local`/`.localhost`. Use a real TLD. The realm JSON and
+  live Keycloak DB must match — `infra/keycloak/setup-console-sso.py` normalises it.)
+- **Embedded Service Consoles SSO:** `/admin/consoles` iframes the infra consoles.
+  LiteLLM UI logs in via Keycloak (client `litellm-ui`); run
+  `python infra/keycloak/setup-console-sso.py` after a fresh deploy to (re)create the
+  OIDC client + mappers. MinIO Community console dropped OpenID SSO upstream
+  (RELEASE.2025-09+) → it embeds with native root login only.
 - Frontend logout is **federated**: `signOut()` + redirect to Keycloak end-session
   (`id_token_hint` + `post_logout_redirect_uri`), else the SSO cookie silently re-logs in.
   (`post_logout_redirect_uri` = `http://localhost:3003` must be registered on the `aria-web` client.)

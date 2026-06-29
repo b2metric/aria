@@ -27,6 +27,21 @@ services:
       DATABASE_URL: ${LITELLM_DATABASE_URL:-postgresql://postgres:postgres@llm-postgres:5432/litellm}
       UI_USERNAME: ${UI_USERNAME:-}
       UI_PASSWORD: ${UI_PASSWORD:-}
+      # ── Keycloak SSO for the LiteLLM admin UI (embedded in /admin/consoles) ──
+      # The UI shows "Sign in with SSO"; login routes through ARIA's Keycloak.
+      # PROXY_BASE_URL must be the public UI origin so the OAuth callback resolves.
+      # Dev client secret; override per env.
+      PROXY_BASE_URL: http://llm.aria.localhost
+      GENERIC_CLIENT_ID: litellm-ui
+      GENERIC_CLIENT_SECRET: litellm-ui-dev-secret
+      GENERIC_AUTHORIZATION_ENDPOINT: http://auth.aria.localhost/auth/realms/aria/protocol/openid-connect/auth
+      GENERIC_TOKEN_ENDPOINT: http://auth.aria.localhost/auth/realms/aria/protocol/openid-connect/token
+      GENERIC_USERINFO_ENDPOINT: http://auth.aria.localhost/auth/realms/aria/protocol/openid-connect/userinfo
+      # The aria realm is minimal — only "openid" is a valid scope here; email/
+      # preferred_username are delivered via mappers added to the litellm-ui client.
+      GENERIC_SCOPE: "openid"
+      # Skip the username/password form in the embedded console — go straight to SSO.
+      AUTO_REDIRECT_UI_LOGIN_TO_SSO: "true"
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY must be set}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GLM_API_KEY: ${GLM_API_KEY:-}
