@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
+import { setThemePreference } from "@/lib/theme";
 
 type Theme = "light" | "dark";
 
@@ -23,12 +24,7 @@ export function ThemeToggle({ collapsed = false }: ThemeToggleProps) {
   const toggle = () => {
     const next: Theme = theme === "dark" ? "light" : "dark";
     setTheme(next);
-    document.documentElement.setAttribute("data-theme", next);
-    try {
-      localStorage.setItem("theme", next);
-    } catch {
-      // storage may be unavailable (private mode) — theme still applies for the session
-    }
+    setThemePreference(next);
   };
 
   const isDark = theme === "dark";
