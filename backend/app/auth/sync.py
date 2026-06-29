@@ -3,6 +3,7 @@ import uuid
 
 from sqlalchemy.dialects.postgresql import insert
 
+from backend.app.auth.identity import resolve_identity_uuid
 from backend.app.auth.models import UserContext
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.organization import Customer, Team, User
@@ -67,7 +68,7 @@ async def sync_user_from_token(user_ctx: UserContext):
 
             # Upsert User
             try:
-                user_uuid = uuid.UUID(user_ctx.sub)
+                user_uuid = resolve_identity_uuid(user_ctx.sub)
 
                 stmt = insert(User).values(
                     id=user_uuid,

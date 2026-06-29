@@ -34,6 +34,7 @@ if TYPE_CHECKING:
 
 from agents.artifact_store import ArtifactStore
 from agents.chart_builder import run_chart_pipeline_sync
+from backend.app.auth.identity import resolve_identity_uuid
 from backend.app.db import DatabaseType, DBConfig
 from backend.app.memory.service import MemoryService
 from backend.app.query import (
@@ -146,19 +147,14 @@ def _sqlglot_dialect(db_type_value: str | None) -> str | None:
 
 
 def _coerce_user_uuid(user_id: str | None) -> _uuid.UUID | None:
-    """Parse a user identifier to UUID; warn (don't silently drop) on non-UUID.
+    """Resolve a user identifier to a stable UUID for audit attribution.
 
-    In some environments the JWT ``sub`` is a non-UUID legacy identifier
-    (e.g. ``admin-001``). Such audit rows cannot be attributed to a user and
-    will never appear on the per-user dashboard — log so it is diagnosable.
+    Delegates to :func:`resolve_identity_uuid`: real UUIDs pass through, while
+    non-UUID legacy identifiers (e.g. ``admin-001``) map deterministically via
+    ``uuid5`` so audit rows are consistently attributed instead of dropped to
+    NULL. Empty identifiers still return ``None``.
     """
-    if not user_id:
-        return None
-    try:
-        return _uuid.UUID(user_id)
-    except (ValueError, AttributeError):
-        logger.warning("Audit: non-UUID user_id %r — row will be unattributed", user_id)
-        return None
+    return resolve_identity_uuid(user_id)
 
 
 async def _resolve_vault_policy(

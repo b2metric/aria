@@ -4,16 +4,16 @@ Two concerns are covered here:
 
 1. Workspace-scoped dashboard stats (``GET /api/dashboard``) must surface real
    query activity counted by ``customer_id`` even when the JWT ``sub`` is a
-   non-UUID legacy identifier (e.g. ``admin-001``). In that case the per-user
-   block is skipped entirely (``if user_uuid:`` guard), so only the workspace
-   block's queries execute.
-2. ``pipeline._coerce_user_uuid`` warns (instead of silently dropping) on a
-   non-UUID identifier, and returns the parsed UUID for a valid one.
+   non-UUID legacy identifier (e.g. ``admin-001``). Such an identity now resolves
+   to a deterministic UUID, so the per-user block runs against its own (empty)
+   session and returns 0, while the workspace block surfaces the real counts.
+2. ``pipeline._coerce_user_uuid`` resolves a non-UUID identifier to a stable
+   deterministic UUID (via ``resolve_identity_uuid``) and returns the parsed
+   UUID for a valid one.
 """
 
 from __future__ import annotations
 
-import logging
 import uuid
 
 import pytest
@@ -95,9 +95,10 @@ async def test_workspace_stats_count_customer_rows_when_user_is_non_uuid(monkeyp
     from backend.app.api import dashboard
 
     customer_id = uuid.uuid4()
-    # Per-user block is skipped for a non-UUID identity, but it still opens a
-    # session context — give it its own empty session so the workspace session's
-    # scalar call-order can't be perturbed by it.
+    # A non-UUID identity now resolves to a deterministic UUID, so the per-user
+    # block DOES run. Give it its own empty session (scalar → 0) so per-user
+    # "Total Queries" is "0" and the workspace session's scalar call-order can't
+    # be perturbed by it.
     per_user_session = _FakeSession(customer_row=None, scalar_returns=[])
     # Workspace scalar call order: ws_total, ws_today, ws_tokens_today,
     # ws_active_users, then 7 trend-day counts. Only ws_total is non-zero here.
@@ -133,14 +134,11 @@ async def test_workspace_stats_count_customer_rows_when_user_is_non_uuid(monkeyp
 # ── Task 2: _coerce_user_uuid ────────────────────────────────────────────────
 
 
-def test_non_uuid_user_id_logs_warning(caplog):
+def test_non_uuid_user_id_resolves_deterministically():
+    from backend.app.auth.identity import resolve_identity_uuid
     from backend.app.query import pipeline
-
-    with caplog.at_level(logging.WARNING, logger=pipeline.logger.name):
-        result = pipeline._coerce_user_uuid("admin-001")
-
-    assert result is None
-    assert any("non-UUID user_id" in rec.message for rec in caplog.records)
+    result = pipeline._coerce_user_uuid("admin-001")
+    assert result == resolve_identity_uuid("admin-001")
 
 
 def test_valid_uuid_user_id_coerces():

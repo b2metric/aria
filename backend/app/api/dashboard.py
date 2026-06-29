@@ -1,11 +1,11 @@
 import logging
-import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import distinct, func, select, text
 
 from backend.app.auth.dependencies import UserContext, WorkspaceID, get_current_user
+from backend.app.auth.identity import resolve_identity_uuid
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.governance import DataAuditLog
 from backend.app.models.token import TokenUsageDaily
@@ -31,7 +31,7 @@ async def get_user_dashboard(
     recent_trend = []
 
     try:
-        user_uuid = uuid.UUID(str(current_user.user_id))
+        user_uuid = resolve_identity_uuid(str(current_user.user_id))
     except (ValueError, TypeError):
         user_uuid = None
 
