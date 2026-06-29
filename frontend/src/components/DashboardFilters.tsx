@@ -24,6 +24,10 @@ export default function DashboardFilters({
   userId,
   onChange,
 }: DashboardFiltersProps) {
+  // Team → User cascade: when a team is selected, only that team's users are
+  // selectable. Users with no team are shown only under "All teams".
+  const visibleUsers = teamId ? users.filter((u) => u.teamId === teamId) : users;
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       <label className="flex items-center gap-2 text-xs font-medium text-gray-500">
@@ -31,9 +35,11 @@ export default function DashboardFilters({
         <select
           className={selectClass}
           value={teamId ?? ""}
-          onChange={(e) =>
-            onChange({ teamId: e.target.value || undefined, userId })
-          }
+          onChange={(e) => {
+            // Changing the team clears the user selection — the previously
+            // chosen user may not belong to the newly selected team.
+            onChange({ teamId: e.target.value || undefined, userId: undefined });
+          }}
         >
           <option value="">All teams</option>
           {teams.map((t) => (
@@ -54,7 +60,7 @@ export default function DashboardFilters({
           }
         >
           <option value="">All users</option>
-          {users.map((u) => (
+          {visibleUsers.map((u) => (
             <option key={u.id} value={u.id}>
               {u.name}
             </option>

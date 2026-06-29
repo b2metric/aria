@@ -41,6 +41,8 @@ export interface DashboardData {
 export interface PickerItem {
   id: string;
   name: string;
+  /** Owning team id (users only) — drives the Team→User cascade in the dashboard filters. */
+  teamId?: string | null;
 }
 
 export interface ChartConfig {
