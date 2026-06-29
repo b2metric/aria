@@ -185,7 +185,7 @@ Investigated 2026-06-29. Two corrections to the original gap:
   same value the `aria-litellm` proxy uses, then re-save each customer's LLM config
   to mint its virtual key. Until then, behavior is unchanged (passthrough).
 
-### 30 — Keycloak team-group / delete-user — team-group DONE; delete-user still open
+### 30 — Keycloak team-group / delete-user — DONE (incl. both follow-ons)
 **Done 2026-06-29 (team-group):** `teams.kc_group_id` column (migration
 `e8b1f4a2c9d7`, applied to dev DB) + `Team.kc_group_id`. `create_team` now creates
 the KC group and stores its id (resilient: KC outage → team still created,
@@ -193,9 +193,29 @@ kc_group_id=None); `delete_team` deletes by the STORED `kc_group_id` (was wrongl
 passing the local `team.id`), skipping cleanly when none is linked. Tests:
 `backend/tests/test_admin_teams.py` (4, fake-session + mocked KeycloakAdminService —
 no DB harness exists for the ORM endpoints).
-**Still open:** (a) a backfill that creates KC groups for pre-existing teams (their
-`kc_group_id` is NULL); (b) `delete_user` propagation to Keycloak on user delete.
-Both are follow-ons, not blockers for the team-group fix.
+
+**Done 2026-06-29 (follow-ons a + b):**
+- **(a) Backfill** — `POST /api/admin/teams/sync-groups` (`teams.py::sync_team_groups`)
+  creates the missing KC group for every team in the customer with `kc_group_id IS
+  NULL`, storing each id. Per-team resilient (one KC failure is counted + skipped,
+  never aborts the batch) and idempotent (only NULL teams are touched). Returns
+  `{"synced": N, "failed": M}`. Tests: `test_admin_teams.py` (+3). FE: "Sync KC
+  groups" button on the Teams tab.
+- **(b) Delete-user propagation** — there was NO user-delete route at all;
+  `DELETE /api/admin/users/{user_id}` (`users.py::delete_user`) now removes the local
+  row AND deletes the Keycloak account by the stored `external_id` (best-effort: KC
+  outage / 404 never blocks the local delete), 404 when the user isn't in the
+  caller's customer, and a 403 self-delete guard. Tests: new
+  `backend/tests/test_admin_users.py` (5). FE: per-row "Delete" button on the Users tab.
+
+Verification: backend suite green (266); FE `tsc --noEmit` + `eslint` clean. Live
+end-to-end on the dev stack with a fresh admin token: `sync-groups` backfilled the
+"Marketing Team" (created a real KC group), idempotent on the 2nd call
+(`synced:0`); user-delete returns 404 for a missing id. Visual-verified by driving
+`aria.localhost` with Playwright (admin login → `/admin/users`): the Delete button
+renders on every user row (screenshot), and the Sync button renders on the Teams tab.
+Remaining (deferred, separate item): item 31 makes `users.team_id` NOT NULL with a
+Default-team backfill — see below.
 
 ### 31 — user↔team enforcement — SCOPED 2026-06-29, deferred to a focused session
 Decision (owner): create a per-customer **Default** team, backfill NULL-team users

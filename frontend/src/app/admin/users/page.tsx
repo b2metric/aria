@@ -169,6 +169,10 @@ export default function UsersTeamsPage() {
   // Delete team state
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
 
+  // Delete user + Keycloak-group sync state
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [syncingGroups, setSyncingGroups] = useState(false);
+
   // ── Auth guard ────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -278,6 +282,61 @@ export default function UsersTeamsPage() {
       console.error("Failed to delete team", err);
     } finally {
       setDeletingTeamId(null);
+    }
+  };
+
+  // ── Delete user (propagates to Keycloak) ──────────────────────────
+
+  const handleDeleteUser = async (user: User) => {
+    if (!token) return;
+    try {
+      setDeletingUserId(user.id);
+      const res = await fetch(`${API_BASE}/api/admin/users/${user.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        await fetchUsers();
+      } else {
+        let detail = "Failed to delete user";
+        try {
+          detail = (await res.json()).detail || detail;
+        } catch {
+          /* non-JSON error body */
+        }
+        alert(detail);
+      }
+    } catch (err) {
+      console.error("Failed to delete user", err);
+    } finally {
+      setDeletingUserId(null);
+    }
+  };
+
+  // ── Backfill Keycloak groups for teams missing one (item 30) ──────
+
+  const handleSyncGroups = async () => {
+    if (!token) return;
+    try {
+      setSyncingGroups(true);
+      const res = await fetch(`${API_BASE}/api/admin/teams/sync-groups`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(
+          `Keycloak groups synced: ${data.synced} created, ${data.failed} failed.`,
+        );
+        await fetchTeams();
+      } else {
+        console.error("Failed to sync Keycloak groups", res.status);
+        alert("Failed to sync Keycloak groups");
+      }
+    } catch (err) {
+      console.error("Failed to sync Keycloak groups", err);
+    } finally {
+      setSyncingGroups(false);
     }
   };
 
@@ -551,6 +610,24 @@ export default function UsersTeamsPage() {
                             <Pencil className="w-4 h-4 mr-1" />
                             Edit
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            disabled={deletingUserId === user.id}
+                            onClick={() => {
+                              if (
+                                confirm(
+                                  `Delete user "${user.display_name}" (${user.email})? This removes them from the app and Keycloak and cannot be undone.`,
+                                )
+                              ) {
+                                handleDeleteUser(user);
+                              }
+                            }}
+                          >
+                            <Trash2 className="w-4 h-4 mr-1" />
+                            {deletingUserId === user.id ? "Deleting..." : "Delete"}
+                          </Button>
                         </td>
                       </tr>
                     ))
@@ -573,6 +650,17 @@ export default function UsersTeamsPage() {
               <Button variant="outline" size="sm" onClick={fetchTeams} disabled={teamsLoading}>
                 <RefreshCw className={`w-4 h-4 mr-1 ${teamsLoading ? "animate-spin" : ""}`} />
                 Refresh
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSyncGroups}
+                disabled={syncingGroups}
+                title="Create Keycloak groups for any teams missing one"
+              >
+                <Building2 className={`w-4 h-4 mr-1 ${syncingGroups ? "animate-pulse" : ""}`} />
+                {syncingGroups ? "Syncing..." : "Sync KC groups"}
               </Button>
 
               <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>

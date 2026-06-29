@@ -146,6 +146,55 @@ async def create_user(
     )
 
 
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: uuid.UUID,
+    current_user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a user, propagating the removal to Keycloak (item 30, follow-on b).
+
+    Removes the local row AND deletes the backing Keycloak account by the stored
+    ``external_id``. Best-effort on the IdP side: a Keycloak outage (or a 404 — the
+    account is already gone) must not block the local delete, mirroring the resilient
+    team-delete path. An admin cannot delete their own account (self-lockout guard).
+    """
+    if not current_user.can_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    # Guard against an admin deleting themselves (would lock them out of admin).
+    if str(user_id) == str(getattr(current_user, "user_id", "")):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="You cannot delete your own account"
+        )
+
+    customer_id = await resolve_customer_id(current_user, db)
+
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.customer_id == customer_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found or does not belong to this workspace",
+        )
+
+    # Propagate to Keycloak by the STORED external_id; skip cleanly if unlinked.
+    if user.external_id:
+        kc_service = KeycloakAdminService()
+        try:
+            await kc_service.delete_user(user.external_id)
+        except Exception as e:  # noqa: BLE001 — best-effort cleanup, never block local delete
+            log.warning("Failed to delete user %s in Keycloak: %s", user.external_id, e)
+
+    await db.delete(user)
+    await db.commit()
+
+    log.info("Deleted user %s (id=%s) from customer_id=%s", user.email, user.id, customer_id)
+
+
 @router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: uuid.UUID,

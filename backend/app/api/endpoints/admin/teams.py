@@ -124,6 +124,50 @@ async def create_team(
     return TeamResponse.model_validate(team)
 
 
+@router.post("/sync-groups")
+async def sync_team_groups(
+    current_user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, int]:
+    """Backfill Keycloak groups for this customer's teams that have none (item 30).
+
+    Teams created before the kc_group_id wiring — or while Keycloak was down — have
+    ``kc_group_id IS NULL``, so their team-scoped JWT ``groups`` claims never resolve.
+    This creates the missing group per team and stores its id. Per-team resilient: a
+    single Keycloak failure is recorded and skipped, never aborting the rest, so the
+    operation is safely repeatable (only NULL teams are ever touched).
+    """
+    if not current_user.can_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    customer_id = await resolve_customer_id(current_user, db)
+
+    result = await db.execute(
+        select(Team).where(Team.customer_id == customer_id, Team.kc_group_id.is_(None))
+    )
+    pending = result.scalars().all()
+
+    synced = 0
+    failed = 0
+    kc_service = KeycloakAdminService()
+    for team in pending:
+        try:
+            team.kc_group_id = await kc_service.create_team_group(team.name)
+            synced += 1
+        except Exception as e:  # noqa: BLE001 — record + skip, never abort the batch
+            failed += 1
+            log.warning("Could not backfill Keycloak group for team %s: %s", team.name, e)
+
+    await db.commit()
+    log.info(
+        "Synced Keycloak groups for customer %s: %d created, %d failed",
+        customer_id,
+        synced,
+        failed,
+    )
+    return {"synced": synced, "failed": failed}
+
+
 @router.delete("/{team_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_team(
     team_id: uuid.UUID,

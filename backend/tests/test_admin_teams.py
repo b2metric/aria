@@ -138,3 +138,98 @@ async def test_delete_team_skips_kc_when_no_group_linked(monkeypatch):
 
     assert calls["deleted"] == []  # nothing to delete in KC
     assert team in db.deleted  # local row still removed
+
+
+# ── Follow-on (a): backfill KC groups for pre-existing teams ─────────
+#
+# Teams created before item 30 (or while Keycloak was down) have kc_group_id=None.
+# sync_team_groups creates the missing groups for the customer's teams, per-team
+# resilient (one KC failure must not abort the rest), and only touches NULL teams.
+
+
+class _FakeScalars:
+    def __init__(self, values):
+        self._values = list(values)
+
+    def all(self):
+        return self._values
+
+
+class _ListResult:
+    def __init__(self, values):
+        self._values = values
+
+    def scalars(self):
+        return _FakeScalars(self._values)
+
+
+class _SyncDB:
+    """resolve_customer_id() uses scalar_one_or_none(); the team query uses scalars().all()."""
+
+    def __init__(self, customer_id, teams):
+        self._results = [_FakeResult(customer_id), _ListResult(teams)]
+        self.committed = False
+
+    async def execute(self, *a, **k):
+        return self._results.pop(0)
+
+    async def commit(self):
+        self.committed = True
+
+
+def _null_team(name):
+    t = teams_api.Team(name=name, customer_id=uuid.uuid4())
+    t.id = uuid.uuid4()
+    t.kc_group_id = None
+    return t
+
+
+async def test_sync_groups_backfills_null_teams(monkeypatch):
+    calls = _mock_kc(monkeypatch, group_id="kc-new")
+    t1, t2 = _null_team("Sales"), _null_team("Ops")
+    db = _SyncDB(uuid.uuid4(), [t1, t2])
+
+    resp = await teams_api.sync_team_groups(current_user=_AdminUser(), db=db)
+
+    assert calls["created"] == ["Sales", "Ops"]
+    assert t1.kc_group_id == "kc-new" and t2.kc_group_id == "kc-new"
+    assert resp["synced"] == 2
+    assert resp["failed"] == 0
+    assert db.committed
+
+
+async def test_sync_groups_is_per_team_resilient(monkeypatch):
+    # First team's group creation blows up; the second must still be backfilled.
+    seen = {"n": 0}
+
+    class _FlakyKC:
+        def __init__(self, *a, **k):
+            pass
+
+        async def create_team_group(self, name):
+            seen["n"] += 1
+            if seen["n"] == 1:
+                raise RuntimeError("keycloak unreachable")
+            return "kc-second"
+
+    monkeypatch.setattr(teams_api, "KeycloakAdminService", _FlakyKC)
+    t1, t2 = _null_team("First"), _null_team("Second")
+    db = _SyncDB(uuid.uuid4(), [t1, t2])
+
+    resp = await teams_api.sync_team_groups(current_user=_AdminUser(), db=db)
+
+    assert t1.kc_group_id is None  # failed, left for a later retry
+    assert t2.kc_group_id == "kc-second"
+    assert resp["synced"] == 1
+    assert resp["failed"] == 1
+    assert db.committed
+
+
+async def test_sync_groups_noop_when_nothing_pending(monkeypatch):
+    calls = _mock_kc(monkeypatch)
+    db = _SyncDB(uuid.uuid4(), [])  # no NULL-group teams
+
+    resp = await teams_api.sync_team_groups(current_user=_AdminUser(), db=db)
+
+    assert calls["created"] == []
+    assert resp == {"synced": 0, "failed": 0}
