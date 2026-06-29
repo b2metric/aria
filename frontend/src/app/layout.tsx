@@ -3,6 +3,7 @@ import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
+import { THEME_INIT_SCRIPT } from "@/lib/theme-script";
 
 // B2Metric brand typeface (licensed). Exposes --font-apercu; globals.css
 // uses it ahead of the system fallback stack.
@@ -21,10 +22,6 @@ export const metadata: Metadata = {
   description: "Conversational BI platform. Ask questions, get charts.",
 };
 
-// Applies the saved (or system) theme before paint to avoid a flash of the
-// wrong theme on load. Runs synchronously in <head> ahead of hydration.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');if(!t){t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}document.documentElement.setAttribute('data-theme',t);}catch(e){}})();`;
-
 export default function RootLayout({
   children,
 }: {
@@ -33,7 +30,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`h-full ${apercu.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body className="h-full bg-gray-50 antialiased">
         <AuthProvider>
