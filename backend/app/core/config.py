@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     keycloak_url: str = "http://localhost:8080/auth"
     keycloak_realm: str = "aria"
     keycloak_client_id: str = "aria-backend"
-    keycloak_verify_ssl: bool = False
+    keycloak_verify_ssl: bool = True  # verify TLS by default; http dev URLs ignore it
     jwt_leeway_seconds: int = 60
     # Keycloak ADMIN credentials for user/group provisioning. The password MUST be
     # supplied via env in non-dev (validate_runtime enforces it); never hardcoded.

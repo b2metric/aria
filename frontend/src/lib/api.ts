@@ -208,8 +208,7 @@ export async function fetchConversations(tokenOverride?: string): Promise<
 > {
   const token = tokenOverride || getAuthToken();
   const url = `${API_BASE}/api/conversations`;
-  console.log(`[fetchConversations] Fetching from: ${url} with token: ${token ? token.substring(0,10) + "..." : "EMPTY"}`);
-  
+
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${token}`,
