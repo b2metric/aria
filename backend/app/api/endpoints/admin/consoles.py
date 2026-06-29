@@ -45,10 +45,14 @@ async def list_consoles(current_user: Any = Depends(get_current_user)) -> list[C
         ConsoleLink(
             key="traefik", name="Traefik Dashboard", url=s.console_traefik_url, embeddable=True
         ),
+        # Langfuse sets its own CSP frame-ancestors 'none' at the app layer (not
+        # proxy-overridable) → opens in a new tab (Keycloak SSO still applies there).
         ConsoleLink(
             key="langfuse", name="Langfuse", url=s.console_langfuse_url, embeddable=False
         ),
+        # Keycloak's master-realm frame-ancestors CSP is relaxed to allow aria.localhost
+        # (infra/keycloak/setup-console-sso.py), so the admin console embeds.
         ConsoleLink(
-            key="keycloak", name="Keycloak Admin", url=s.console_keycloak_url, embeddable=False
+            key="keycloak", name="Keycloak Admin", url=s.console_keycloak_url, embeddable=True
         ),
     ]

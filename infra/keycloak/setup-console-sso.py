@@ -145,19 +145,49 @@ def normalise_dev_admin_email(tok):
     print(f"set {DEV_ADMIN_USERNAME} email -> {DEV_ADMIN_EMAIL} (was {u.get('email')})")
 
 
+LANGFUSE_SECRET = os.environ.get("LANGFUSE_SECRET", "langfuse-dev-secret")
+LANGFUSE_REDIRECT = os.environ.get(
+    "LANGFUSE_REDIRECT", "http://langfuse.aria.localhost/api/auth/callback/keycloak"
+)
+# Allow the Keycloak admin console to be iframed from the app (relax the master
+# realm's frame-ancestors CSP). Browsers honour CSP frame-ancestors over
+# X-Frame-Options, so this is sufficient to embed /admin/consoles -> Keycloak.
+FRAME_ANCESTORS = os.environ.get("KC_FRAME_ANCESTORS", "'self' http://aria.localhost")
+
+
+def allow_admin_console_framing(tok):
+    """Relax the master realm browser CSP so the KC admin console can be iframed."""
+    status, raw, _ = _req("GET", "/admin/realms/master", token=tok)
+    if status != 200:
+        print(f"skip CSP relax (master realm GET {status})")
+        return
+    realm = json.loads(raw)
+    headers = realm.get("browserSecurityHeaders", {}) or {}
+    headers["contentSecurityPolicy"] = f"frame-src 'self'; frame-ancestors {FRAME_ANCESTORS};"
+    headers["xFrameOptions"] = ""
+    realm["browserSecurityHeaders"] = headers
+    s, r, _ = _req("PUT", "/admin/realms/master", token=tok, data=realm)
+    print(f"relaxed master realm frame-ancestors -> {FRAME_ANCESTORS} ({s})")
+
+
 def main():
     tok = admin_token()
+    mappers = [
+        _property_mapper("email", "email", "email"),
+        _property_mapper("preferred_username", "username", "preferred_username"),
+    ]
+    upsert_confidential_client(
+        tok, "litellm-ui", LITELLM_SECRET, [LITELLM_REDIRECT, "http://llm.aria.localhost/*"], mappers
+    )
     upsert_confidential_client(
         tok,
-        "litellm-ui",
-        LITELLM_SECRET,
-        [LITELLM_REDIRECT, "http://llm.aria.localhost/*"],
-        [
-            _property_mapper("email", "email", "email"),
-            _property_mapper("preferred_username", "username", "preferred_username"),
-        ],
+        "langfuse",
+        LANGFUSE_SECRET,
+        [LANGFUSE_REDIRECT, "http://langfuse.aria.localhost/*"],
+        mappers,
     )
     normalise_dev_admin_email(tok)
+    allow_admin_console_framing(tok)
     print("done.")
 
 

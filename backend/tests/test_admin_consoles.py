@@ -39,9 +39,10 @@ async def test_embeddable_flags_match_measured_reality():
     assert by_key["minio"].embeddable is True
     assert by_key["litellm"].embeddable is True
     assert by_key["traefik"].embeddable is True
-    # Blocked by their own CSP frame-ancestors → open in a new tab.
+    # Keycloak's master-realm CSP is relaxed to allow framing → embeddable.
+    assert by_key["keycloak"].embeddable is True
+    # Langfuse blocks framing via its own app-layer CSP → new tab.
     assert by_key["langfuse"].embeddable is False
-    assert by_key["keycloak"].embeddable is False
 
 
 async def test_non_admin_is_forbidden():

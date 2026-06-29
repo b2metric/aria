@@ -136,11 +136,17 @@ services:
       - "3300:3000"   # hermes langfuse-web holds 3000; expose this one on 3300
     environment:
       <<: *langfuse-worker-env
-      NEXTAUTH_URL: http://localhost:3300
+      # Public origin behind Traefik (admin /admin/consoles opens it in a new tab).
+      NEXTAUTH_URL: http://langfuse.aria.localhost
       NEXTAUTH_URL_INTERNAL: http://0.0.0.0:3000
       AUTH_TRUST_HOST: "true"
       HOSTNAME: 0.0.0.0
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-mysecret}
+      # ── Keycloak SSO ("Sign in with SSO" on the Langfuse login) ──────────────
+      AUTH_KEYCLOAK_CLIENT_ID: langfuse
+      AUTH_KEYCLOAK_CLIENT_SECRET: langfuse-dev-secret
+      AUTH_KEYCLOAK_ISSUER: http://auth.aria.localhost/auth/realms/aria
+      AUTH_KEYCLOAK_ALLOW_ACCOUNT_LINKING: "true"
       LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-}
       LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-}
       LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-}
