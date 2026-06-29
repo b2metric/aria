@@ -10,7 +10,7 @@ import type {
   SavedQuery,
   FilterState,
 } from "@/lib/types";
-import { fetchConversations } from "@/lib/api";
+import { fetchConversations, listSavedQueries, deleteSavedQuery } from "@/lib/api";
 import StatCard from "@/components/StatCard";
 import QuerySearch from "@/components/QuerySearch";
 import ChartArea from "@/components/ChartArea";
@@ -50,6 +50,11 @@ export default function DashboardPage() {
                 status: c.status || "completed",
             }));
         }
+        try {
+          dashboard.savedQueries = await listSavedQueries(token);
+        } catch {
+          dashboard.savedQueries = [];
+        }
         setData(dashboard);
       } catch(e) {
         console.warn("Could not fetch dashboard data", e);
@@ -75,9 +80,24 @@ export default function DashboardPage() {
 
   const handleSavedQuerySelect = useCallback(
     (sq: SavedQuery) => {
-      handleSearch(sq.query);
+      handleSearch(sq.question);
     },
     [handleSearch],
+  );
+
+  const handleSavedQueryDelete = useCallback(
+    async (id: string) => {
+      const token = (session as any)?.accessToken;
+      try {
+        await deleteSavedQuery(id, token);
+        setData((prev) =>
+          prev ? { ...prev, savedQueries: prev.savedQueries.filter((q) => q.id !== id) } : prev,
+        );
+      } catch {
+        /* keep list as-is on failure */
+      }
+    },
+    [session],
   );
 
   useEffect(() => {
@@ -125,6 +145,18 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* Workspace activity stats */}
+      {data.workspaceStats && data.workspaceStats.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Workspace activity</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {data.workspaceStats.map((stat) => (
+              <StatCard key={stat.label} data={stat} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Chart Area */}
       <ChartArea
         data={data.chartData}
@@ -168,6 +200,7 @@ export default function DashboardPage() {
           <SavedQueries
             queries={data.savedQueries}
             onSelect={handleSavedQuerySelect}
+            onDelete={handleSavedQueryDelete}
           />
         )}
       </div>
