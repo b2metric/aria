@@ -133,7 +133,7 @@ export async function fetchDashboardData(): Promise<DashboardData> {
 export function streamQuery(
   question: string,
   conversationId?: string,
-  workspaceId: string = "stc-kuwait",
+  workspaceId: string = "",
   token: string = "",
 ): { reader: ReadableStreamDefaultReader<Uint8Array>; abort: () => void } {
   const controller = new AbortController();

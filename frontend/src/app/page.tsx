@@ -34,7 +34,7 @@ export default function DashboardPage() {
     async function loadData() {
       try {
         const token = (session as any)?.accessToken;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/dashboard?workspace_id=stc-kuwait`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/dashboard`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         if (!res.ok) throw new Error("Failed to fetch dashboard data");

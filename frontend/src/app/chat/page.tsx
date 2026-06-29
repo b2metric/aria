@@ -122,7 +122,7 @@ export default function ChatPage() {
 function ChatPageContent() {
   const { data: session, status } = useSession();
   const token = (session as any)?.accessToken;
-  const workspaceId = (session as any)?.user?.workspaceId || "stc-kuwait";
+  const workspaceId = (session as any)?.user?.workspaceId || "";
   const searchParams = useSearchParams();
   const router = useRouter();
   const initialQuery = searchParams.get("q") || "";

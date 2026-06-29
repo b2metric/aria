@@ -166,8 +166,15 @@ async def get_workspace_id(user: CurrentUser) -> str:
 
     Convenience dependency for endpoints that only need workspace
     scoping and don't need the full user object.
+
+    Fails closed: never fall back to a hardcoded tenant (``stc-kuwait``), which
+    would silently scope an unscoped request to another customer's data.
     """
-    return user.workspace_id or "stc-kuwait"
+    if not user.workspace_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="No workspace_id in token"
+        )
+    return user.workspace_id
 
 
 WorkspaceID = Annotated[str, Depends(get_workspace_id)]
