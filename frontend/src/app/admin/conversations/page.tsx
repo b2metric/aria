@@ -183,7 +183,7 @@ export default function AdminConversationsPage() {
                   <p className="text-sm text-gray-800 whitespace-pre-wrap">{m.content}</p>
 
                   {m.sql && (
-                    <pre className="mt-2 bg-[#0d0d14] text-gray-100 p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap break-all">{m.sql}</pre>
+                    <pre className="mt-2 bg-[#0d0d14] text-[#e2e2e8] p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap break-all">{m.sql}</pre>
                   )}
 
                   {m.trace && (

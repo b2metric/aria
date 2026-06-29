@@ -1,7 +1,20 @@
 import type { Metadata } from "next";
+import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
+
+// B2Metric brand typeface (licensed). Exposes --font-apercu; globals.css
+// uses it ahead of the system fallback stack.
+const apercu = localFont({
+  src: [
+    { path: "./fonts/Apercu_Regular.otf", weight: "400", style: "normal" },
+    { path: "./fonts/Apercu_Medium.otf", weight: "500", style: "normal" },
+    { path: "./fonts/Apercu_Bold.otf", weight: "700", style: "normal" },
+  ],
+  variable: "--font-apercu",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "ARIA — AI-Driven Analytics",
@@ -18,7 +31,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="h-full" suppressHydrationWarning>
+    <html lang="en" className={`h-full ${apercu.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
