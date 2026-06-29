@@ -745,43 +745,50 @@ function ChatPageContent() {
                     <pre className="mt-1 text-xs bg-gray-900 text-green-400 p-3 rounded-lg overflow-auto font-mono leading-relaxed">
                       {msg.sql}
                     </pre>
-                    <button
-                      onClick={async () => {
-                        const idx = messages.findIndex((m) => m.id === msg.id);
-                        const q =
-                          [...messages.slice(0, idx)].reverse().find((m) => m.role === "user")?.content ?? "";
-                        try {
-                          await saveQuery(q, msg.sql!, undefined, token);
-                          alert("Query saved");
-                        } catch {
-                          alert("Could not save query");
-                        }
-                      }}
-                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600"
-                    >
-                      💾 Save query
-                    </button>
                   </details>
                 )}
 
-                {/* Artifact chip → opens the right panel */}
-                {msg.chartSpec && (
-                  <button
-                    onClick={() => setActiveArtifactMsgId(msg.id)}
-                    className={`mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
-                      activeArtifactMsgId === msg.id
-                        ? "border-blue-300 bg-blue-50 text-blue-700"
-                        : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
-                    }`}
-                  >
-                    <span>{chartEmoji(msg.chartSpec.type)}</span>
-                    <span className="capitalize">
-                      {msg.chartSpec.type === "table" ? "Data grid" : `${msg.chartSpec.type} chart`}
-                    </span>
-                    {msg.chartSpec.title ? (
-                      <span className="text-gray-400 truncate max-w-[12rem]">— {msg.chartSpec.title}</span>
-                    ) : null}
-                  </button>
+                {/* Action chips → opens the artifact panel / saves the query */}
+                {(msg.chartSpec || (msg.sql && msg.role === "assistant" && msg.status !== "streaming")) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {msg.chartSpec && (
+                      <button
+                        onClick={() => setActiveArtifactMsgId(msg.id)}
+                        className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          activeArtifactMsgId === msg.id
+                            ? "border-blue-300 bg-blue-50 text-blue-700"
+                            : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span>{chartEmoji(msg.chartSpec.type)}</span>
+                        <span className="capitalize">
+                          {msg.chartSpec.type === "table" ? "Data grid" : `${msg.chartSpec.type} chart`}
+                        </span>
+                        {msg.chartSpec.title ? (
+                          <span className="text-gray-400 truncate max-w-[12rem]">— {msg.chartSpec.title}</span>
+                        ) : null}
+                      </button>
+                    )}
+                    {msg.sql && msg.role === "assistant" && msg.status !== "streaming" && (
+                      <button
+                        onClick={async () => {
+                          const idx = messages.findIndex((m) => m.id === msg.id);
+                          const q =
+                            [...messages.slice(0, idx)].reverse().find((m) => m.role === "user")?.content ?? "";
+                          try {
+                            await saveQuery(q, msg.sql!, undefined, token);
+                            alert("Query saved");
+                          } catch {
+                            alert("Could not save query");
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 text-xs font-medium transition-colors"
+                      >
+                        <span>💾</span>
+                        <span>Save query</span>
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {/* Insight Summary & Suggestions */}
