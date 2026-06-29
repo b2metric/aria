@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2 } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -124,8 +124,20 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Vault Schema</span>}
             </Link>
             
-            <Link 
-              href="/admin/audit-log" 
+            <Link
+              href="/admin/conversations"
+              className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
+                ${isCollapsed ? "justify-center" : "justify-start gap-3"}
+                ${pathname?.includes("/admin/conversations") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
+              `}
+              title="Conversation Debug"
+            >
+              <MessagesSquare className="w-5 h-5 flex-shrink-0" />
+              {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Conversations</span>}
+            </Link>
+
+            <Link
+              href="/admin/audit-log"
               className={`flex items-center px-3 py-2.5 rounded-lg transition-colors whitespace-nowrap
                 ${isCollapsed ? "justify-center" : "justify-start gap-3"}
                 ${pathname?.includes("/admin/audit-log") ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:bg-blue-50 hover:text-blue-700"}
