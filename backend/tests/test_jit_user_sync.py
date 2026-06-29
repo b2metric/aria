@@ -34,6 +34,24 @@ async def test_jit_sync_called_once_per_sub():
 
 
 @pytest.mark.asyncio
+async def test_jit_sync_fires_on_user_id_when_sub_absent():
+    # Tokens may carry the identity in a custom `user_id` claim with no `sub`
+    # (e.g. the `admin-001` dev identity). JIT-sync must still provision, keyed
+    # on `user_id` — otherwise the audit FK (user_id → users.id) finds no row.
+    deps._synced_users.discard("admin-001")
+    payload = TokenPayload(sub=None, workspace_id="ws1", role="admin", user_id="admin-001")
+    with (
+        patch.object(deps, "decode_token", AsyncMock(return_value=payload)),
+        patch("backend.app.auth.sync.sync_user_from_token", AsyncMock()) as sync_mock,
+    ):
+        user = await deps.get_current_user(token="t")
+
+    assert user.user_id == "admin-001"
+    sync_mock.assert_awaited_once()
+    assert "admin-001" in deps._synced_users
+
+
+@pytest.mark.asyncio
 async def test_jit_sync_failure_does_not_break_auth():
     deps._synced_users.discard("sub-2")
     with (

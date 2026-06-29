@@ -155,15 +155,21 @@ async def get_current_user(
     # Best-effort JIT provisioning: ensure a local users/team row exists for
     # JWT-only users so FK-bound features (quotas, audit, sql-visibility) resolve.
     # `sync_user_from_token` existed but had zero callers (item 10). Cached per
-    # process (one attempt per sub) and never blocks or fails authentication.
-    if user.sub and user.sub != "unknown-sub" and user.sub not in _synced_users:
-        _synced_users.add(user.sub)
+    # process (one attempt per identity) and never blocks or fails authentication.
+    #
+    # Key on the EFFECTIVE identity (`user_id`, which falls back to `sub`), not
+    # `sub` alone: tokens may carry the identity in a custom `user_id` claim with
+    # no `sub` (e.g. the legacy `admin-001` dev identity). Audit writes and the
+    # dashboard both attribute by `user_id`, so JIT-sync must provision the SAME
+    # identity or the audit FK (`user_id → users.id`) finds no row.
+    if user.user_id and user.user_id != "unknown-user" and user.user_id not in _synced_users:
+        _synced_users.add(user.user_id)
         try:
             from backend.app.auth.sync import sync_user_from_token
 
             await sync_user_from_token(user)
         except Exception:
-            logger.warning("JIT user sync failed for sub=%s (continuing)", user.sub)
+            logger.warning("JIT user sync failed for user_id=%s (continuing)", user.user_id)
 
     return user
 
