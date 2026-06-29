@@ -28,7 +28,7 @@
 | 12 | **"Queries Today" always 0** | `metrics.py:54` reads non-existent `DataAuditLog.timestamp` → broad except → 0 | ✅ |
 | 13 | **MONTHLY token quotas never enforced** | `token.py:105` `if period != daily: continue` | ✅ |
 | 14 | **"Saved Queries" entirely unwired** | `dashboard.py:128` `savedQueries: []` hardcoded; no save endpoint | ✅ |
-| 15 | **Team-invite password hardcoded** `"TempPassword123!"` | `settings/team/page.tsx`; planned `/api/workspaces/{id}/users` endpoint missing | ☐ |
+| 15 | **Team-invite password hardcoded** `"TempPassword123!"` | `settings/team/page.tsx`; planned `/api/workspaces/{id}/users` endpoint missing | ✅ |
 | 16 | **EXPLAIN guard no-op for MySQL/MSSQL** | no `explain()` override → `estimated_rows:0` → massive-query guard silently off | ✅ |
 | 17 | **Retry logic false-positive** | `@retry` on `verify_sql_security` (no DB call); real `execute_query`/LLM call have no retry | ☐ |
 
@@ -43,7 +43,7 @@
 | 22 | **Memory decay dormant** | `cleanup_expired_memories` only manual admin `POST /cleanup`; no scheduler | ✅ |
 | 23 | **Sprint 9 QueryTrace + admin conversation-debug UI never built** | no `trace` field on `ConversationMessage`; no `/admin/conversations` | ☐ |
 | 24 | **`/admin` Overview + `/settings` index = `return null`** (blank page) | `app/admin/page.tsx`, `app/settings/page.tsx` | ✅ |
-| 25 | **CSV download link lost on reload** | `csv_url` not persisted in `ConversationMessage` | ☐ |
+| 25 | **CSV download link lost on reload** | `csv_url` not persisted in `ConversationMessage` | ✅ |
 | 26 | **Two-way vault sync (Obsidian↔MinIO) is fiction** | `vault_sync.py` one-way only | ❎ closed |
 | 27 | **LLM config "Phase 1" passthrough virtual key** | `llm_resolver.py:113` — upstream key used as proxy key; no per-customer isolation | ☐ |
 | 28 | **JWT audience check disabled** | `jwt.py:119` `verify_aud:False` → accepts another client's token in the realm | ✅ |
@@ -82,7 +82,10 @@ lost export result) — invisible without this audit. Remediation should prefer 
 
 ## Remaining work (snapshot 2026-06-29)
 
-**Done & merged to main:** TIER 1 (1–5), TIER 2 (6–17), TIER 3 19,20,21,22,24,28,29, TIER 4 (console.log token-leak, dead `_detect_user_correction`). Item 26 CLOSED (not a gap — vault is intentionally one-way DB→md→Qdrant; Obsidian/MinIO sync never existed). Items 17 & audit-`success`-filter were audit false-positives (no change).
+**Done & merged to main:** TIER 1 (1–5), TIER 2 (6–17), TIER 3 19,20,21,22,24,25,28,29, TIER 4 (console.log token-leak, dead `_detect_user_correction`). Item 26 CLOSED (not a gap — vault is intentionally one-way DB→md→Qdrant; Obsidian/MinIO sync never existed). Items 17 & audit-`success`-filter were audit false-positives (no change). Item 15 verified DONE (FE posts `/api/admin/users` passwordless; backend mints a one-time temp password — folded into TIER 1 item 4).
+
+### 25 — CSV download link lost on reload — DONE
+`csv_url` added to `ConversationMessage` and persisted at both pipeline build sites (Stage-6 `assistant_msg` + resume chart re-append); FE history reload now restores `csv_url` onto the rebuilt `chartSpec`. Guard: `backend/tests/test_conversation_csv_persist.py`.
 
 ### 18 — Prefect deploy-durability (Plan 2) — STARTED
 Foundation merged (`run_store`: `heartbeat_run`, `reclaim_stale_run`, `find_running_cids` + tests). Remaining chunks:
@@ -94,9 +97,6 @@ Spec: `docs/superpowers/specs/2026-06-28-durable-resumable-chat-streaming-design
 
 ### 23 — QueryTrace + admin conversation-debug UI — NOT STARTED (new feature)
 Add a `trace` field to the persisted conversation message + an `/admin/conversations` debug screen (Sprint 9 scope, never built).
-
-### 25 — CSV download link lost on reload — MEDIUM
-`csv_url` is not persisted on the assistant `ConversationMessage`, so it vanishes on F5. Persist it (FE history only reads `chart_url`).
 
 ### 27 — BYOK per-customer virtual key (Phase 2) — MEDIUM (crypto — careful)
 `llm_resolver` uses the customer's upstream key directly as the proxy key ("Phase 1 passthrough"). Phase 2: mint/decrypt a per-customer LiteLLM virtual key. Touches `crypto`/key management — review carefully.

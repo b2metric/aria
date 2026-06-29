@@ -1939,6 +1939,7 @@ async def _process_query_impl(
                 chart_spec=cfg,
                 chart_data=_prev_assistant.chart_data,
                 chart_url=_prev_assistant.chart_url,
+                csv_url=_prev_assistant.csv_url,
             ),
         )
         yield {
@@ -2352,6 +2353,7 @@ async def _process_query_impl(
         # Persist JSON data + MinIO url, NOT the multi-MB inline HTML (Redis/history bloat).
         chart_data=chart_result.get("chart_data", []),
         chart_url=chart_result.get("chart_url", ""),
+        csv_url=chart_result.get("csv_url", ""),
         summary=summary,
         suggestions=suggestions,
     )

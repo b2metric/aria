@@ -42,6 +42,9 @@ class ConversationMessage(BaseModel):
     sql: str | None = None
     chart_html: str | None = None
     chart_url: str | None = None
+    # Presigned/public MinIO link to the full-result CSV export (item 25): persisted
+    # so the download link survives F5 / history reload, not just the live SSE event.
+    csv_url: str | None = None
     chart_spec: dict[str, Any] | None = None
     # Chart DATA points (JSON rows) for client-side recharts rendering.
     # Preferred over chart_html: avoids persisting multi-MB inline Plotly HTML.

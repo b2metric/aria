@@ -359,7 +359,12 @@ function ChatPageContent() {
             const formattedMessages = data.messages.map((m: any, i: number) => {
               const rawSpec = m.chart_spec || m.chart_config || null;
               const chartSpec = rawSpec
-                ? { ...rawSpec, data: m.chart_data || rawSpec.data || [], chart_url: m.chart_url || rawSpec.chart_url }
+                ? {
+                    ...rawSpec,
+                    data: m.chart_data || rawSpec.data || [],
+                    chart_url: m.chart_url || rawSpec.chart_url,
+                    csv_url: m.csv_url || rawSpec.csv_url,
+                  }
                 : null;
               return {
                 role: m.role,
