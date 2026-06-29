@@ -39,11 +39,11 @@ interface ChartAreaProps {
 }
 
 const COLORS = [
-  "#4a9eed",
+  "#5951ff",
   "#22c55e",
   "#f59e0b",
   "#ef4444",
-  "#8b5cf6",
+  "#8b83ff",
   "#ec4899",
   "#06b6d4",
 ];
@@ -123,7 +123,7 @@ function filterByDays(
 
 /** Selectable color palettes (first = backend/default). */
 export const PALETTES: string[][] = [
-  ["#4a9eed", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4"],
+  ["#5951ff", "#22c55e", "#f59e0b", "#ef4444", "#8b83ff", "#ec4899", "#06b6d4"],
   ["#6366f1", "#14b8a6", "#f43f5e", "#eab308", "#a855f7", "#0ea5e9", "#84cc16"],
   ["#0f172a", "#334155", "#64748b", "#94a3b8", "#cbd5e1", "#475569", "#1e293b"],
   ["#e11d48", "#fb923c", "#facc15", "#4ade80", "#2dd4bf", "#60a5fa", "#c084fc"],
