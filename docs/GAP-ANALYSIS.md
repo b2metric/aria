@@ -19,14 +19,14 @@
 
 | # | Gap | Evidence | Status |
 |---|-----|----------|--------|
-| 6 | **Token quota bypassable** | `pipeline.py:2073` fails-OPEN on exception; skipped for non-UUID user_id; "session" = conversation id → resets on new chat | ☐ |
-| 7 | **RBAC holes — 6 mutating endpoints unguarded** | 4 vault-write (`workspaces.py:448,632,1132,1190`) + 2 schema-cache (`schema.py:83,113`) → any authed user poisons workspace NL2SQL grounding | ☐ |
-| 8 | **No security headers** | `main.py:116` only CORS; no CSP/HSTS/X-Frame-Options/nosniff | ☐ |
+| 6 | **Token quota bypassable** | `pipeline.py:2073` fails-OPEN on exception; skipped for non-UUID user_id; "session" = conversation id → resets on new chat | ✅ |
+| 7 | **RBAC holes — 6 mutating endpoints unguarded** | 4 vault-write (`workspaces.py:448,632,1132,1190`) + 2 schema-cache (`schema.py:83,113`) → any authed user poisons workspace NL2SQL grounding | ✅ |
+| 8 | **No security headers** | `main.py:116` only CORS; no CSP/HSTS/X-Frame-Options/nosniff | ✅ |
 | 9 | **Rate limiting near-absent** | `query.py:202` only `POST /api/query`; public `POST /api/onboarding/register` + all admin unlimited | ☐ |
 | 10 | **`sync_user_from_token` dead (0 callers)** | `auth/sync.py:13` — JWT-only users get no local `users` row → quota/audit/SQL-visibility silently degrade | ☐ |
 | 11 | **Hardcoded `stc-kuwait` workspace fallback** | FE `page.tsx:37`, `chat/page.tsx:125`, `api.ts:136` + BE `dependencies.py:170` → cross-tenant data risk for non-STC tenants | ☐ |
-| 12 | **"Queries Today" always 0** | `metrics.py:54` reads non-existent `DataAuditLog.timestamp` → broad except → 0 | ☐ |
-| 13 | **MONTHLY token quotas never enforced** | `token.py:105` `if period != daily: continue` | ☐ |
+| 12 | **"Queries Today" always 0** | `metrics.py:54` reads non-existent `DataAuditLog.timestamp` → broad except → 0 | ✅ |
+| 13 | **MONTHLY token quotas never enforced** | `token.py:105` `if period != daily: continue` | ✅ |
 | 14 | **"Saved Queries" entirely unwired** | `dashboard.py:128` `savedQueries: []` hardcoded; no save endpoint | ☐ |
 | 15 | **Team-invite password hardcoded** `"TempPassword123!"` | `settings/team/page.tsx`; planned `/api/workspaces/{id}/users` endpoint missing | ☐ |
 | 16 | **EXPLAIN guard no-op for MySQL/MSSQL** | no `explain()` override → `estimated_rows:0` → massive-query guard silently off | ☐ |
