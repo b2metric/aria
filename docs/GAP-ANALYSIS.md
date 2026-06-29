@@ -36,7 +36,7 @@
 
 | # | Gap | Evidence | Status |
 |---|-----|----------|--------|
-| 18 | **Prefect entirely inert** | `BackgroundJob`+`prefect_flow_run_id` + dev Prefect containers, but 0 flows/deployments, absent from prod, Plan 2 reconcile never written | ☐ |
+| 18 | **Prefect entirely inert** | `BackgroundJob`+`prefect_flow_run_id` + dev Prefect containers, but 0 flows/deployments, absent from prod, Plan 2 reconcile never written | 🔄 chunks 1-3 done (app-code + reconcile flow, tested); chunk 4 (prod Prefect infra) deferred — see below |
 | 19 | **LLM chart-selection subsystem dead** | `pipeline.py:1649` `use_llm=False` constant → all of `agents/chart_llm.py` unreachable | ✅ |
 | 20 | **`Artifact` DB model/table fully dead** | never written → dashboard "Saved Artifacts: 0" placeholder (`dashboard.py:111`) | ✅ |
 | 21 | **Memory-stats wrong namespaces** | `service.py:647,657` `team:default` + `:user` → admin shows ~0 team/user memories | ✅ |
@@ -87,13 +87,43 @@ lost export result) — invisible without this audit. Remediation should prefer 
 ### 25 — CSV download link lost on reload — DONE
 `csv_url` added to `ConversationMessage` and persisted at both pipeline build sites (Stage-6 `assistant_msg` + resume chart re-append); FE history reload now restores `csv_url` onto the rebuilt `chartSpec`. Guard: `backend/tests/test_conversation_csv_persist.py`.
 
-### 18 — Prefect deploy-durability (Plan 2) — STARTED
-Foundation merged (`run_store`: `heartbeat_run`, `reclaim_stale_run`, `find_running_cids` + tests). Remaining chunks:
-1. Wire `heartbeat_run` into the detached producer (`backend/app/api/query.py`) so a long run keeps its lock alive.
-2. `backend/app/flows/reconcile.py` — Prefect `@flow reconcile_stalled_runs` (~60s scheduled): `find_running_cids` → `reclaim_stale_run` → re-run idempotently, record `prefect_flow_run_id`.
-3. `process_query(resume=True)` — skip re-appending the user message on a reconcile re-run.
-4. Prod `docker-compose.prod.yml`: add `prefect-server`/`prefect-worker` + `PREFECT_API_URL`; register the reconcile deployment.
-Spec: `docs/superpowers/specs/2026-06-28-durable-resumable-chat-streaming-design.md`. Concurrency-critical (fencing races) — do in a fresh focused session.
+### 18 — Prefect deploy-durability (Plan 2) — chunks 1-3 DONE, chunk 4 DEFERRED
+Spec: `docs/superpowers/specs/2026-06-28-durable-resumable-chat-streaming-design.md`.
+
+**Done & tested (app-code durability layer):**
+1. ✅ Heartbeat wired into the detached producer (`backend/app/api/query.py`): a
+   `run_store.maintain_heartbeat` task renews the run lock for the lifetime of
+   generation, so a long-but-alive run never lapses / is never falsely reclaimed.
+   The POST handler also persists the run's full gating context (question,
+   db_config_id, workspace_id, user_id, team_id, sql_visible) into run-meta on
+   `acquire_run`. Tests: `backend/tests/test_query_resume.py`,
+   `backend/tests/test_run_store_plan2.py`.
+2. ✅ `backend/app/flows/reconcile.py` — `reconcile_stalled_runs` flow + pure
+   `reconcile_stalled_runs_core(redis, engine)`: `find_running_cids` →
+   `reclaim_stale_run` (atomic SET NX fencing) → re-run idempotently with the
+   PERSISTED context (no JWT). A live run (lock held) is never stolen; a run
+   with no context is failed terminally (not left running forever). Prefect
+   `@flow` decoration is lazy (`get_reconcile_flow()`) so the core unit-tests
+   need no Prefect server. Tests: `backend/tests/test_reconcile.py`.
+3. ✅ `process_query(resume=True)` skips re-appending the user message on a
+   reconcile re-run. Test: `backend/tests/test_pipeline_resume.py`.
+
+**Chunk 4 — DEFERRED (LOCKED-DECISIONS-level infra; needs explicit sign-off):**
+Adding Prefect to prod is flagged in the spec (§Risks, "confirm before the
+compose change ships") because it introduces new prod services. Remaining steps
+for a separate infra PR:
+- `docker-compose.prod.yml`: add `prefect-server` + `prefect-db` + a
+  `prefect-worker` service & work-pool; wire `PREFECT_API_URL` into backend +
+  worker (mirror the dev `prefect-server`/`prefect-db` already in
+  `docker-compose.dev.yml`).
+- Register the reconcile deployment from `get_reconcile_flow()` on a ~60s
+  schedule against the prod work-pool (e.g. a `prefect deploy` step / entrypoint).
+- Record `prefect_flow_run_id` on the reconciled run (column already reserved on
+  `artifact.py`).
+Until chunk 4 ships, the reconcile flow exists and is tested but is not scheduled
+in prod, so a producer killed by a deploy still leaves its run to lapse on the
+lock TTL rather than being re-run — the live SSE fast-path + resume (Plan 1) are
+unaffected.
 
 ### 23 — QueryTrace + admin conversation-debug UI — NOT STARTED (new feature)
 Add a `trace` field to the persisted conversation message + an `/admin/conversations` debug screen (Sprint 9 scope, never built).
