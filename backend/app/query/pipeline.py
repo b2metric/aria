@@ -1651,11 +1651,20 @@ def _build_chart(
     # the raw CSV — for history/export. Plotly HTML iframe rendering was removed
     # (see agents/chart_renderer), so we no longer produce/upload chart HTML.
     columns = list(rows[0].keys())
+    from backend.app.core.config import get_settings as _get_settings
+
+    _s = _get_settings()
     pipeline_result = run_chart_pipeline_sync(
         rows,
         columns=columns,
         question=question,
-        use_llm=False,  # Heuristic only — fast, no external API call
+        # LLM-assisted chart-type selection routed through the LiteLLM proxy
+        # (custom_llm_provider="openai" + api_base). Degrades gracefully to the
+        # heuristic/table choice on any LLM/parse error, so it never blocks.
+        use_llm=True,
+        model_name=_s.llm_model,
+        llm_base_url=_s.litellm_api_base,
+        llm_api_key=_s.litellm_api_key or "sk-placeholder",
         render_formats=("png", "csv"),
     )
 

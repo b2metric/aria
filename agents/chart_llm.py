@@ -206,13 +206,17 @@ def _build_user_prompt(
 
 
 def _resolve_model(model_name: str | None = None) -> str:
-    """Resolve LLM model name — defaults to 'chart' role model.
+    """Resolve the chart LLM model name.
 
-    In production this would call ``backend.app.llm.get_model(\"chart\")``.
+    The caller (pipeline) passes the resolved platform/proxy model explicitly;
+    the fallback is the platform default, NOT a hardcoded OpenAI model the
+    LiteLLM proxy doesn't serve.
     """
     if model_name:
         return model_name
-    return "gpt-4o"
+    import os
+
+    return os.getenv("LLM_MODEL") or "deepseek-chat"
 
 
 # ── LLM call ─────────────────────────────────────────────────────────────
