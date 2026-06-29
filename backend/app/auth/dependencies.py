@@ -151,6 +151,20 @@ async def get_current_user(
         user.role.value if user.role else "none",
         user.workspace_id,
     )
+
+    # Best-effort JIT provisioning: ensure a local users/team row exists for
+    # JWT-only users so FK-bound features (quotas, audit, sql-visibility) resolve.
+    # `sync_user_from_token` existed but had zero callers (item 10). Cached per
+    # process (one attempt per sub) and never blocks or fails authentication.
+    if user.sub and user.sub != "unknown-sub" and user.sub not in _synced_users:
+        _synced_users.add(user.sub)
+        try:
+            from backend.app.auth.sync import sync_user_from_token
+
+            await sync_user_from_token(user)
+        except Exception:
+            logger.warning("JIT user sync failed for sub=%s (continuing)", user.sub)
+
     return user
 
 
