@@ -81,3 +81,11 @@ class UserResponse(BaseModel):
     sql_visibility: bool | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class UserCreateResponse(UserResponse):
+    """Response for admin user-creation: carries the one-time temporary password
+    so the admin can hand it to the new user (who must reset it on first login).
+    Shown ONCE — it is never stored or returned again."""
+
+    temporary_password: str

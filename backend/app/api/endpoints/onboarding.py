@@ -81,6 +81,7 @@ async def register_account(body: RegisterRequest):
                 password=body.password,
                 role="admin",
                 workspace_id=workspace_slug,
+                temporary=False,  # self-registration: the user chose this password
             )
 
             # 5. Create the User in DB

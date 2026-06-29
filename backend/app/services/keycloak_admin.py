@@ -13,20 +13,32 @@ class KeycloakAdminService:
         self.settings = get_settings()
         self.base_url = self.settings.keycloak_url
         self.realm = self.settings.keycloak_realm
-        # Using bootstrap admin credentials for dev. In prod, use a dedicated service account.
-        self.admin_user = "admin"
-        self.admin_pass = "admin"
-        self.admin_realm = "master"
+        # Admin credentials come from config (env in prod). The bootstrap admin/admin
+        # is allowed ONLY in development; outside dev a missing password fails loudly.
+        self.admin_user = self.settings.keycloak_admin_user
+        self.admin_pass = self.settings.keycloak_admin_password
+        self.admin_realm = self.settings.keycloak_admin_realm
+        self.admin_client_id = self.settings.keycloak_admin_client_id
+        if not self.admin_pass and self.settings.is_development:
+            logger.warning(
+                "KEYCLOAK_ADMIN_PASSWORD unset — using dev bootstrap 'admin' (DEV ONLY)."
+            )
+            self.admin_pass = "admin"
         self._token: str | None = None
 
     async def _get_admin_token(self, client: httpx.AsyncClient) -> str:
         """Get an admin token from the master realm."""
+        if not self.admin_pass:
+            logger.error("Keycloak admin password not configured (set KEYCLOAK_ADMIN_PASSWORD)")
+            raise HTTPException(
+                status_code=500, detail="Identity Provider admin credentials are not configured"
+            )
         token_url = f"{self.base_url}/realms/{self.admin_realm}/protocol/openid-connect/token"
 
         response = await client.post(
             token_url,
             data={
-                "client_id": "admin-cli",
+                "client_id": self.admin_client_id,
                 "username": self.admin_user,
                 "password": self.admin_pass,
                 "grant_type": "password",
@@ -50,9 +62,10 @@ class KeycloakAdminService:
         self,
         email: str,
         display_name: str,
-        password: str = "123456",
+        password: str,
         role: str = "member",
         workspace_id: str = "default",
+        temporary: bool = True,
     ) -> str:
         """Create a user in Keycloak and return their Keycloak ID."""
         async with httpx.AsyncClient() as client:
@@ -72,7 +85,7 @@ class KeycloakAdminService:
                 "lastName": last_name,
                 "enabled": True,
                 "emailVerified": True,
-                "credentials": [{"type": "password", "value": password, "temporary": False}],
+                "credentials": [{"type": "password", "value": password, "temporary": temporary}],
                 "attributes": {"workspace_id": [workspace_id], "role": [role]},
             }
 

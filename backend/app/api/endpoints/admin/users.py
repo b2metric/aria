@@ -7,6 +7,7 @@ customer identified via the workspace slug in the current user's JWT claims.
 from __future__ import annotations
 
 import logging
+import secrets
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -16,7 +17,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.auth.dependencies import UserContext, get_current_user
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.organization import Customer, User
-from backend.app.schemas.organization import UserCreate, UserResponse, UserUpdate
+from backend.app.schemas.organization import (
+    UserCreate,
+    UserCreateResponse,
+    UserResponse,
+    UserUpdate,
+)
 from backend.app.services.keycloak_admin import KeycloakAdminService
 
 log = logging.getLogger("aria.admin.users")
@@ -82,13 +88,18 @@ async def list_users(
     return [UserResponse.model_validate(u) for u in users]
 
 
-@router.post("", response_model=UserResponse)
+@router.post("", response_model=UserCreateResponse)
 async def create_user(
     body: UserCreate,
     current_user: UserContext = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> UserResponse:
-    """Create a new user within the current workspace."""
+) -> UserCreateResponse:
+    """Create a new user within the current workspace.
+
+    A cryptographically-random one-time password is generated and returned ONCE
+    (the user is created ``temporary`` and must reset it on first login). No shared
+    default password is ever used.
+    """
     if not current_user.can_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
 
@@ -101,14 +112,17 @@ async def create_user(
             status_code=status.HTTP_409_CONFLICT, detail="A user with this email already exists"
         )
 
-    # 1. Create in Keycloak
+    # 1. Create in Keycloak with a random temp password (force reset on first login)
+    temp_password = secrets.token_urlsafe(16)
     kc_service = KeycloakAdminService()
     workspace_slug = current_user.workspace_id or "default"
     kc_user_id, db_user_id = await kc_service.create_user(
         email=body.email,
         display_name=body.display_name,
+        password=temp_password,
         role=body.role,
         workspace_id=workspace_slug,
+        temporary=True,
     )
 
     # 2. Add to DB
@@ -127,7 +141,9 @@ async def create_user(
     await db.refresh(user)
 
     log.info("Created user %s (id=%s) in customer_id=%s", user.email, user.id, customer_id)
-    return UserResponse.model_validate(user)
+    return UserCreateResponse(
+        **UserResponse.model_validate(user).model_dump(), temporary_password=temp_password
+    )
 
 
 @router.patch("/{user_id}", response_model=UserResponse)

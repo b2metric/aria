@@ -1,6 +1,5 @@
 import base64
 import logging
-import os
 import uuid
 
 from cachetools import TTLCache
@@ -9,6 +8,8 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.app.core.config import DEV_FALLBACK_SECRET, get_settings
 
 log = logging.getLogger(__name__)
 
@@ -65,11 +66,21 @@ class AppKEKProvider(KEKProvider):
 
     @classmethod
     def get_kek_fernet(cls) -> Fernet:
-        secret_key = os.getenv("ARIA_SECRET_KEY", "fallback_secret_key_for_dev_only_change_in_prod")
+        settings = get_settings()
+        secret_key = settings.aria_secret_key or DEV_FALLBACK_SECRET
+        # Fail loud rather than silently wrap every customer DB password with a key
+        # derived from the public dev fallback. validate_runtime catches this at boot;
+        # this is defense-in-depth for any path that skips the startup gate.
+        if secret_key == DEV_FALLBACK_SECRET and not settings.is_development:
+            raise RuntimeError(
+                "ARIA_SECRET_KEY is unset (or the dev default) in a non-development "
+                "environment; refusing to derive the master KEK from the well-known "
+                "fallback. Set a strong ARIA_SECRET_KEY."
+            )
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
-            salt=b"aria_salt",
+            salt=b"aria_salt",  # static by design — changing it would orphan existing DEKs
             iterations=100000,
         )
         key = base64.urlsafe_b64encode(kdf.derive(secret_key.encode()))

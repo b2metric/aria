@@ -12,6 +12,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # It is now treated as a FATAL misconfiguration at startup (see validate_runtime).
 DUMMY_LITELLM_KEY = "sk-1234"
 
+# Well-known dev-only fallback for the master KEK secret (ARIA_SECRET_KEY) that
+# wraps every customer DB password. Deriving the KEK from this outside development
+# is a FATAL misconfiguration (see validate_runtime / crypto.AppKEKProvider).
+DEV_FALLBACK_SECRET = "fallback_secret_key_for_dev_only_change_in_prod"
+
 
 class Settings(BaseSettings):
     """ARIA application configuration.
@@ -60,6 +65,17 @@ class Settings(BaseSettings):
     keycloak_client_id: str = "aria-backend"
     keycloak_verify_ssl: bool = False
     jwt_leeway_seconds: int = 60
+    # Keycloak ADMIN credentials for user/group provisioning. The password MUST be
+    # supplied via env in non-dev (validate_runtime enforces it); never hardcoded.
+    keycloak_admin_user: str = "admin"
+    keycloak_admin_password: str | None = None
+    keycloak_admin_realm: str = "master"
+    keycloak_admin_client_id: str = "admin-cli"
+
+    # ── Secrets ──────────────────────────────────────────────────────
+    # Master KEK secret: derives the key that wraps every customer DB password.
+    # Required (strong, non-default) outside development — see validate_runtime.
+    aria_secret_key: str | None = None
 
     # ── LiteLLM ──────────────────────────────────────────────────────
     litellm_api_base: str = "http://localhost:4000"
@@ -94,6 +110,20 @@ class Settings(BaseSettings):
                 "LLM calls would 401 and silently degrade to garbage SQL. "
                 "Set a valid proxy key in backend/.env or the LITELLM_API_KEY env var."
             )
+        # Secret-management invariants — only fatal OUTSIDE development, so local dev
+        # keeps working on defaults while prod refuses to boot on weak/missing secrets.
+        if not self.is_development:
+            if not self.aria_secret_key or self.aria_secret_key == DEV_FALLBACK_SECRET:
+                problems.append(
+                    "ARIA_SECRET_KEY is missing or the well-known dev default. It derives "
+                    "the master KEK that wraps every customer DB password — set a strong, "
+                    "unique ARIA_SECRET_KEY."
+                )
+            if not self.keycloak_admin_password:
+                problems.append(
+                    "KEYCLOAK_ADMIN_PASSWORD is missing. Keycloak user/group provisioning "
+                    "would otherwise fall back to the dev bootstrap admin — set it."
+                )
         return problems
 
     @property
