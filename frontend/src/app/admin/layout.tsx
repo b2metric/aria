@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare, Boxes } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -48,6 +48,19 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             >
               <Activity className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? "" : "mr-3"} ${pathname === "/admin/health" ? "text-blue-600" : "text-gray-500"}`} />
               {!isCollapsed && <span className="font-medium">System Health</span>}
+            </Link>
+
+            <Link
+              href="/admin/consoles"
+              className={`flex items-center p-3 rounded-lg transition-colors whitespace-nowrap ${
+                pathname === "/admin/consoles"
+                  ? "bg-blue-50 text-blue-700"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              } ${isCollapsed ? "justify-center" : "justify-start"}`}
+              title={isCollapsed ? "Service Consoles" : undefined}
+            >
+              <Boxes className={`w-5 h-5 flex-shrink-0 ${isCollapsed ? "" : "mr-3"} ${pathname === "/admin/consoles" ? "text-blue-600" : "text-gray-500"}`} />
+              {!isCollapsed && <span className="font-medium">Service Consoles</span>}
             </Link>
 
 

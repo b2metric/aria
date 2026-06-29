@@ -10,6 +10,37 @@ http:
       rule: "Host(`auth.aria.localhost`)"
       service: keycloak-svc
 
+    # ── Infra service consoles (admin-only; embedded in /admin/consoles) ──────
+    # The `unframe` middleware strips X-Frame-Options so these can be iframed from
+    # aria.localhost. They live on subdomains of the same parent (aria.localhost),
+    # so they are same-site with the app → their session cookies are not 3rd-party
+    # and persist inside the iframe.
+    minio-console:
+      rule: "Host(`minio.aria.localhost`)"
+      service: minio-console-svc
+      middlewares: [unframe]
+    litellm-ui:
+      rule: "Host(`llm.aria.localhost`)"
+      service: litellm-svc
+      middlewares: [unframe]
+    langfuse:
+      rule: "Host(`langfuse.aria.localhost`)"
+      service: langfuse-svc
+      middlewares: [unframe]
+    traefik-dashboard:
+      rule: "Host(`traefik.aria.localhost`)"
+      service: api@internal
+      middlewares: [unframe]
+
+  middlewares:
+    # Remove X-Frame-Options (empty value deletes the header in Traefik) so the
+    # console responses can be framed. CSP frame-ancestors, where a service sets
+    # it (e.g. Keycloak), is handled in that service's own config, not here.
+    unframe:
+      headers:
+        customResponseHeaders:
+          X-Frame-Options: ""
+
   # Traefik v3 proxies WebSocket (Next.js HMR) transparently when the browser
   # initiates the upgrade — no header injection needed.
   services:
@@ -25,3 +56,15 @@ http:
       loadBalancer:
         servers:
           - url: "http://aria-keycloak:8080"
+    minio-console-svc:
+      loadBalancer:
+        servers:
+          - url: "http://aria-minio:9001"
+    litellm-svc:
+      loadBalancer:
+        servers:
+          - url: "http://aria-litellm:4000"
+    langfuse-svc:
+      loadBalancer:
+        servers:
+          - url: "http://aria-langfuse-web:3000"

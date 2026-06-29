@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     minio_bucket: str = "aria-artifacts"
     minio_secure: bool = False
 
+    # ── Admin service-console links (/admin/consoles, admin-only) ─────
+    # URLs of the infra web consoles surfaced in the admin panel. Defaults target
+    # the dev *.aria.localhost Traefik routes; override per env (CONSOLE_*_URL).
+    console_minio_url: str = "http://minio.aria.localhost"
+    console_litellm_url: str = "http://llm.aria.localhost/ui"
+    console_langfuse_url: str = "http://langfuse.aria.localhost"
+    console_traefik_url: str = "http://traefik.aria.localhost/dashboard/"
+    console_keycloak_url: str = "http://auth.aria.localhost/auth/admin/"
+
     # ── Keycloak ─────────────────────────────────────────────────────
     keycloak_url: str = "http://localhost:8080/auth"
     keycloak_realm: str = "aria"

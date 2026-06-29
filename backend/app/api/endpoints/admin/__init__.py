@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from backend.app.api.endpoints.admin import (
     audit,
+    consoles,
     conversations,
     encryption,
     health,
@@ -39,3 +40,4 @@ router.include_router(
 )
 
 router.include_router(health.router, prefix="/health", tags=["Admin / Health"])
+router.include_router(consoles.router, prefix="/consoles", tags=["Admin / Consoles"])
