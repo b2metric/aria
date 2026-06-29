@@ -50,45 +50,6 @@ logger = logging.getLogger(__name__)
 # ── User Preference Detection ─────────────────────────────────────────────────
 
 
-def _detect_user_correction(question: str, prev_messages: list) -> dict | None:
-    """Detect if user is correcting a previous result.
-
-    Patterns:
-    - "no, I meant X" / "hayır, X'i kastetmiştim"
-    - "not X, use Y" / "X değil, Y kullan"
-    - "actually I want X" / "aslında X istiyorum"
-    - "wrong column, use X" / "yanlış kolon, X kullan"
-
-    Returns dict with correction info if detected, None otherwise.
-    """
-    q = question.lower()
-
-    correction_patterns = [
-        # English
-        (r"\b(no|not)\b.*(meant|want|use|should be|i need)\s+(\w+)", "correction"),
-        (r"\bactually\b.*(want|need|use|meant)\s+(\w+)", "correction"),
-        (r"\bwrong\b.*(column|table|field).*(use|should be)\s+(\w+)", "column_correction"),
-        (r"\binstead of\b.*\buse\s+(\w+)", "correction"),
-        # Turkish
-        (r"\b(hayır|yanlış|değil)\b.*(kastet|kullan|olmalı|istiyorum)\s*(\w+)?", "correction"),
-        (r"\baslında\b.*(istiyorum|kullan|lazım)\s*(\w+)?", "correction"),
-    ]
-
-    for pattern, correction_type in correction_patterns:
-        match = re.search(pattern, q, re.IGNORECASE)
-        if match:
-            # Extract what they want
-            groups = match.groups()
-            target = groups[-1] if groups[-1] else None
-            return {
-                "type": correction_type,
-                "target": target,
-                "original_question": question,
-            }
-
-    return None
-
-
 def _detect_chart_preference(question: str) -> dict | None:
     """Detect chart type preference from user message.
 
