@@ -24,6 +24,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
         <button
           onClick={() => setIsCollapsed(!isCollapsed)}
           className="absolute -right-3 top-6 bg-white border border-gray-200 rounded-full p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors z-10 hidden md:block shadow-sm"
+          aria-label={isCollapsed ? "Expand menu" : "Collapse menu"}
           title={isCollapsed ? "Expand menu" : "Collapse menu"}
         >
           {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}

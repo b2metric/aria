@@ -24,7 +24,7 @@ function ProfileRow({ Icon, label, value }: ProfileRowProps) {
 export default function ProfileSettings() {
   const { data: session } = useSession();
   const user = session?.user;
-  const roles = (user as { roles?: string[] } | undefined)?.roles ?? [];
+  const roles = user?.roles ?? [];
 
   const name = user?.name || "—";
   const email = user?.email || "—";

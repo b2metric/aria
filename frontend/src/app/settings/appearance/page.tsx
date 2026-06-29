@@ -29,8 +29,8 @@ export default function AppearanceSettings() {
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg p-6">
-        <div className="text-sm font-medium text-gray-700 mb-3">Theme</div>
-        <div className="grid grid-cols-3 gap-3">
+        <p id="theme-group-label" className="text-sm font-medium text-gray-700 mb-3">Theme</p>
+        <div role="group" aria-labelledby="theme-group-label" className="grid grid-cols-3 gap-3">
           {OPTIONS.map(({ value, label, Icon }) => {
             const active = pref === value;
             return (
