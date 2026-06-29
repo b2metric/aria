@@ -7,6 +7,8 @@ which is what makes an in-flight answer survive a client refresh.
 
 from __future__ import annotations
 
+import asyncio
+
 from redis.asyncio import Redis
 
 STREAM_PREFIX = "aria:run:"
@@ -14,10 +16,18 @@ META_PREFIX = "aria:run_meta:"
 LOCK_PREFIX = "aria:run_lock:"
 
 # A producer must finish within this; safety against leaked locks. Sized to
-# cover long-running queries. True lock renewal/heartbeat (so an in-flight run
-# can outlive even this) is deferred to Plan 2 (Prefect deploy-durability).
+# cover long-running queries. A live run renews the lock via ``maintain_heartbeat``
+# (Plan 2), so it can outlive a single TTL; only a DEAD producer lets the lock
+# lapse, which is what makes its run reclaimable by the reconcile flow.
 LOCK_TTL_S = 900
+# Renew the lock well within its TTL so two consecutive missed renewals (e.g. a
+# brief event-loop stall) still don't lapse a live run's lock.
+HEARTBEAT_INTERVAL_S = 300
 STREAM_TTL_S = 3600  # keep the event log ~1h after the run ends (replay window)
+
+# Run-context fields persisted on acquire so a reconcile re-run (which has no
+# JWT) can reuse the EXACT original gating context — no re-derivation, no drift.
+_CONTEXT_FIELDS = ("question", "db_config_id", "workspace_id", "user_id", "team_id")
 
 RUNNING = "running"
 COMPLETE = "complete"
@@ -36,18 +46,51 @@ def _lock_key(cid: str) -> str:
     return f"{LOCK_PREFIX}{cid}"
 
 
-async def acquire_run(redis: Redis, cid: str, run_id: str) -> bool:
+async def acquire_run(
+    redis: Redis, cid: str, run_id: str, context: dict | None = None
+) -> bool:
     """Try to start a run for *cid*. Returns False if one is already active.
 
     Uses SET NX as a one-run-per-conversation lock so a refresh-triggered
     request can never start a duplicate generation.
+
+    *context* (optional) is the run's gating context (question, db_config_id,
+    workspace_id, user_id, team_id, sql_visible). It is persisted alongside the
+    run so a reconcile re-run can reproduce the ORIGINAL run without a JWT —
+    see :func:`get_run_context`.
     """
     acquired = await redis.set(_lock_key(cid), run_id, nx=True, ex=LOCK_TTL_S)
     if not acquired:
         return False
-    await redis.hset(_meta_key(cid), mapping={"run_id": run_id, "status": RUNNING})
+    mapping: dict[str, str] = {"run_id": run_id, "status": RUNNING}
+    if context is not None:
+        # Redis hash values must be strings: None optionals → "", bool → "1"/"0".
+        for field in _CONTEXT_FIELDS:
+            mapping[field] = "" if context.get(field) is None else str(context[field])
+        mapping["sql_visible"] = "1" if context.get("sql_visible") else "0"
+    await redis.hset(_meta_key(cid), mapping=mapping)
     await redis.expire(_meta_key(cid), STREAM_TTL_S)
     return True
+
+
+async def get_run_context(redis: Redis, cid: str) -> dict | None:
+    """Return the persisted gating context for *cid*, or None if none was stored.
+
+    Inverse of the serialization in :func:`acquire_run`: "" → None for the
+    optional fields, "1"/"0" → bool for ``sql_visible``. Used by the reconcile
+    flow to re-run a stalled run with its exact original security context.
+    """
+    meta = await redis.hgetall(_meta_key(cid))
+    if not meta or "question" not in meta:
+        return None
+    return {
+        "question": meta["question"],
+        "db_config_id": meta.get("db_config_id") or None,
+        "workspace_id": meta.get("workspace_id") or None,
+        "user_id": meta.get("user_id") or None,
+        "team_id": meta.get("team_id") or None,
+        "sql_visible": meta.get("sql_visible") == "1",
+    }
 
 
 async def finish_run(redis: Redis, cid: str, status: str) -> None:
@@ -76,6 +119,23 @@ async def heartbeat_run(redis: Redis, cid: str, run_id: str) -> bool:
         return False
     await redis.expire(_lock_key(cid), LOCK_TTL_S)
     return True
+
+
+async def maintain_heartbeat(
+    redis: Redis, cid: str, run_id: str, interval_s: float = HEARTBEAT_INTERVAL_S
+) -> None:
+    """Renew the run lock on a fixed cadence until ownership is lost.
+
+    Run as a detached task for the lifetime of a producer: every *interval_s*
+    it renews the lock so a long-but-alive run never lapses (and so never gets
+    falsely reclaimed). The moment a renewal reports the lock is no longer ours
+    (it expired and a reconciler took it over), the loop exits — a producer that
+    already lost the race must never keep extending its successor's lock.
+    """
+    while True:
+        await asyncio.sleep(interval_s)
+        if not await heartbeat_run(redis, cid, run_id):
+            return
 
 
 async def reclaim_stale_run(redis: Redis, cid: str, new_run_id: str) -> bool:
