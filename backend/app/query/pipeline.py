@@ -1795,6 +1795,7 @@ async def process_query(
     user_id: str,
     team_id: str | None = None,
     sql_visible: bool = True,
+    resume: bool = False,
 ) -> AsyncGenerator[dict, None]:
     """Process a natural language query and yield SSE events.
 
@@ -1805,6 +1806,10 @@ async def process_query(
     event, and blanks a raw table grid — while still streaming the chart
     visualisation and the insight.  Defaults to ``True`` to preserve the
     behaviour of any caller that does not resolve visibility.
+
+    *resume* (Plan 2 deploy-durability): when ``True`` the user message is NOT
+    re-appended — it was already persisted by the original POST, so a reconcile
+    re-run must not duplicate the turn.
     """
     from backend.app.query.sql_visibility import gate_sse_event
 
@@ -1815,6 +1820,7 @@ async def process_query(
         workspace_id=workspace_id,
         user_id=user_id,
         team_id=team_id,
+        resume=resume,
     ):
         gated = gate_sse_event(_event, sql_visible)
         if gated is not None:
@@ -1828,6 +1834,7 @@ async def _process_query_impl(
     workspace_id: str,
     user_id: str,
     team_id: str | None = None,
+    resume: bool = False,
 ) -> AsyncGenerator[dict, None]:
     """Inner pipeline generator (un-gated).  See :func:`process_query`.
 
@@ -1879,9 +1886,12 @@ async def _process_query_impl(
         await save_conversation(redis, conversation)
         cid = conversation.id
 
-    # Save user message
-    user_msg = ConversationMessage(role="user", content=request.question)
-    conversation = await append_message(redis, workspace_id, cid, user_msg)
+    # Save user message. On a resume/reconcile re-run the user message was
+    # already persisted by the original POST; re-appending it would duplicate
+    # the turn, so skip it — the loaded conversation already contains it.
+    if not resume:
+        user_msg = ConversationMessage(role="user", content=request.question)
+        conversation = await append_message(redis, workspace_id, cid, user_msg)
 
     # ── Fast path: pure chart-type change ("give me a pie chart") ──────────
     # Reuse the previous result's data and just re-render with the requested type.
