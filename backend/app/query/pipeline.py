@@ -1149,6 +1149,10 @@ async def _execute_sql(
             logger.debug("Could not resolve customer UUID for audit: %s", workspace_id)
 
     _user_uuid = _coerce_user_uuid(user_id)
+    # Resolve the (possibly non-UUID group-name) team identifier to a stable UUID
+    # for team-level audit attribution. "platform" → deterministic uuid5; a real
+    # UUID passes through; empty → None. Stored as a plain uuid (no FK).
+    _team_uuid = resolve_identity_uuid(team_id)
 
     deny_columns: dict | None = None
     if db is not None and workspace_id and config is not None:
@@ -1208,6 +1212,7 @@ async def _execute_sql(
             await audit.log_event(
                 customer_id=_customer_uuid,
                 user_id=_user_uuid,
+                team_id=_team_uuid,
                 action=AuditAction.QUERY,
                 resource_type=AuditResourceType.QUERY,
                 details=details,

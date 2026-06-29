@@ -73,11 +73,16 @@ class AuditService:
         action: str,
         resource_type: str,
         user_id: uuid.UUID | None = None,
+        team_id: uuid.UUID | None = None,
         resource_id: str | None = None,
         details: dict[str, Any] | None = None,
         ip_address: str | None = None,
     ) -> DataAuditLog:
         """Persist a single audit-log entry.
+
+        ``team_id`` records the caller's team (a stable UUID resolved upstream
+        via ``resolve_identity_uuid``) so dashboard activity can be grouped/
+        filtered by team.  It is a plain uuid with no FK — see the model.
 
         Returns the newly created ``DataAuditLog`` instance (already committed,
         so ``.id`` is populated).
@@ -85,6 +90,7 @@ class AuditService:
         entry = DataAuditLog(
             customer_id=customer_id,
             user_id=user_id,
+            team_id=team_id,
             action=action,
             resource_type=resource_type,
             resource_id=resource_id,

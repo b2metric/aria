@@ -76,6 +76,12 @@ class DataAuditLog(Base, UUIDMixin):
         nullable=True,
         index=True,
     )
+    # PLAIN nullable, indexed uuid — NO ForeignKey by design. Team identifiers in
+    # tokens can be non-UUID group names (e.g. "platform") with no provisioned
+    # `teams` row; an FK would raise on insert and fail the whole audit write
+    # (dropping the row + user attribution). A plain indexed uuid still supports
+    # GROUP BY team_id / equality filters for dashboard team-level activity.
+    team_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True, index=True)
     action: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
