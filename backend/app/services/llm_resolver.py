@@ -110,8 +110,14 @@ async def resolve_llm(
             ).scalar_one_or_none()
 
             if llm_config:
-                # Decrypt their virtual key (using the global decrypt_password for Phase 1)
-                # In Phase 2, this will use decrypt_for_customer
+                # Decrypt their stored proxy key with the customer's own DEK
+                # (async_decrypt_password resolves the per-customer KEK/DEK via
+                # customer_key_configs — i.e. this is already CMEK-scoped, not the
+                # global KEK). NOTE: this passes the customer's *stored upstream*
+                # key through to the proxy; true per-customer LiteLLM virtual-key
+                # minting (budget/rate-limit isolation) is gated on a LiteLLM
+                # master key + key-management API that this deployment does not yet
+                # configure — see docs/GAP-ANALYSIS.md item 27.
                 virtual_key = (
                     await async_decrypt_password(
                         llm_config.encrypted_virtual_key, llm_config.customer_id, session

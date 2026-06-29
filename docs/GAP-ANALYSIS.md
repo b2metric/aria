@@ -144,8 +144,24 @@ turns produced AFTER the backend image is rebuilt — the running `aria-backend`
 predates the Stage-6 trace wiring, so existing turns have `trace=null` (rendered
 correctly as no badge).
 
-### 27 — BYOK per-customer virtual key (Phase 2) — MEDIUM (crypto — careful)
-`llm_resolver` uses the customer's upstream key directly as the proxy key ("Phase 1 passthrough"). Phase 2: mint/decrypt a per-customer LiteLLM virtual key. Touches `crypto`/key management — review carefully.
+### 27 — BYOK per-customer virtual key (Phase 2) — BLOCKED on LiteLLM infra
+Investigated 2026-06-29. Two corrections to the original gap:
+- **Decryption is already per-customer (CMEK).** `llm_resolver` calls
+  `async_decrypt_password(encrypted_virtual_key, customer_id, session)`, which
+  resolves the customer's DEK via `customer_key_configs` (falling back to the
+  global KEK only when no per-customer config exists). The old "Phase 1 / global
+  decrypt_password" comment was stale — corrected in code.
+- **The real gap is LiteLLM-managed virtual-key minting** (per-customer budget /
+  rate-limit / model-access isolation at the proxy), NOT decryption. ARIA stores
+  the customer's *upstream* key and passes it through to the single shared proxy.
+- **Blocked:** there is no `litellm_master_key` setting and no key-management
+  client in the codebase — only a single `litellm_api_key`. True Phase 2 requires
+  standing up a LiteLLM **master key + virtual-key store** on the shared proxy
+  (an infra change touching the shared LiteLLM deployment, akin to
+  LOCKED-DECISIONS), then an admin client (`/key/generate`, `/key/delete`) + key
+  lifecycle on customer-LLM-config save/rotate/delete. Needs a scope/infra
+  decision before implementation; building it speculatively (against infra that
+  doesn't exist) would violate YAGNI. Recommended as a focused, infra-gated task.
 
 ### 30 — Keycloak team-group / delete-user — MEDIUM (needs migration)
 `create_team` writes only a DB row (no KC group); `delete_team` deletes by the wrong id (`team.id`, not the KC group id). Clean fix needs a `teams.kc_group_id` column (migration) + wire `create_team_group(name)` on create + use it on delete + a backfill for existing teams. Matters because JWT `groups` claims drive team-scoped SSO/RLS.
