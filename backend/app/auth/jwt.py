@@ -120,11 +120,13 @@ async def decode_token(token: str, *, leeway: int | None = None) -> TokenPayload
             token,
             key,
             algorithms=list(allowed_algorithms),
-            audience="account",
+            audience=settings.keycloak_audience,
             issuer=settings.keycloak_issuer,
             options={
                 "verify_signature": True,
-                "verify_aud": False,
+                # Off by default (Keycloak aud varies by client); enable in prod via
+                # keycloak_verify_audience to reject tokens minted for another client.
+                "verify_aud": settings.keycloak_verify_audience,
                 "verify_iss": True,
                 "verify_exp": True,
                 "verify_iat": True,
