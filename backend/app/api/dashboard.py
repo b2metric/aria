@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from sqlalchemy import distinct, func, select, text
 
 from backend.app.auth.dependencies import UserContext, WorkspaceID, get_current_user
 from backend.app.db.session import get_sessionmaker
@@ -95,6 +95,96 @@ async def get_user_dashboard(
     except Exception as exc:
         log.warning("User dashboard fetch failed: %s", exc)
 
+    # ── Workspace-scoped stats (counted by customer_id) ──────────────────
+    # In this environment the JWT ``sub`` is often a non-UUID legacy identifier,
+    # so the per-user block above returns 0 even when real query activity exists
+    # (those rows carry a valid customer_id but a NULL user_id). Counting by the
+    # workspace's customer_id surfaces that activity. Best-effort: never break
+    # the dashboard.
+    ws_total = 0
+    ws_today = 0
+    ws_tokens_today = 0
+    ws_active_users = 0
+    ws_trend: list[dict] = []
+
+    try:
+        async with sessionmaker() as session:
+            # Resolve customer UUID from the workspace slug (mirrors the audit
+            # resolution in backend/app/query/pipeline.py).
+            customer_id = None
+            result = await session.execute(
+                text("SELECT id FROM customers WHERE slug = :slug"),
+                {"slug": workspace_id},
+            )
+            row = result.fetchone()
+            if row:
+                customer_id = row[0]
+
+            if customer_id is not None:
+                ws_total = (
+                    await session.scalar(
+                        select(func.count(DataAuditLog.id)).where(
+                            DataAuditLog.customer_id == customer_id,
+                            DataAuditLog.action == "query",
+                        )
+                    )
+                    or 0
+                )
+
+                ws_today = (
+                    await session.scalar(
+                        select(func.count(DataAuditLog.id)).where(
+                            DataAuditLog.customer_id == customer_id,
+                            DataAuditLog.action == "query",
+                            DataAuditLog.created_at >= today,
+                        )
+                    )
+                    or 0
+                )
+
+                ws_tokens_today = (
+                    await session.scalar(
+                        select(func.sum(TokenUsageDaily.tokens_used)).where(
+                            TokenUsageDaily.customer_id == customer_id,
+                            TokenUsageDaily.usage_date == today.date(),
+                        )
+                    )
+                    or 0
+                )
+
+                ws_active_users = (
+                    await session.scalar(
+                        select(func.count(distinct(DataAuditLog.user_id))).where(
+                            DataAuditLog.customer_id == customer_id,
+                            DataAuditLog.action == "query",
+                            DataAuditLog.created_at >= today - timedelta(days=7),
+                            DataAuditLog.user_id.isnot(None),
+                        )
+                    )
+                    or 0
+                )
+
+                for i in range(6, -1, -1):
+                    day = today - timedelta(days=i)
+                    next_day = day + timedelta(days=1)
+
+                    day_queries = (
+                        await session.scalar(
+                            select(func.count(DataAuditLog.id)).where(
+                                DataAuditLog.customer_id == customer_id,
+                                DataAuditLog.action == "query",
+                                DataAuditLog.created_at >= day,
+                                DataAuditLog.created_at < next_day,
+                            )
+                        )
+                        or 0
+                    )
+
+                    day_str = day.strftime("%b %d")
+                    ws_trend.append({"date": day_str, "queries": day_queries})
+    except Exception as exc:
+        log.warning("Workspace dashboard fetch failed: %s", exc)
+
     # Saved-queries count (best-effort; never break the dashboard).
     saved_queries_count = 0
     try:
@@ -131,9 +221,23 @@ async def get_user_dashboard(
         },
     ]
 
+    workspace_stats = [
+        {"label": "Workspace Queries", "value": str(ws_total), "icon": "Database"},
+        {
+            "label": "Queries Today",
+            "value": str(ws_today),
+            "change": "Workspace",
+            "changeType": "neutral",
+            "icon": "Activity",
+        },
+        {"label": "Tokens Today", "value": f"{ws_tokens_today:,}", "icon": "Zap"},
+        {"label": "Active Users (7d)", "value": str(ws_active_users), "icon": "Users"},
+    ]
+
     return {
         "stats": stats,
-        "chartData": recent_trend,
+        "workspaceStats": workspace_stats,
+        "chartData": ws_trend or recent_trend,
         "chartConfig": {
             "type": "area",
             "xKey": "date",
