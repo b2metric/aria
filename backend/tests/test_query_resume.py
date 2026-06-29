@@ -74,6 +74,38 @@ async def test_run_producer_records_error_event_on_exception(redis, monkeypatch)
     assert await run_store.get_status(redis, "cid-2") == "error"
 
 
+async def test_run_producer_maintains_heartbeat_for_run_id(redis, monkeypatch):
+    """The detached POST producer must keep its run lock alive via a heartbeat
+    task for the lifetime of generation, then stop it on completion."""
+    monkeypatch.setattr(query_api, "process_query", _fake_pipeline)
+    seen: dict = {}
+
+    async def _fake_heartbeat(r, cid, run_id, *a, **k):
+        seen["cid"] = cid
+        seen["run_id"] = run_id
+        await asyncio.sleep(3600)  # block until the producer cancels it
+
+    monkeypatch.setattr(run_store, "maintain_heartbeat", _fake_heartbeat)
+    await run_store.acquire_run(redis, "cid-hb", "run-hb")
+
+    await query_api._run_producer(
+        redis=redis,
+        engine=None,
+        body=None,
+        workspace_id="ws",
+        user_id="u",
+        team_id=None,
+        sql_visible=True,
+        cid="cid-hb",
+        run_id="run-hb",
+    )
+
+    # Heartbeat was started against this run, and the run still completed (the
+    # heartbeat task was cancelled cleanly when generation finished).
+    assert seen == {"cid": "cid-hb", "run_id": "run-hb"}
+    assert await run_store.get_status(redis, "cid-hb") == "complete"
+
+
 # ── POST /api/query integration: spawn producer + tail the run stream ──────
 #
 # JWT fixtures are copied verbatim from backend/tests/test_query.py so this

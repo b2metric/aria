@@ -9,6 +9,7 @@ DELETE /api/conversations/{id} — delete a conversation.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import uuid
@@ -112,13 +113,21 @@ async def _run_producer(
     team_id: str | None,
     sql_visible: bool,
     cid: str,
+    run_id: str | None = None,
 ) -> None:
     """Drive the (already SQL-visibility-gated) pipeline into the run stream.
 
     Runs detached from the HTTP request, so a client disconnect does not kill
     generation. Every event is appended to ``aria:run:{cid}``; the run is then
     marked terminal and its lock released.
+
+    When *run_id* is given, a heartbeat task renews the run lock for the lifetime
+    of generation so a long-but-alive run never lapses and is never falsely
+    reclaimed by the reconcile flow; it is cancelled when generation ends.
     """
+    heartbeat: asyncio.Task | None = None
+    if run_id is not None:
+        heartbeat = asyncio.create_task(run_store.maintain_heartbeat(redis, cid, run_id))
     try:
         async for event in process_query(
             redis=redis,
@@ -143,6 +152,13 @@ async def _run_producer(
             redis, cid, {"event": "error", "data": json.dumps({"error": str(exc)})}
         )
         await run_store.finish_run(redis, cid, run_store.ERROR)
+    finally:
+        # Stop the lock-renewal task; generation is over (the run is terminal,
+        # so the lock will be released by finish_run and need not be renewed).
+        if heartbeat is not None:
+            heartbeat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat
 
 
 async def _tail_events(redis: Redis, cid: str, request: Request):
@@ -231,7 +247,17 @@ async def query(
         # One run per conversation. If a run is already active (e.g. a duplicate
         # submit / refresh re-POST), do NOT start a second generation — just tail.
         run_id = uuid.uuid4().hex
-        started = await run_store.acquire_run(redis, cid, run_id)
+        # Persist the run's full gating context so a reconcile re-run (which has
+        # no JWT) can reproduce it exactly — see flows/reconcile.py.
+        run_context = {
+            "question": body.question,
+            "db_config_id": body.db_config_id,
+            "workspace_id": workspace_id,
+            "user_id": user.user_id,
+            "team_id": user.team_id,
+            "sql_visible": sql_visible,
+        }
+        started = await run_store.acquire_run(redis, cid, run_id, context=run_context)
 
         if started:
             # Producer owns its OWN redis+engine: the request's connections close
@@ -250,6 +276,7 @@ async def query(
                         team_id=user.team_id,
                         sql_visible=sql_visible,
                         cid=cid,
+                        run_id=run_id,
                     )
                 finally:
                     await prod_redis.aclose()
