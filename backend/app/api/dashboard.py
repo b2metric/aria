@@ -95,7 +95,25 @@ async def get_user_dashboard(
     except Exception as exc:
         log.warning("User dashboard fetch failed: %s", exc)
 
-    # Format like getMockDashboardData() expects
+    # Saved-queries count (best-effort; never break the dashboard).
+    saved_queries_count = 0
+    try:
+        from redis.asyncio import Redis
+
+        from backend.app.core.config import get_settings
+        from backend.app.query.saved_queries import list_saved_queries
+
+        _redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
+        try:
+            saved = await list_saved_queries(
+                _redis, workspace_id=workspace_id, user_id=str(current_user.user_id)
+            )
+            saved_queries_count = len(saved)
+        finally:
+            await _redis.aclose()
+    except Exception as exc:
+        log.warning("Saved-queries count failed: %s", exc)
+
     stats = [
         {"label": "Total Queries", "value": str(total_queries), "icon": "Database"},
         {
@@ -107,8 +125,8 @@ async def get_user_dashboard(
         },
         {"label": "Tokens Used Today", "value": f"{tokens_today:,}", "icon": "Zap"},
         {
-            "label": "Saved Artifacts",
-            "value": "0",  # Placeholder for now
+            "label": "Saved Queries",
+            "value": str(saved_queries_count),
             "icon": "Save",
         },
     ]
