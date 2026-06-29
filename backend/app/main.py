@@ -31,6 +31,37 @@ def _truthy(value: str | None) -> bool:
     return str(value or "").strip().lower() in ("1", "true", "yes", "on")
 
 
+async def _memory_decay_loop(interval_s: int) -> None:
+    """Periodically purge expired memories for every workspace (best-effort).
+
+    item 22: cleanup_expired_memories existed but was only reachable via a manual
+    admin POST. Run it on a schedule so query-cache/user memories actually decay.
+    """
+    from sqlalchemy import select
+
+    from backend.app.db.session import get_sessionmaker
+    from backend.app.memory.service import MemoryService
+    from backend.app.models.organization import Customer
+
+    while True:
+        try:
+            await asyncio.sleep(interval_s)
+            maker = get_sessionmaker()
+            async with maker() as db:
+                slugs = (await db.execute(select(Customer.slug))).scalars().all()
+            svc = MemoryService.get_instance()
+            loop = asyncio.get_event_loop()
+            for slug in slugs:
+                try:
+                    await loop.run_in_executor(None, svc.cleanup_expired_memories, slug)
+                except Exception as exc:  # noqa: BLE001 — one workspace must not stop the rest
+                    logger.warning("Memory decay failed for %s: %s", slug, exc)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — the loop must survive transient errors
+            logger.warning("Memory decay loop error: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup validation — fail loudly instead of running degraded.
@@ -95,7 +126,19 @@ async def lifespan(app: FastAPI):
             "Startup checks passed: LiteLLM key valid; Keycloak JWKS reachable at %s",
             settings.keycloak_jwks_url,
         )
-    yield
+
+    # Memory-decay scheduler (best-effort; disabled in tests / when interval <= 0).
+    decay_task: asyncio.Task | None = None
+    if not _truthy(os.environ.get("ARIA_SKIP_STARTUP_CHECKS")):
+        _interval = int(os.environ.get("ARIA_MEMORY_DECAY_INTERVAL_S", str(6 * 3600)))
+        if _interval > 0:
+            decay_task = asyncio.create_task(_memory_decay_loop(_interval))
+
+    try:
+        yield
+    finally:
+        if decay_task is not None:
+            decay_task.cancel()
 
 
 app = FastAPI(
