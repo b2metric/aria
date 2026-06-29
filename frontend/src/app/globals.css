@@ -54,8 +54,11 @@ html[data-theme="dark"] {
   --color-gray-900: #f0f0f4;
   --color-gray-950: #f7f7fa;
 
-  /* Nav active tint + link text tuned for dark. */
+  /* Brand tint scale + link text tuned for dark, so tinted chips/badges
+     (bg-blue-50/100/200 with text-blue-600/700) keep readable contrast. */
   --color-blue-50: #232046;
+  --color-blue-100: #2a2550;
+  --color-blue-200: #39327a;
   --color-blue-700: #aba5ff;
 }
 
@@ -73,7 +76,7 @@ html[data-theme="dark"] {
   --color-blue-800: #3c35b8;
   --color-blue-900: #2e2980;
 
-  --font-sans: Apercu, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--font-apercu), Apercu, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
 @theme inline {
