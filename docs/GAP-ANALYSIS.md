@@ -41,7 +41,7 @@
 | 20 | **`Artifact` DB model/table fully dead** | never written → dashboard "Saved Artifacts: 0" placeholder (`dashboard.py:111`) | ✅ |
 | 21 | **Memory-stats wrong namespaces** | `service.py:647,657` `team:default` + `:user` → admin shows ~0 team/user memories | ✅ |
 | 22 | **Memory decay dormant** | `cleanup_expired_memories` only manual admin `POST /cleanup`; no scheduler | ✅ |
-| 23 | **Sprint 9 QueryTrace + admin conversation-debug UI never built** | no `trace` field on `ConversationMessage`; no `/admin/conversations` | ☐ |
+| 23 | **Sprint 9 QueryTrace + admin conversation-debug UI never built** | no `trace` field on `ConversationMessage`; no `/admin/conversations` | ✅ BE+FE shipped, tested & visually verified |
 | 24 | **`/admin` Overview + `/settings` index = `return null`** (blank page) | `app/admin/page.tsx`, `app/settings/page.tsx` | ✅ |
 | 25 | **CSV download link lost on reload** | `csv_url` not persisted in `ConversationMessage` | ✅ |
 | 26 | **Two-way vault sync (Obsidian↔MinIO) is fiction** | `vault_sync.py` one-way only | ❎ closed |
@@ -125,8 +125,24 @@ in prod, so a producer killed by a deploy still leaves its run to lapse on the
 lock TTL rather than being re-run — the live SSE fast-path + resume (Plan 1) are
 unaffected.
 
-### 23 — QueryTrace + admin conversation-debug UI — NOT STARTED (new feature)
-Add a `trace` field to the persisted conversation message + an `/admin/conversations` debug screen (Sprint 9 scope, never built).
+### 23 — QueryTrace + admin conversation-debug UI — DONE (visual screenshot pending)
+Shipped as a vertical slice:
+- `backend/app/query/trace.py::build_query_trace` + `ConversationMessage.trace`
+  (optional, backward-compatible); the pipeline captures the resolved model and
+  attaches the trace at Stage 6. Tests: `backend/tests/test_query_trace.py`.
+- `/api/admin/conversations` + `/{cid}` (require_role(ADMIN), workspace-scoped via
+  `list_workspace_conversations` scanning `aria:conv:{ws}:*`). Tests:
+  `backend/tests/test_admin_conversations.py` (incl. route-table RBAC introspection).
+- FE `/admin/conversations` screen + nav link, mirroring the admin audit-log page.
+Verification: backend suite green (250); FE `tsc --noEmit` + `eslint` clean; the new
+route compiles & serves 200 in the live Next dev server. Visual-verified by driving
+the live stack with the project's own Playwright (admin login → `/admin/conversations`):
+the list renders real workspace conversations and the detail dialog renders each
+turn's message + SQL. (The browser MCPs were unavailable this session, so a standalone
+Playwright script was used instead.) Note: the live QueryTrace badge only appears for
+turns produced AFTER the backend image is rebuilt — the running `aria-backend`
+predates the Stage-6 trace wiring, so existing turns have `trace=null` (rendered
+correctly as no badge).
 
 ### 27 — BYOK per-customer virtual key (Phase 2) — MEDIUM (crypto — careful)
 `llm_resolver` uses the customer's upstream key directly as the proxy key ("Phase 1 passthrough"). Phase 2: mint/decrypt a per-customer LiteLLM virtual key. Touches `crypto`/key management — review carefully.
