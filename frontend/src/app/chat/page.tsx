@@ -6,6 +6,7 @@ import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConve
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
+import { Sparkles } from "lucide-react";
 
 // Emoji for a chart artifact chip/header.
 function chartEmoji(type?: string): string {
@@ -683,14 +684,16 @@ function ChatPageContent() {
         <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
           {messages.length === 0 && !isStreaming && (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="text-4xl mb-4">💬</div>
-              <h3 className="text-lg font-semibold text-gray-700 mb-1">
-                Start a conversation
+              <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+                <Sparkles className="h-7 w-7" />
+              </div>
+              <h3 className="text-xl font-semibold text-gray-900 mb-1.5">
+                What do you want to know?
               </h3>
               <p className="text-sm text-gray-500 max-w-md">
-                Ask anything about your data. Choose one of the examples below or type your own question.
+                Ask anything about your data. Pick a starting point below or type your own question.
               </p>
-              <div className="mt-4 flex flex-wrap gap-2 justify-center">
+              <div className="mt-5 flex flex-wrap gap-2 justify-center max-w-lg">
                 {suggestions.map((example) => (
                   <button
                     key={example}
@@ -698,7 +701,7 @@ function ChatPageContent() {
                       setInputValue(example);
                       handleSubmit(example);
                     }}
-                    className="px-3 py-1.5 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
+                    className="px-3.5 py-2 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-100 hover:bg-blue-100 hover:border-blue-200 rounded-full cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
                     {example}
                   </button>
