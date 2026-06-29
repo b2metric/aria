@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions, saveQuery } from "@/lib/api";
+import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions, saveQuery, deleteSavedQuery } from "@/lib/api";
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
@@ -135,6 +135,10 @@ function ChatPageContent() {
   // Claude-Desktop-style artifact panel: id of the message whose artifact is shown on the right.
   const [activeArtifactMsgId, setActiveArtifactMsgId] = useState<string | null>(null);
   const [panelFilters, setPanelFilters] = useState<FilterState>({});
+  // Per-message saved-query state: message id → saved query id (for the inline
+  // "Query saved" + delete affordance). `savingMsgId` marks an in-flight save.
+  const [savedQueryByMsg, setSavedQueryByMsg] = useState<Record<string, string>>({});
+  const [savingMsgId, setSavingMsgId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<any[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -770,23 +774,57 @@ function ChatPageContent() {
                       </button>
                     )}
                     {msg.sql && msg.role === "assistant" && msg.status !== "streaming" && (
-                      <button
-                        onClick={async () => {
-                          const idx = messages.findIndex((m) => m.id === msg.id);
-                          const q =
-                            [...messages.slice(0, idx)].reverse().find((m) => m.role === "user")?.content ?? "";
-                          try {
-                            await saveQuery(q, msg.sql!, undefined, token);
-                            alert("Query saved");
-                          } catch {
-                            alert("Could not save query");
-                          }
-                        }}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 text-xs font-medium transition-colors"
-                      >
-                        <span>💾</span>
-                        <span>Save query</span>
-                      </button>
+                      savedQueryByMsg[msg.id] ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-medium">
+                          <span>✓</span>
+                          <span>Query saved</span>
+                          <button
+                            type="button"
+                            title="Delete saved query"
+                            aria-label="Delete saved query"
+                            onClick={async () => {
+                              if (!confirm("Delete this saved query?")) return;
+                              const sid = savedQueryByMsg[msg.id];
+                              try {
+                                await deleteSavedQuery(sid, token);
+                                setSavedQueryByMsg((prev) => {
+                                  const next = { ...prev };
+                                  delete next[msg.id];
+                                  return next;
+                                });
+                              } catch {
+                                alert("Could not delete saved query");
+                              }
+                            }}
+                            className="ml-0.5 -mr-1 px-1 rounded text-green-600 hover:text-red-600 hover:bg-red-50 transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={savingMsgId === msg.id}
+                          onClick={async () => {
+                            const idx = messages.findIndex((m) => m.id === msg.id);
+                            const q =
+                              [...messages.slice(0, idx)].reverse().find((m) => m.role === "user")?.content ?? "";
+                            setSavingMsgId(msg.id);
+                            try {
+                              const saved = await saveQuery(q, msg.sql!, undefined, token);
+                              setSavedQueryByMsg((prev) => ({ ...prev, [msg.id]: saved.id }));
+                            } catch {
+                              alert("Could not save query");
+                            } finally {
+                              setSavingMsgId(null);
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 text-xs font-medium transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          <span>💾</span>
+                          <span>{savingMsgId === msg.id ? "Saving…" : "Save query"}</span>
+                        </button>
+                      )
                     )}
                   </div>
                 )}
