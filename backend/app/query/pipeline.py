@@ -1209,9 +1209,23 @@ async def _execute_sql(
 
             from backend.app.services.audit import AuditAction, AuditResourceType
 
+            # FK-safety: data_audit_logs.user_id references users(id). If JIT-sync
+            # has not (yet) provisioned the row for this identity, writing the
+            # derived UUID would raise an FK violation and lose the WHOLE audit
+            # row. Fall back to NULL attribution so the row (and the workspace
+            # count) is never dropped.
+            attributed_user = _user_uuid
+            if attributed_user is not None:
+                from sqlalchemy import select as sa_select
+
+                from backend.app.models.organization import User as _User
+
+                if await db.scalar(sa_select(_User.id).where(_User.id == attributed_user)) is None:
+                    attributed_user = None
+
             await audit.log_event(
                 customer_id=_customer_uuid,
-                user_id=_user_uuid,
+                user_id=attributed_user,
                 team_id=_team_uuid,
                 action=AuditAction.QUERY,
                 resource_type=AuditResourceType.QUERY,

@@ -93,13 +93,17 @@ async def sync_user_from_token(user_ctx: UserContext):
                     is_active=True,
                 )
 
-                # Update if exists
+                # Update if exists — but NEVER let a JWT claim overwrite an
+                # existing row's `role` or `email`. Role is privilege-bearing
+                # (a crafted/elevated token claim must not escalate a stored
+                # user), and `email` is UNIQUE (a fallback-email collision would
+                # raise and roll the whole upsert back, dangling the audit FK).
+                # New users still get role/email from the insert values above;
+                # role changes for existing users go through the admin surface.
                 stmt = stmt.on_conflict_do_update(
                     index_elements=["id"],
                     set_={
-                        "email": stmt.excluded.email,
                         "display_name": stmt.excluded.display_name,
-                        "role": stmt.excluded.role,
                         "team_id": stmt.excluded.team_id,
                     },
                 )

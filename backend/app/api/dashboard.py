@@ -30,10 +30,9 @@ async def get_user_dashboard(
     tokens_today = 0
     recent_trend = []
 
-    try:
-        user_uuid = resolve_identity_uuid(str(current_user.user_id))
-    except (ValueError, TypeError):
-        user_uuid = None
+    # resolve_identity_uuid never raises (UUID → passthrough, non-UUID → uuid5,
+    # empty → None), so no try/except is needed here.
+    user_uuid = resolve_identity_uuid(str(current_user.user_id))
 
     try:
         async with sessionmaker() as session:
