@@ -58,6 +58,48 @@ async def finish_run(redis: Redis, cid: str, status: str) -> None:
     await redis.delete(_lock_key(cid))
 
 
+# ── Plan 2: deploy-durability (heartbeat + fencing-token reclaim) ────────────
+# The lock value IS the run_id, so it doubles as a fencing token: only the run
+# that holds it may renew it, and a reconciler can only reclaim a run whose lock
+# has EXPIRED (its producer died). This makes an in-flight answer survive a
+# backend restart — a scheduled reconcile (Prefect) re-runs the stalled run.
+
+async def heartbeat_run(redis: Redis, cid: str, run_id: str) -> bool:
+    """Renew the run lock while the producer is alive. Returns False if the
+    caller no longer owns the lock (it expired and was reclaimed elsewhere).
+
+    Ownership is re-checked before renewing so a producer that already lost its
+    lock cannot extend a successor's. (Reclaim safety — the fencing guarantee —
+    is enforced atomically by ``reclaim_stale_run``'s SET NX, not here.)
+    """
+    if (await redis.get(_lock_key(cid))) != run_id:
+        return False
+    await redis.expire(_lock_key(cid), LOCK_TTL_S)
+    return True
+
+
+async def reclaim_stale_run(redis: Redis, cid: str, new_run_id: str) -> bool:
+    """Try to take over a STALE run (status still ``running`` but its lock has
+    expired → producer died). Returns True if this caller won the takeover.
+
+    Fail-safe: ``SET NX`` only succeeds when the lock is gone, so a still-alive
+    producer (lock present) is never stolen from.
+    """
+    if (await redis.hget(_meta_key(cid), "status")) != RUNNING:
+        return False
+    acquired = await redis.set(_lock_key(cid), new_run_id, nx=True, ex=LOCK_TTL_S)
+    return bool(acquired)
+
+
+async def find_running_cids(redis: Redis) -> list[str]:
+    """Return the cids whose run meta is still ``running`` (reconcile candidates)."""
+    out: list[str] = []
+    async for key in redis.scan_iter(match=f"{META_PREFIX}*"):
+        if (await redis.hget(key, "status")) == RUNNING:
+            out.append(key[len(META_PREFIX) :])
+    return out
+
+
 async def get_status(redis: Redis, cid: str) -> str | None:
     """Return the run status for *cid*, or None if there is no run record."""
     status = await redis.hget(_meta_key(cid), "status")
