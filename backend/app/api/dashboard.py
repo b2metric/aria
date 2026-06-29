@@ -18,9 +18,24 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 async def get_user_dashboard(
     workspace_id: WorkspaceID,
     current_user: UserContext = Depends(get_current_user),
+    team_id: str | None = None,
+    user_id_filter: str | None = None,
 ):
-    """Get dashboard stats for the current user."""
+    """Get dashboard stats for the current user.
+
+    ``team_id`` / ``user_id_filter`` are optional admin filters applied to the
+    workspace-scoped aggregates + 7-day trend (never to the caller's own
+    per-user ``stats`` block). They stay scoped to ``customer_uuid`` — filtering
+    by a row's ``id`` (which IS the attribution UUID) cannot cross tenants.
+    """
     sessionmaker = get_sessionmaker()
+
+    # Reusable extra WHERE conditions for the workspace audit aggregates.
+    extra = []
+    if team_id:
+        extra.append(DataAuditLog.team_id == resolve_identity_uuid(team_id))
+    if user_id_filter:
+        extra.append(DataAuditLog.user_id == resolve_identity_uuid(user_id_filter))
 
     today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -124,6 +139,7 @@ async def get_user_dashboard(
                         select(func.count(DataAuditLog.id)).where(
                             DataAuditLog.customer_id == customer_id,
                             DataAuditLog.action == "query",
+                            *extra,
                         )
                     )
                     or 0
@@ -135,16 +151,26 @@ async def get_user_dashboard(
                             DataAuditLog.customer_id == customer_id,
                             DataAuditLog.action == "query",
                             DataAuditLog.created_at >= today,
+                            *extra,
                         )
                     )
                     or 0
                 )
+
+                # TokenUsageDaily has user_id but no team_id, so only the
+                # user filter applies here; the team filter is skipped for tokens.
+                token_extra = []
+                if user_id_filter:
+                    token_extra.append(
+                        TokenUsageDaily.user_id == resolve_identity_uuid(user_id_filter)
+                    )
 
                 ws_tokens_today = (
                     await session.scalar(
                         select(func.sum(TokenUsageDaily.tokens_used)).where(
                             TokenUsageDaily.customer_id == customer_id,
                             TokenUsageDaily.usage_date == today.date(),
+                            *token_extra,
                         )
                     )
                     or 0
@@ -157,6 +183,7 @@ async def get_user_dashboard(
                             DataAuditLog.action == "query",
                             DataAuditLog.created_at >= today - timedelta(days=7),
                             DataAuditLog.user_id.isnot(None),
+                            *extra,
                         )
                     )
                     or 0
@@ -173,6 +200,7 @@ async def get_user_dashboard(
                                 DataAuditLog.action == "query",
                                 DataAuditLog.created_at >= day,
                                 DataAuditLog.created_at < next_day,
+                                *extra,
                             )
                         )
                         or 0
@@ -235,6 +263,7 @@ async def get_user_dashboard(
     return {
         "stats": stats,
         "workspaceStats": workspace_stats,
+        "filters": {"team_id": team_id, "user_id": user_id_filter},
         "chartData": ws_trend or recent_trend,
         "chartConfig": {
             "type": "area",

@@ -131,6 +131,55 @@ async def test_workspace_stats_count_customer_rows_when_user_is_non_uuid(monkeyp
     assert per_user["Total Queries"] == "0"
 
 
+# ── Task 3: team/user filters on workspace stats ─────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_workspace_stats_apply_team_filter_and_echo(monkeypatch):
+    """Passing ``team_id`` scopes the workspace aggregates and is echoed back.
+
+    The fake workspace session returns the seeded scalars regardless of the
+    extra WHERE conditions, so this asserts the wiring: the filter is accepted,
+    surfaced in ``body["filters"]``, and the seeded workspace count flows
+    through to the "Workspace Queries" card.
+    """
+    from backend.app.api import dashboard
+
+    customer_id = uuid.uuid4()
+    team_uuid = str(uuid.uuid4())
+
+    per_user_session = _FakeSession(customer_row=None, scalar_returns=[])
+    # ws_total, ws_today, ws_tokens_today, ws_active_users, then 7 trend days.
+    workspace_session = _FakeSession(
+        customer_row=(customer_id,),
+        scalar_returns=[5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    )
+    monkeypatch.setattr(
+        dashboard,
+        "get_sessionmaker",
+        lambda: _sessionmaker_returning(per_user_session, workspace_session),
+    )
+
+    async def _no_saved(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.app.query.saved_queries.list_saved_queries", _no_saved
+    )
+
+    body = await dashboard.get_user_dashboard(
+        workspace_id="acme",
+        current_user=_non_uuid_user(),
+        team_id=team_uuid,
+    )
+
+    assert body["filters"]["team_id"] == team_uuid
+    assert body["filters"]["user_id"] is None
+
+    ws_stats = {s["label"]: s["value"] for s in body["workspaceStats"]}
+    assert ws_stats["Workspace Queries"] == "5"
+
+
 # ── Task 2: _coerce_user_uuid ────────────────────────────────────────────────
 
 
