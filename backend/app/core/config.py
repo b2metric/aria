@@ -84,6 +84,10 @@ class Settings(BaseSettings):
     # ── LiteLLM ──────────────────────────────────────────────────────
     litellm_api_base: str = "http://localhost:4000"
     litellm_api_key: str | None = None  # Falls back to LITELLM_API_KEY env var
+    # Proxy master key for the LiteLLM key-management API (item 27, BYOK Phase 2).
+    # When set, customer LLM-config saves mint a per-customer virtual key; unset →
+    # Phase-1 passthrough. Falls back to the LITELLM_MASTER_KEY env var.
+    litellm_master_key: str | None = None
     llm_model: str = "deepseek-chat"  # Default model for SQL generation
     llm_temperature: float = 0.1  # Low temperature for deterministic SQL
     llm_max_tokens: int = 2000  # Max tokens for SQL generation
@@ -98,6 +102,9 @@ class Settings(BaseSettings):
         # is kept so import never crashes, but validate_runtime() rejects it loudly.
         if not self.litellm_api_key:
             self.litellm_api_key = os.environ.get("LITELLM_API_KEY", DUMMY_LITELLM_KEY)
+        if not self.litellm_master_key:
+            # Optional: only present when the proxy's virtual-key API is in use.
+            self.litellm_master_key = os.environ.get("LITELLM_MASTER_KEY") or None
 
     def validate_runtime(self) -> list[str]:
         """Return a list of FATAL misconfigurations (empty = healthy).

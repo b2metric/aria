@@ -151,6 +151,10 @@ services:
       # LiteLLM proxy now runs in-cluster (infra/llm, service `litellm`) on aria-net.
       # Overrides the localhost:4000 value in backend/.env (env vars > .env file).
       - LITELLM_API_BASE=http://litellm:4000
+      # Optional (item 27, BYOK Phase 2): the LiteLLM proxy master key. When set,
+      # customer LLM-config saves mint a per-customer virtual key; unset → Phase-1
+      # passthrough. Must match the proxy's LITELLM_MASTER_KEY.
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

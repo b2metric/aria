@@ -45,7 +45,7 @@
 | 24 | **`/admin` Overview + `/settings` index = `return null`** (blank page) | `app/admin/page.tsx`, `app/settings/page.tsx` | ✅ |
 | 25 | **CSV download link lost on reload** | `csv_url` not persisted in `ConversationMessage` | ✅ |
 | 26 | **Two-way vault sync (Obsidian↔MinIO) is fiction** | `vault_sync.py` one-way only | ❎ closed |
-| 27 | **LLM config "Phase 1" passthrough virtual key** | `llm_resolver.py:113` — upstream key used as proxy key; no per-customer isolation | ☐ |
+| 27 | **LLM config "Phase 1" passthrough virtual key** | `llm_resolver.py:113` — upstream key used as proxy key; no per-customer isolation | ✅ Phase 2 implemented (mint per-customer virtual key when `LITELLM_MASTER_KEY` set; passthrough fallback) |
 | 28 | **JWT audience check disabled** | `jwt.py:119` `verify_aud:False` → accepts another client's token in the realm | ✅ |
 | 29 | **`keycloak_verify_ssl=False` default** + **Oracle `stc/stc123` dummy fallback** in live path | `config.py:61`, `pipeline.py:1031` (non-prod) | ✅ |
 | 30 | **`keycloak_admin.delete_user`/`create_team_group` unwired** | team KC group not created; user delete not propagated | ⏸ migration |
@@ -154,14 +154,36 @@ Investigated 2026-06-29. Two corrections to the original gap:
 - **The real gap is LiteLLM-managed virtual-key minting** (per-customer budget /
   rate-limit / model-access isolation at the proxy), NOT decryption. ARIA stores
   the customer's *upstream* key and passes it through to the single shared proxy.
-- **Blocked:** there is no `litellm_master_key` setting and no key-management
-  client in the codebase — only a single `litellm_api_key`. True Phase 2 requires
-  standing up a LiteLLM **master key + virtual-key store** on the shared proxy
-  (an infra change touching the shared LiteLLM deployment, akin to
-  LOCKED-DECISIONS), then an admin client (`/key/generate`, `/key/delete`) + key
-  lifecycle on customer-LLM-config save/rotate/delete. Needs a scope/infra
-  decision before implementation; building it speculatively (against infra that
-  doesn't exist) would violate YAGNI. Recommended as a focused, infra-gated task.
+- **NOT infra-blocked (corrected 2026-06-29).** The shared `aria-litellm` proxy
+  IS configured for virtual keys: its container has `LITELLM_MASTER_KEY` +
+  `DATABASE_URL` and `general_settings.{master_key,database_url}`, so
+  `/key/generate` works. The earlier "blocked" note was wrong — it only checked
+  the ARIA backend config, not the proxy. The proxy is reachable from
+  aria-backend (`LITELLM_API_BASE=http://litellm:4000`, health 200).
+- **Remaining ARIA-side work (buildable now):**
+  1. config: add `litellm_master_key` (env `LITELLM_MASTER_KEY`); provision the
+     same value into the aria-backend env (operator step — do NOT commit the secret).
+  2. `litellm_admin.py` client: `mint_virtual_key(...)` (`POST /key/generate`,
+     bearer = master key, scoped key_alias/models/budget) + `delete_virtual_key`.
+  3. lifecycle: on customer-LLM-config save, mint a per-customer virtual key and
+     store it (encrypted) as `encrypted_virtual_key`; delete/rotate on change.
+     Resolver already consumes `encrypted_virtual_key` → no resolver change.
+  Backward-compatible: when `litellm_master_key` is unset, keep the current
+  passthrough behavior.
+
+**IMPLEMENTED 2026-06-29 (activates when `LITELLM_MASTER_KEY` is provisioned):**
+- `backend/app/services/litellm_admin.py` — `mint_virtual_key` (`POST /key/generate`,
+  bearer = master key, scoped `key_alias=aria-{slug}` + models), `delete_virtual_key`
+  (best-effort cleanup), and `provision_virtual_key` (mint when master key set, else
+  passthrough, fall back to passthrough on proxy error). Tests:
+  `backend/tests/test_litellm_admin.py` (4).
+- `config.litellm_master_key` (env `LITELLM_MASTER_KEY`); `admin/llm_config.py` save
+  paths now store the provisioned key as `encrypted_virtual_key`; the resolver is
+  unchanged (already consumes it). Compose passes `LITELLM_MASTER_KEY` to the backend
+  (dev + prod), default empty → passthrough.
+- **Operator step to activate:** set `LITELLM_MASTER_KEY` in the backend env to the
+  same value the `aria-litellm` proxy uses, then re-save each customer's LLM config
+  to mint its virtual key. Until then, behavior is unchanged (passthrough).
 
 ### 30 — Keycloak team-group / delete-user — MEDIUM (needs migration)
 `create_team` writes only a DB row (no KC group); `delete_team` deletes by the wrong id (`team.id`, not the KC group id). Clean fix needs a `teams.kc_group_id` column (migration) + wire `create_team_group(name)` on create + use it on delete + a backfill for existing teams. Matters because JWT `groups` claims drive team-scoped SSO/RLS.

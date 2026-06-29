@@ -6,11 +6,13 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from backend.app.auth.dependencies import get_current_user
+from backend.app.core.config import get_settings
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.database import CustomerLLMConfig
 from backend.app.models.enums import LLMProvider
 from backend.app.models.organization import Customer
 from backend.app.services.crypto import async_encrypt_password
+from backend.app.services.litellm_admin import provision_virtual_key
 
 log = logging.getLogger("aria.admin.llm_config")
 router = APIRouter()
@@ -115,9 +117,18 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                     llm_config.encrypted_upstream_api_key = await async_encrypt_password(
                         body.upstream_api_key, customer.id, session
                     )
-                    # For phase 1, virtual key is just the upstream key passed through
+                    # Phase 2 (item 27): mint a per-customer LiteLLM virtual key when
+                    # a master key is configured; otherwise fall back to passthrough.
+                    _settings = get_settings()
+                    proxy_key = await provision_virtual_key(
+                        api_base=_settings.litellm_api_base,
+                        master_key=_settings.litellm_master_key,
+                        customer_slug=customer.slug,
+                        upstream_key=body.upstream_api_key,
+                        model=body.model_name,
+                    )
                     llm_config.encrypted_virtual_key = await async_encrypt_password(
-                        body.upstream_api_key, customer.id, session
+                        proxy_key, customer.id, session
                     )
                 llm_config.model_name = body.model_name
                 llm_config.deployment_or_version = body.deployment_or_version
@@ -125,6 +136,16 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                 if body.operation_models is not None:
                     llm_config.operation_models = body.operation_models or None
             else:
+                # Phase 2 (item 27): provision the proxy key (mint a per-customer
+                # virtual key when a master key is set, else passthrough).
+                _settings = get_settings()
+                proxy_key = await provision_virtual_key(
+                    api_base=_settings.litellm_api_base,
+                    master_key=_settings.litellm_master_key,
+                    customer_slug=customer.slug,
+                    upstream_key=body.upstream_api_key or "",
+                    model=body.model_name,
+                )
                 llm_config = CustomerLLMConfig(
                     customer_id=customer.id,
                     provider=body.provider,
@@ -133,7 +154,7 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
                         body.upstream_api_key or "", customer.id, session
                     ),
                     encrypted_virtual_key=await async_encrypt_password(
-                        body.upstream_api_key or "", customer.id, session
+                        proxy_key, customer.id, session
                     ),
                     model_name=body.model_name,
                     deployment_or_version=body.deployment_or_version,

@@ -68,6 +68,9 @@ services:
       KEYCLOAK_CLIENT_ID: aria-backend
       LITELLM_API_BASE: ${LITELLM_API_BASE:-http://litellm:4000}
       LITELLM_API_KEY: ${LITELLM_API_KEY}
+      # Optional (item 27, BYOK Phase 2): set to the proxy master key to enable
+      # per-customer virtual-key minting; unset → Phase-1 passthrough.
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-}
       SENTRY_DSN: ${SENTRY_DSN:-}
       # Oracle thick mode (auto-configured in container)
       ORACLE_CLIENT_LIB_DIR: /opt/oracle/instantclient
