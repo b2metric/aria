@@ -621,73 +621,78 @@ class MemoryService:
             return False
 
     def get_memory_stats(self, workspace_id: str) -> dict:
-        """Get memory statistics for a workspace."""
-        if not self._memory:
-            return {"total": 0, "by_type": {}, "expiring_soon": 0}
+        """Get memory statistics for a workspace.
 
+        Counts by scanning Qdrant directly and classifying each point by its
+        namespaced ``user_id`` payload (``{ws}:{user}`` / ``{ws}:team:{id}`` /
+        ``{ws}:query_cache``). The previous get_all/search used LITERAL prefixes
+        (``{ws}:team:default`` / ``{ws}:user``) that matched almost nothing —
+        mem0's get_all requires an exact user_id, not a prefix — so team/user
+        counts read ~0. The scroll pattern mirrors cleanup_expired_memories.
+        """
         stats = {
             "total": 0,
             "by_type": {"user": 0, "team": 0, "cache": 0},
             "expiring_soon": 0,
             "recent_7d": 0,
         }
+        if not self._memory:
+            return stats
 
         try:
             now = datetime.now(UTC)
             soon_cutoff = now + timedelta(days=7)
             recent_cutoff = now - timedelta(days=7)
+            prefix = f"{workspace_id}:"
 
-            # Get cache memories
-            cache_mems = self._memory.get_all(filters={"user_id": f"{workspace_id}:query_cache"})
-            cache_results = cache_mems.get("results", []) if isinstance(cache_mems, dict) else []
-            stats["by_type"]["cache"] = len(cache_results)
-            stats["total"] += len(cache_results)
-
-            # Get team memories
-            team_mems = self._memory.get_all(filters={"user_id": f"{workspace_id}:team:default"})
-            team_results = team_mems.get("results", []) if isinstance(team_mems, dict) else []
-            stats["by_type"]["team"] = len(team_results)
-            stats["total"] += len(team_results)
-
-            # Get user memories (user preferences stored under workspace_id:user:*)
-            # We search for memories that match user preference patterns
-            try:
-                user_mems = self._memory.search(
-                    query="user preference",
-                    filters={"user_id": f"{workspace_id}:user"},
-                    top_k=100,
+            client, collection = self._qdrant_client()
+            offset = None
+            while True:
+                points, offset = client.scroll(
+                    collection_name=collection,
+                    limit=256,
+                    with_payload=True,
+                    with_vectors=False,
+                    offset=offset,
                 )
-                user_results = user_mems.get("results", []) if isinstance(user_mems, dict) else []
-                stats["by_type"]["user"] = len(user_results)
-                stats["total"] += len(user_results)
-            except Exception:
-                # Fallback: count from get_all_memories with USER type
-                user_results = []
+                for point in points:
+                    payload = point.payload or {}
+                    uid = payload.get("user_id", "")
+                    if not uid.startswith(prefix):
+                        continue
 
-            # Count recent and expiring
-            for mem in cache_results + team_results + user_results:
-                created_at = mem.get("created_at")
-                if created_at:
-                    try:
-                        if isinstance(created_at, str):
-                            mem_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-                        else:
-                            mem_time = datetime.fromtimestamp(created_at, tz=UTC)
-                        if mem_time > recent_cutoff:
-                            stats["recent_7d"] += 1
-                    except (ValueError, TypeError):
-                        pass
+                    if uid.endswith(":query_cache"):
+                        mem_type = "cache"
+                    elif ":team:" in uid:
+                        mem_type = "team"
+                    else:
+                        mem_type = "user"
+                    stats["by_type"][mem_type] += 1
+                    stats["total"] += 1
 
-                expires_at = (
-                    mem.get("metadata", {}).get("expires_at") if mem.get("metadata") else None
-                )
-                if expires_at:
-                    try:
-                        exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
-                        if exp_time < soon_cutoff:
-                            stats["expiring_soon"] += 1
-                    except (ValueError, TypeError):
-                        pass
+                    created_at = payload.get("created_at")
+                    if created_at:
+                        try:
+                            if isinstance(created_at, str):
+                                mem_time = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                            else:
+                                mem_time = datetime.fromtimestamp(created_at, tz=UTC)
+                            if mem_time > recent_cutoff:
+                                stats["recent_7d"] += 1
+                        except (ValueError, TypeError):
+                            pass
+
+                    expires_at = payload.get("expires_at")
+                    if expires_at:
+                        try:
+                            exp_time = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+                            if exp_time < soon_cutoff:
+                                stats["expiring_soon"] += 1
+                        except (ValueError, TypeError):
+                            pass
+
+                if offset is None:
+                    break
 
         except Exception as e:
             logger.warning("Failed to get memory stats: %s", e)
