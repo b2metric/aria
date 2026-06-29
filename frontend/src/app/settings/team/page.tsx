@@ -120,7 +120,7 @@ export default function TeamSettings() {
         </div>
         <button
           onClick={() => { setTempPassword(""); setInviteError(""); setIsInviteOpen(true); }}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-[#ffffff] rounded-md hover:bg-blue-700"
         >
           <UserPlus className="w-4 h-4" />
           Invite Member
@@ -267,7 +267,7 @@ export default function TeamSettings() {
               <button
                 type="submit"
                 disabled={inviteLoading}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 text-[#ffffff] rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
               >
                 {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Invite"}
               </button>

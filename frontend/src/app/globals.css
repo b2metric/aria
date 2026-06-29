@@ -20,7 +20,9 @@
   --info: #3498db;
 }
 
-[data-theme="dark"] {
+html[data-theme="dark"] {
+  color-scheme: dark;
+
   --surface: #15151f;
   --surface-2: #1b1b27;
   --canvas: #0b0b14;
@@ -35,6 +37,26 @@
   --warning: #f1c40f;
   --danger: #ff5a4d;
   --info: #4aa3ff;
+
+  /* Flip Tailwind's neutral ramp so the app's existing white/gray utilities
+     adapt to dark. Intentionally-dark elements (code blocks, scrims) and
+     on-fill white text were pinned to literals so they stay put. */
+  --color-white: #15151f;
+  --color-gray-50: #0b0b14;
+  --color-gray-100: #1b1b27;
+  --color-gray-200: #2a2a3a;
+  --color-gray-300: #3a3a4d;
+  --color-gray-400: #8b8b9a;
+  --color-gray-500: #a0a0b0;
+  --color-gray-600: #b8b8c4;
+  --color-gray-700: #d0d0d8;
+  --color-gray-800: #e2e2e8;
+  --color-gray-900: #f0f0f4;
+  --color-gray-950: #f7f7fa;
+
+  /* Nav active tint + link text tuned for dark. */
+  --color-blue-50: #232046;
+  --color-blue-700: #aba5ff;
 }
 
 @theme {

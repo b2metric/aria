@@ -20,7 +20,7 @@ export default function OnboardingLayout({ children }: { children: ReactNode }) 
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">A</span>
+                <span className="text-[#ffffff] font-bold text-xl">A</span>
               </div>
               <span className="font-bold text-xl tracking-wide text-gray-900">ARIA</span>
             </div>
@@ -42,7 +42,7 @@ export default function OnboardingLayout({ children }: { children: ReactNode }) 
                         ? 'bg-blue-600'
                         : 'bg-gray-200'}
                   `}>
-                    <step.icon className={`h-5 w-5 ${pathname.includes(step.id) || pathname === '/onboarding/done' || (stepIdx === 0 && pathname.includes('sync')) ? 'text-white' : 'text-gray-500'}`} />
+                    <step.icon className={`h-5 w-5 ${pathname.includes(step.id) || pathname === '/onboarding/done' || (stepIdx === 0 && pathname.includes('sync')) ? 'text-[#ffffff]' : 'text-gray-500'}`} />
                   </div>
                   <div className="ml-4 hidden sm:block">
                     <p className={`text-sm font-medium ${pathname.includes(step.id) ? 'text-blue-600' : 'text-gray-500'}`}>

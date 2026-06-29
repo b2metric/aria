@@ -489,7 +489,7 @@ export default function UsersTeamsPage() {
               </Button>
               <Dialog open={createUserDialogOpen} onOpenChange={setCreateUserDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+                  <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-[#ffffff]">
                     <Plus className="w-4 h-4 mr-1" />
                     Add User
                   </Button>

@@ -573,7 +573,7 @@ function ChatPageContent() {
       {/* Mobile History Backdrop */}
       {isHistoryOpen && (
         <div 
-          className="md:hidden fixed inset-0 bg-gray-900/50 z-20"
+          className="md:hidden fixed inset-0 bg-black/50 z-20"
           onClick={() => setIsHistoryOpen(false)}
         />
       )}
@@ -602,7 +602,7 @@ function ChatPageContent() {
           <div className="p-4">
             <button
               onClick={handleNewChat}
-              className="w-full flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="w-full flex items-center gap-2 px-4 py-2 bg-blue-600 text-[#ffffff] rounded-lg hover:bg-blue-700 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -715,7 +715,7 @@ function ChatPageContent() {
               <div
                 className={`max-w-[80%] rounded-2xl px-4 py-3 ${
                   msg.role === "user"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-blue-600 text-[#ffffff]"
                     : "bg-white border border-gray-200 text-gray-900"
                 }`}
               >
@@ -746,7 +746,7 @@ function ChatPageContent() {
                     <summary className="cursor-pointer text-xs font-medium text-gray-500 hover:text-gray-700 select-none">
                       🔍 View SQL
                     </summary>
-                    <pre className="mt-1 text-xs bg-gray-900 text-green-400 p-3 rounded-lg overflow-auto font-mono leading-relaxed">
+                    <pre className="mt-1 text-xs bg-[#0d0d14] text-green-400 p-3 rounded-lg overflow-auto font-mono leading-relaxed">
                       {msg.sql}
                     </pre>
                   </details>
@@ -895,7 +895,7 @@ function ChatPageContent() {
             <button
               onClick={() => handleSubmit()}
               disabled={!inputValue.trim() || isStreaming}
-              className="px-4 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-3 bg-blue-600 text-[#ffffff] rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
               {isStreaming ? (
                 <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />

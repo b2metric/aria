@@ -26,7 +26,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
 
         <div className={`flex items-center mb-8 transition-all duration-300 ${isCollapsed ? "justify-center gap-0" : "justify-start gap-2"}`}>
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-bold text-xl">A</span>
+            <span className="text-[#ffffff] font-bold text-xl">A</span>
           </div>
           {!isCollapsed && (
             <span className="font-bold text-xl tracking-wide text-gray-900 whitespace-nowrap overflow-hidden transition-opacity duration-300">

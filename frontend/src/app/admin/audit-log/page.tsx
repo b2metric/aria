@@ -203,7 +203,7 @@ export default function AuditLogPage() {
                                 {log.details && (
                                   <div>
                                     <h4 className="text-sm font-semibold mb-1 text-gray-700">Payload</h4>
-                                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all">
+                                    <pre className="bg-[#0d0d14] text-gray-100 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-all">
                                       {JSON.stringify(log.details, null, 2)}
                                     </pre>
                                   </div>

@@ -326,7 +326,7 @@ export default function TenantConfigPage() {
               className={`px-8 py-3 rounded-lg font-medium transition-all flex items-center gap-2 ${
                 saving
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow-md"
+                  : "bg-blue-600 hover:bg-blue-700 text-[#ffffff] shadow-sm hover:shadow-md"
               }`}
             >
               <Save className="w-5 h-5" />

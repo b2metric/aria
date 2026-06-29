@@ -100,7 +100,7 @@ export default function SyncOnboarding() {
           <div className="pt-8">
             <button
               onClick={() => router.push("/")}
-              className="inline-flex items-center gap-2 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700"
+              className="inline-flex items-center gap-2 px-6 py-3 border border-transparent rounded-md shadow-sm text-base font-medium text-[#ffffff] bg-blue-600 hover:bg-blue-700"
             >
               Go to Dashboard
               <ArrowRight className="w-5 h-5" />
