@@ -40,6 +40,29 @@ async def _check_background_worker() -> dict[str, Any]:
         return {"status": "unhealthy", "error": str(e)}
 
 
+async def _check_minio(client: httpx.AsyncClient, endpoint: str) -> dict[str, Any]:
+    """Probe MinIO via its unauthenticated liveness endpoint.
+
+    Mirrors the litellm liveness probe: ``/minio/health/live`` returns 200 when the
+    object store is up (no credentials needed). Never raises — a health probe must
+    not blow up the endpoint.
+    """
+    base = str(endpoint).rstrip("/")
+    try:
+        start = asyncio.get_event_loop().time()
+        resp = await client.get(f"http://{base}/minio/health/live")
+        latency_ms = round((asyncio.get_event_loop().time() - start) * 1000)
+        if resp.status_code == 200:
+            return {"status": "healthy", "latency_ms": latency_ms}
+        return {
+            "status": "unhealthy",
+            "latency_ms": latency_ms,
+            "error": f"HTTP {resp.status_code}",
+        }
+    except Exception as e:  # noqa: BLE001 — health probe must never raise
+        return {"status": "unhealthy", "error": str(e)}
+
+
 @router.get("/")
 async def get_system_health(current_user: Any = Depends(get_current_user)):
     """Get detailed health status of all system dependencies."""
@@ -53,6 +76,7 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
         "keycloak": {"status": "unknown", "latency_ms": 0},
         "qdrant": {"status": "unknown", "latency_ms": 0},
         "litellm": {"status": "unknown", "latency_ms": 0},
+        "minio": {"status": "unknown", "latency_ms": 0},
         "customer_dbs": {"status": "unknown", "latency_ms": 0},
         "background_worker": {"status": "unknown", "latency_ms": 0},
     }
@@ -214,7 +238,11 @@ async def get_system_health(current_user: Any = Depends(get_current_user)):
         except Exception as e:
             results["litellm"] = {"status": "unhealthy", "error": str(e)}
 
-    # 6. Background worker (in-process asyncio task scheduler for large-result exports)
+        # 6. MinIO — object store for chart/export artifacts. Unauthenticated
+        # liveness probe (/minio/health/live), same client + pattern as litellm.
+        results["minio"] = await _check_minio(client, settings.minio_endpoint)
+
+    # 7. Background worker (in-process asyncio task scheduler for large-result exports)
     results["background_worker"] = await _check_background_worker()
 
     return results
