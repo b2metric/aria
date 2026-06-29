@@ -18,10 +18,9 @@ export interface Conversation {
 export interface SavedQuery {
   id: string;
   name: string;
-  query: string;
-  createdAt: string;
-  lastRun?: string;
-  tags?: string[];
+  question: string;
+  sql: string;
+  created_at: string;
 }
 
 export interface ChartDataPoint {
@@ -30,6 +29,7 @@ export interface ChartDataPoint {
 
 export interface DashboardData {
   stats: StatCardData[];
+  workspaceStats: StatCardData[];
   recentConversations: Conversation[];
   savedQueries: SavedQuery[];
   chartData: ChartDataPoint[];

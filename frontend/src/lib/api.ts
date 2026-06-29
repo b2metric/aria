@@ -1,5 +1,5 @@
 import { getSession } from "next-auth/react";
-import type { DashboardData } from "./types";
+import type { DashboardData, SavedQuery } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -11,6 +11,12 @@ export function getMockDashboardData(): DashboardData {
       { label: "Accuracy", value: "94.2%", change: "+2.1%", changeType: "up" },
       { label: "Avg Response", value: "1.8s", change: "-0.3s", changeType: "down" },
       { label: "Active Users", value: "342", change: "+8%", changeType: "up" },
+    ],
+    workspaceStats: [
+      { label: "Workspace Queries", value: "48.1K", change: "+11%", changeType: "up" },
+      { label: "Team Members", value: "18", change: "+2", changeType: "up" },
+      { label: "Saved Queries", value: "126", change: "+9%", changeType: "up" },
+      { label: "Data Sources", value: "7", change: "0", changeType: "neutral" },
     ],
     recentConversations: [
       {
@@ -57,33 +63,30 @@ export function getMockDashboardData(): DashboardData {
       {
         id: "s1",
         name: "Monthly Revenue by Region",
-        query: "Show monthly prepaid revenue by region for current year",
-        createdAt: "2026-05-15",
-        lastRun: "2 hours ago",
-        tags: ["revenue", "regional"],
+        question: "Show monthly prepaid revenue by region for current year",
+        sql: "SELECT region, SUM(revenue) FROM prepaid GROUP BY region",
+        created_at: "2026-05-15",
       },
       {
         id: "s2",
         name: "Top Customers Recharge",
-        query: "Top 10 customers by recharge amount this month",
-        createdAt: "2026-05-20",
-        lastRun: "15 min ago",
-        tags: ["customers", "recharge"],
+        question: "Top 10 customers by recharge amount this month",
+        sql: "SELECT customer, SUM(amount) FROM recharge GROUP BY customer ORDER BY 2 DESC LIMIT 10",
+        created_at: "2026-05-20",
       },
       {
         id: "s3",
         name: "Churn Risk Analysis",
-        query: "Churn prediction for postpaid segment with risk scores",
-        createdAt: "2026-05-28",
-        lastRun: "1 hour ago",
-        tags: ["churn", "postpaid"],
+        question: "Churn prediction for postpaid segment with risk scores",
+        sql: "SELECT customer, risk_score FROM churn_predictions WHERE segment = 'postpaid'",
+        created_at: "2026-05-28",
       },
       {
         id: "s4",
         name: "ARPU Comparison YTD",
-        query: "Compare ARPU across all regions YTD vs last year",
-        createdAt: "2026-06-01",
-        tags: ["arpu", "benchmark"],
+        question: "Compare ARPU across all regions YTD vs last year",
+        sql: "SELECT region, arpu_ytd, arpu_last_year FROM arpu_benchmark",
+        created_at: "2026-06-01",
       },
     ],
     chartData: [
@@ -376,14 +379,6 @@ export async function fetchWorkspaceSuggestions(workspaceId: string, tokenOverri
 }
 
 // ── Saved queries (TIER 2 item 14) ──────────────────────────────────────────
-
-export interface SavedQuery {
-  id: string;
-  name: string;
-  question: string;
-  sql: string;
-  created_at: string;
-}
 
 export async function saveQuery(
   question: string,
