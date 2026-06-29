@@ -201,7 +201,10 @@ class ArtifactStore:
         assert self._client is not None
         try:
             if not self._client.bucket_exists(self._bucket):
-                self._client.make_bucket(self._bucket, region=self._region)
+                # minio SDK's make_bucket takes `location`, NOT `region` (only the
+                # Minio(...) constructor takes `region`). Passing `region` raises a
+                # TypeError that `except S3Error` won't catch, killing the upload.
+                self._client.make_bucket(self._bucket, location=self._region)
                 log.info("artifact_store.bucket_created", bucket=self._bucket)
         except S3Error as exc:
             log.warning("artifact_store.bucket_check_failed", error=str(exc))

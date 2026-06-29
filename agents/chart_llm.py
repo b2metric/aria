@@ -169,7 +169,17 @@ question, pick the SINGLE best chart type and configure axes.
 - Confidence should reflect how certain you are: 0.9+ for obvious matches,
   0.5-0.7 for ambiguous data.
 
-Respond ONLY with the structured output — no extra text.
+## Output format
+Respond ONLY with a single JSON object — no prose, no markdown fences. The word
+"json" is required here because the response is parsed as JSON. Use exactly these keys:
+- "chart_type": one of bar|line|scatter|pie|area|table
+- "x_column": column for the x-axis (empty string for table)
+- "y_column": column for the y-axis (empty string for table)
+- "color_column": optional grouping column (empty string if none)
+- "title": short descriptive title (≤60 chars)
+- "labels": object mapping column names to human-friendly labels (may be empty)
+- "reasoning": one short sentence
+- "confidence": number 0.0–1.0
 """
 
 
