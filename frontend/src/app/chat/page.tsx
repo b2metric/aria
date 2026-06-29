@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions } from "@/lib/api";
+import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions, saveQuery } from "@/lib/api";
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
@@ -745,6 +745,22 @@ function ChatPageContent() {
                     <pre className="mt-1 text-xs bg-gray-900 text-green-400 p-3 rounded-lg overflow-auto font-mono leading-relaxed">
                       {msg.sql}
                     </pre>
+                    <button
+                      onClick={async () => {
+                        const idx = messages.findIndex((m) => m.id === msg.id);
+                        const q =
+                          [...messages.slice(0, idx)].reverse().find((m) => m.role === "user")?.content ?? "";
+                        try {
+                          await saveQuery(q, msg.sql!, undefined, token);
+                          alert("Query saved");
+                        } catch {
+                          alert("Could not save query");
+                        }
+                      }}
+                      className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-blue-600"
+                    >
+                      💾 Save query
+                    </button>
                   </details>
                 )}
 
