@@ -77,6 +77,10 @@ services:
       # Worker config
       GUNICORN_WORKERS: ${GUNICORN_WORKERS:-4}
       GUNICORN_TIMEOUT: ${GUNICORN_TIMEOUT:-120}
+    volumes:
+      # Persist mem0's BM25 sparse model (Qdrant/bm25) so it downloads from the HF
+      # Hub once, not on every container restart/redeploy.
+      - fastembed_cache:/home/aria/.cache/fastembed
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.${DOMAIN:-localhost}`)"
@@ -268,3 +272,4 @@ volumes:
   qdrant_data:
   keycloak_db_data:
   traefik_letsencrypt:
+  fastembed_cache:  # mem0 BM25 sparse model — download once, persist across redeploys

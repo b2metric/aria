@@ -75,6 +75,11 @@ COPY infra/gunicorn.conf.py ./gunicorn.conf.py
 
 # Set ownership
 RUN chown -R aria:aria /app
+
+# Pre-create the fastembed cache dir owned by aria so a mounted named volume
+# (see docker-compose.prod) inherits aria ownership; the non-root app downloads
+# mem0's BM25 sparse model (Qdrant/bm25) here once instead of on every start.
+RUN mkdir -p /home/aria/.cache/fastembed && chown -R aria:aria /home/aria
 USER aria
 
 # Environment
@@ -83,6 +88,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV ORACLE_CLIENT_LIB_DIR=/opt/oracle/instantclient
 ENV LD_LIBRARY_PATH=/opt/oracle/instantclient:$LD_LIBRARY_PATH
+ENV FASTEMBED_CACHE_PATH=/home/aria/.cache/fastembed
 
 # Production settings
 ENV APP_ENV=production

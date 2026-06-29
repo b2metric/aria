@@ -88,6 +88,13 @@ COPY alembic.ini ./
 
 # Set ownership
 RUN chown -R aria:aria /app
+
+# Pre-create the fastembed cache dir owned by aria. mem0's BM25 sparse encoder
+# (Qdrant/bm25, ~18 files) downloads here from the HF Hub on first use; persisting
+# it via a named volume (see docker-compose) avoids re-downloading on every start.
+# Pre-creating + chowning means a freshly-mounted named volume inherits aria
+# ownership (a root-owned volume would block the non-root app from writing).
+RUN mkdir -p /home/aria/.cache/fastembed && chown -R aria:aria /home/aria/.cache
 USER aria
 
 # Environment
@@ -99,6 +106,9 @@ ENV LD_LIBRARY_PATH=/opt/oracle/instantclient:$LD_LIBRARY_PATH
 # Kaleido/choreographer picks the browser from BROWSER_PATH; point it at the
 # system chromium installed above (launched headless + --no-sandbox by default).
 ENV BROWSER_PATH=/usr/bin/chromium
+# Persisted fastembed cache (mem0 BM25 sparse model). Backed by a named volume in
+# docker-compose so the model downloads once, not on every container start.
+ENV FASTEMBED_CACHE_PATH=/home/aria/.cache/fastembed
 
 EXPOSE 8000
 

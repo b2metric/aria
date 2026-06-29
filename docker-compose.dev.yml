@@ -132,6 +132,9 @@ services:
       # Schema vault (docs/vaults/<workspace>/tables/*.md) drives SQL generation;
       # not COPYed in the image, so mount it for dev (else queries → no_tables_found).
       - ./docs:/app/docs
+      # Persist mem0's BM25 sparse model (Qdrant/bm25) so it downloads once instead
+      # of re-fetching from the HF Hub on every container restart/rebuild.
+      - fastembed_cache:/home/aria/.cache/fastembed
     environment:
       - DATABASE_URL=postgresql+asyncpg://aria:aria_dev@postgres:5432/aria
       - REDIS_URL=redis://redis:6379/0
@@ -294,6 +297,7 @@ volumes:
   minio_data:
   qdrant_data:
   prefect_db_data:
+  fastembed_cache:  # mem0 BM25 sparse model — download once, persist across restarts
 
 # ── Network ────────────────────────────────────────────────────────────
 networks:
