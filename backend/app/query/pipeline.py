@@ -145,6 +145,22 @@ def _sqlglot_dialect(db_type_value: str | None) -> str | None:
     return _SQLGLOT_DIALECTS.get(db_type_value.lower())
 
 
+def _coerce_user_uuid(user_id: str | None) -> _uuid.UUID | None:
+    """Parse a user identifier to UUID; warn (don't silently drop) on non-UUID.
+
+    In some environments the JWT ``sub`` is a non-UUID legacy identifier
+    (e.g. ``admin-001``). Such audit rows cannot be attributed to a user and
+    will never appear on the per-user dashboard — log so it is diagnosable.
+    """
+    if not user_id:
+        return None
+    try:
+        return _uuid.UUID(user_id)
+    except (ValueError, AttributeError):
+        logger.warning("Audit: non-UUID user_id %r — row will be unattributed", user_id)
+        return None
+
+
 async def _resolve_vault_policy(
     workspace_id: str,
     db: AsyncSession,
@@ -436,8 +452,6 @@ async def _get_table_columns(engine: AsyncEngine, table_name: str, workspace_id:
         logger.warning("Could not read vault %s: %s", table_name, e)
         return [{"name": "unknown", "type": "VARCHAR2", "description": ""}]
 
-
-import contextlib  # noqa: E402
 
 from backend.app.services.llm_resolver import ResolvedLLM  # noqa: E402
 
@@ -1138,9 +1152,7 @@ async def _execute_sql(
         except Exception:
             logger.debug("Could not resolve customer UUID for audit: %s", workspace_id)
 
-    if user_id:
-        with contextlib.suppress(ValueError, AttributeError):
-            _user_uuid = _uuid.UUID(user_id)
+    _user_uuid = _coerce_user_uuid(user_id)
 
     deny_columns: dict | None = None
     if db is not None and workspace_id and config is not None:

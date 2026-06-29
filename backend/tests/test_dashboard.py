@@ -13,6 +13,7 @@ Two concerns are covered here:
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 import pytest
@@ -110,3 +111,29 @@ async def test_workspace_stats_count_customer_rows_when_user_is_non_uuid(monkeyp
 
     per_user = {s["label"]: s["value"] for s in body["stats"]}
     assert per_user["Total Queries"] == "0"
+
+
+# ── Task 2: _coerce_user_uuid ────────────────────────────────────────────────
+
+
+def test_non_uuid_user_id_logs_warning(caplog):
+    from backend.app.query import pipeline
+
+    with caplog.at_level(logging.WARNING, logger=pipeline.logger.name):
+        result = pipeline._coerce_user_uuid("admin-001")
+
+    assert result is None
+    assert any("non-UUID user_id" in rec.message for rec in caplog.records)
+
+
+def test_valid_uuid_user_id_coerces():
+    from backend.app.query import pipeline
+
+    some_uuid = uuid.uuid4()
+    assert pipeline._coerce_user_uuid(str(some_uuid)) == some_uuid
+
+
+def test_none_user_id_returns_none():
+    from backend.app.query import pipeline
+
+    assert pipeline._coerce_user_uuid(None) is None
