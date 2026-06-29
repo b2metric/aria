@@ -1,5 +1,5 @@
 import { getSession } from "next-auth/react";
-import type { DashboardData, SavedQuery } from "./types";
+import type { DashboardData, PickerItem, SavedQuery } from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -123,6 +123,29 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     // fall back to mock data
   }
   return getMockDashboardData();
+}
+
+/**
+ * Fetch the dashboard with optional team/user activity filters.
+ *
+ * The backend applies `team_id`/`user_id_filter` to the workspace-scoped
+ * aggregates + 7-day trend (always scoped to the caller's tenant). Filters
+ * are only sent when provided so the default call stays unfiltered.
+ */
+export async function getDashboard(
+  token: string,
+  opts?: { teamId?: string; userId?: string },
+): Promise<DashboardData> {
+  const params = new URLSearchParams();
+  if (opts?.teamId) params.set("team_id", opts.teamId);
+  if (opts?.userId) params.set("user_id_filter", opts.userId);
+  const qs = params.toString();
+  const res = await fetch(`${API_BASE}/api/dashboard${qs ? `?${qs}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
+  return res.json();
 }
 
 // ── Chat / Query API ───────────────────────────────────────────────────
@@ -327,6 +350,49 @@ export async function fetchAdminMemory(token: string): Promise<any[]> {
   if (!res.ok) throw new Error(`Failed to fetch admin memory: ${res.status}`);
   const data = await res.json();
   return Array.isArray(data) ? data : [];
+}
+
+/**
+ * List teams in the admin's workspace for the dashboard filter picker.
+ *
+ * Admin-only on the backend (`GET /api/admin/teams`); a non-OK response
+ * (e.g. 403 for non-admins) resolves to [] so the filter UI simply stays
+ * hidden rather than throwing.
+ */
+export async function listAdminTeams(token: string): Promise<PickerItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/teams`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "omit",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map((t: any) => ({ id: t.id, name: t.name }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * List users in the admin's workspace for the dashboard filter picker.
+ *
+ * Admin-only on the backend (`GET /api/admin/users`); a non-OK response
+ * resolves to [] (see {@link listAdminTeams}).
+ */
+export async function listAdminUsers(token: string): Promise<PickerItem[]> {
+  try {
+    const res = await fetch(`${API_BASE}/api/admin/users`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "omit",
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map((u: any) => ({ id: u.id, name: u.display_name || u.email }));
+  } catch {
+    return [];
+  }
 }
 
 export interface VaultTable {

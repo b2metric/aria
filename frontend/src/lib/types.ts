@@ -34,6 +34,13 @@ export interface DashboardData {
   savedQueries: SavedQuery[];
   chartData: ChartDataPoint[];
   chartConfig: ChartConfig;
+  filters?: { team_id: string | null; user_id: string | null };
+}
+
+/** A selectable team or user for the dashboard activity filters. */
+export interface PickerItem {
+  id: string;
+  name: string;
 }
 
 export interface ChartConfig {

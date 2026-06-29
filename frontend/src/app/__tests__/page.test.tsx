@@ -25,46 +25,53 @@ vi.mock("next/navigation", () => ({
 }));
 
 // ── Mock API ─────────────────────────────────────────────────────────
+const mockDashboard = {
+  stats: [
+    { label: "Total Queries", value: "12.4K", change: "+14%", changeType: "up" as const },
+    { label: "Accuracy", value: "94.2%", change: "+2.1%", changeType: "up" as const },
+    { label: "Avg Response", value: "1.8s", change: "-0.3s", changeType: "down" as const },
+    { label: "Active Users", value: "342", change: "+8%", changeType: "up" as const },
+  ],
+  workspaceStats: [],
+  recentConversations: [
+    {
+      id: "c1",
+      query: "Show me prepaid revenue by region",
+      timestamp: "2 min ago",
+      status: "completed" as const,
+      rowCount: 142,
+      duration: "1.2s",
+    },
+  ],
+  savedQueries: [
+    {
+      id: "s1",
+      name: "Monthly Revenue",
+      query: "Show monthly prepaid revenue",
+      createdAt: "2026-05-15",
+      tags: ["revenue"],
+    },
+  ],
+  chartData: [
+    { month: "Jan", revenue: 2400 },
+    { month: "Feb", revenue: 1398 },
+  ],
+  chartConfig: {
+    type: "bar" as const,
+    xKey: "month",
+    yKeys: ["revenue"],
+    title: "Monthly Revenue",
+  },
+};
 const mockFetchConversations = vi.fn();
 vi.mock("@/lib/api", () => ({
-  getMockDashboardData: () => ({
-    stats: [
-      { label: "Total Queries", value: "12.4K", change: "+14%", changeType: "up" as const },
-      { label: "Accuracy", value: "94.2%", change: "+2.1%", changeType: "up" as const },
-      { label: "Avg Response", value: "1.8s", change: "-0.3s", changeType: "down" as const },
-      { label: "Active Users", value: "342", change: "+8%", changeType: "up" as const },
-    ],
-    recentConversations: [
-      {
-        id: "c1",
-        query: "Show me prepaid revenue by region",
-        timestamp: "2 min ago",
-        status: "completed" as const,
-        rowCount: 142,
-        duration: "1.2s",
-      },
-    ],
-    savedQueries: [
-      {
-        id: "s1",
-        name: "Monthly Revenue",
-        query: "Show monthly prepaid revenue",
-        createdAt: "2026-05-15",
-        tags: ["revenue"],
-      },
-    ],
-    chartData: [
-      { month: "Jan", revenue: 2400 },
-      { month: "Feb", revenue: 1398 },
-    ],
-    chartConfig: {
-      type: "bar" as const,
-      xKey: "month",
-      yKeys: ["revenue"],
-      title: "Monthly Revenue",
-    },
-  }),
+  getMockDashboardData: () => mockDashboard,
+  getDashboard: async () => mockDashboard,
   fetchConversations: (...args: any[]) => mockFetchConversations(...args),
+  listSavedQueries: async () => mockDashboard.savedQueries,
+  deleteSavedQuery: async () => undefined,
+  listAdminTeams: async () => [],
+  listAdminUsers: async () => [],
 }));
 
 // ── Mock recharts (avoid SVG rendering in jsdom) ─────────────────────

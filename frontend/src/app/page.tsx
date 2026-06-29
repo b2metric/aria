@@ -9,13 +9,22 @@ import type {
   Conversation,
   SavedQuery,
   FilterState,
+  PickerItem,
 } from "@/lib/types";
-import { fetchConversations, listSavedQueries, deleteSavedQuery } from "@/lib/api";
+import {
+  fetchConversations,
+  listSavedQueries,
+  deleteSavedQuery,
+  getDashboard,
+  listAdminTeams,
+  listAdminUsers,
+} from "@/lib/api";
 import StatCard from "@/components/StatCard";
 import QuerySearch from "@/components/QuerySearch";
 import ChartArea from "@/components/ChartArea";
 import RecentConversations from "@/components/RecentConversations";
 import SavedQueries from "@/components/SavedQueries";
+import DashboardFilters from "@/components/DashboardFilters";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -23,6 +32,35 @@ export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [filters, setFilters] = useState<FilterState>({ dateRange: "1y" });
   const [activeTab, setActiveTab] = useState<"recent" | "saved">("recent");
+  // Team/user activity filters (admin only — pickers stay hidden otherwise).
+  const [activityFilters, setActivityFilters] = useState<{
+    teamId?: string;
+    userId?: string;
+  }>({});
+  const [teams, setTeams] = useState<PickerItem[]>([]);
+  const [users, setUsers] = useState<PickerItem[]>([]);
+
+  // Best-effort load of the filter pickers on auth (admin endpoints 403 →
+  // empty, which keeps the filter UI hidden for non-admins).
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const token = (session as any)?.accessToken;
+    if (!token) return;
+
+    let cancelled = false;
+    (async () => {
+      const [t, u] = await Promise.all([
+        listAdminTeams(token),
+        listAdminUsers(token),
+      ]);
+      if (cancelled) return;
+      setTeams(t);
+      setUsers(u);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [status, session]);
 
   useEffect(() => {
     // Session yuklenmediyse veya giris yapilmadiysa data getirmeyi bekle
@@ -34,11 +72,10 @@ export default function DashboardPage() {
     async function loadData() {
       try {
         const token = (session as any)?.accessToken;
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/dashboard`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const dashboard = await getDashboard(token, {
+          teamId: activityFilters.teamId,
+          userId: activityFilters.userId,
         });
-        if (!res.ok) throw new Error("Failed to fetch dashboard data");
-        const dashboard: DashboardData = await res.json();
 
         const realConversations = await fetchConversations(token);
         if (Array.isArray(realConversations)) {
@@ -60,9 +97,9 @@ export default function DashboardPage() {
         console.warn("Could not fetch dashboard data", e);
       }
     }
-    
+
     loadData();
-  }, [status]);
+  }, [status, activityFilters.teamId, activityFilters.userId]);
 
   const handleSearch = useCallback(
     (query: string) => {
@@ -148,7 +185,18 @@ export default function DashboardPage() {
       {/* Workspace activity stats */}
       {data.workspaceStats && data.workspaceStats.length > 0 && (
         <div>
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Workspace activity</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <h2 className="text-sm font-semibold text-gray-700">Workspace activity</h2>
+            {(teams.length > 0 || users.length > 0) && (
+              <DashboardFilters
+                teams={teams}
+                users={users}
+                teamId={activityFilters.teamId}
+                userId={activityFilters.userId}
+                onChange={setActivityFilters}
+              />
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {data.workspaceStats.map((stat) => (
               <StatCard key={stat.label} data={stat} />
