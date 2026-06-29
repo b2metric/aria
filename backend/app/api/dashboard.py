@@ -23,7 +23,6 @@ async def get_user_dashboard(
     sessionmaker = get_sessionmaker()
 
     today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-    today - timedelta(days=today.weekday())
 
     # Defaults
     total_queries = 0

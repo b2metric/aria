@@ -18,7 +18,6 @@ import uuid
 
 import pytest
 
-
 # ── Fake async session machinery (mirrors test_sql_visibility.py) ────────────
 
 
@@ -45,7 +44,7 @@ class _FakeSession:
         self._scalar_returns = list(scalar_returns)
         self._scalar_calls = 0
 
-    async def __aenter__(self) -> "_FakeSession":
+    async def __aenter__(self) -> _FakeSession:
         return self
 
     async def __aexit__(self, *exc) -> None:
@@ -63,9 +62,21 @@ class _FakeSession:
         return value
 
 
-def _sessionmaker_returning(session):
+def _sessionmaker_returning(*sessions):
+    """Return a sessionmaker that yields each given session in call order.
+
+    The dashboard handler opens one session context for the per-user block and
+    a second for the workspace block. Giving each its own session means the
+    workspace assertions cannot be silently broken by a future scalar call
+    added to the per-user block (which would shift a shared counter).
+    Once exhausted, the last session is reused.
+    """
+    calls = {"n": 0}
+
     def _maker():
-        return session
+        index = min(calls["n"], len(sessions) - 1)
+        calls["n"] += 1
+        return sessions[index]
 
     return _maker
 
@@ -84,14 +95,20 @@ async def test_workspace_stats_count_customer_rows_when_user_is_non_uuid(monkeyp
     from backend.app.api import dashboard
 
     customer_id = uuid.uuid4()
+    # Per-user block is skipped for a non-UUID identity, but it still opens a
+    # session context — give it its own empty session so the workspace session's
+    # scalar call-order can't be perturbed by it.
+    per_user_session = _FakeSession(customer_row=None, scalar_returns=[])
     # Workspace scalar call order: ws_total, ws_today, ws_tokens_today,
     # ws_active_users, then 7 trend-day counts. Only ws_total is non-zero here.
-    session = _FakeSession(
+    workspace_session = _FakeSession(
         customer_row=(customer_id,),
         scalar_returns=[3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     )
     monkeypatch.setattr(
-        dashboard, "get_sessionmaker", lambda: _sessionmaker_returning(session)
+        dashboard,
+        "get_sessionmaker",
+        lambda: _sessionmaker_returning(per_user_session, workspace_session),
     )
 
     # Keep the saved-queries Redis block hermetic.
