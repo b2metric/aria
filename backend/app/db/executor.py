@@ -195,6 +195,34 @@ class MySQLExecutor(DatabaseExecutor):
         finally:
             conn.close()
 
+    def explain(self, sql: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Estimate rows via MySQL ``EXPLAIN`` so the massive-query guard works.
+
+        Without this override MySQL inherited the no-op base (estimated_rows=0),
+        which silently disabled the pre-execution row guard. We take the max
+        per-table ``rows`` estimate as a conservative single-scan proxy.
+        """
+        import pymysql
+        import pymysql.cursors
+
+        conn = pymysql.connect(
+            host=self.config.host,
+            port=self.config.get_port(),
+            database=self.config.database,
+            user=self.config.username,
+            password=self.config.password,
+            cursorclass=pymysql.cursors.DictCursor,
+            **(self.config.options or {}),
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(f"EXPLAIN {sql}", params or {})
+                rows = cur.fetchall() or []
+                est = max((int(r.get("rows") or 0) for r in rows), default=0)
+                return {"estimated_rows": est, "estimated_cost": 0, "raw": list(rows)}
+        finally:
+            conn.close()
+
 
 class OracleExecutor(DatabaseExecutor):
     """Oracle executor using oracledb (thin mode by default, thick if client available)."""
