@@ -1,1 +1,101 @@
 @import "tailwindcss";
+
+/* B2Metric brand tokens — single source of truth.
+   Light is active today; the dark block is scaffolding for a later phase
+   (flip by setting data-theme="dark" on <html>). */
+:root {
+  --surface: #ffffff;
+  --surface-2: #f7f7f9;
+  --canvas: #fbfbfd;
+  --line: #ececf1;
+  --ink: #0a0a0a;
+  --ink-muted: #6b6b76;
+  --brand: #5951ff;
+  --brand-hover: #4a42e6;
+  --brand-tint: #eeedff;
+  --ring-brand: #7871f9;
+  --success: #07bc0c;
+  --warning: #f1c40f;
+  --danger: #e74c3c;
+  --info: #3498db;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #15151f;
+  --surface-2: #1b1b27;
+  --canvas: #0b0b14;
+  --line: #2a2a3a;
+  --ink: #ececf1;
+  --ink-muted: #a0a0b0;
+  --brand: #7c74ff;
+  --brand-hover: #8b83ff;
+  --brand-tint: #1e1b3a;
+  --ring-brand: #8b83ff;
+  --success: #2ecc71;
+  --warning: #f1c40f;
+  --danger: #ff5a4d;
+  --info: #4aa3ff;
+
+  /* Flip Tailwind's neutral ramp so the app's existing white/gray utilities
+     adapt to dark. Intentionally-dark elements (code blocks, scrims) and
+     on-fill white text were pinned to literals so they stay put. */
+  --color-white: #15151f;
+  --color-gray-50: #0b0b14;
+  --color-gray-100: #1b1b27;
+  --color-gray-200: #2a2a3a;
+  --color-gray-300: #3a3a4d;
+  --color-gray-400: #8b8b9a;
+  --color-gray-500: #a0a0b0;
+  --color-gray-600: #b8b8c4;
+  --color-gray-700: #d0d0d8;
+  --color-gray-800: #e2e2e8;
+  --color-gray-900: #f0f0f4;
+  --color-gray-950: #f7f7fa;
+
+  /* Nav active tint + link text tuned for dark. */
+  --color-blue-50: #232046;
+  --color-blue-700: #aba5ff;
+}
+
+@theme {
+  /* Re-skin the default blue ramp to the B2Metric indigo (#5951FF) so every
+     existing blue-* utility brands automatically — no per-file edits. */
+  --color-blue-50: #eeedff;
+  --color-blue-100: #e0deff;
+  --color-blue-200: #c9c6ff;
+  --color-blue-300: #aba5ff;
+  --color-blue-400: #8b83ff;
+  --color-blue-500: #6b62ff;
+  --color-blue-600: #5951ff;
+  --color-blue-700: #4a42e6;
+  --color-blue-800: #3c35b8;
+  --color-blue-900: #2e2980;
+
+  --font-sans: Apercu, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@theme inline {
+  /* Semantic brand utilities for new/refactored components (two-mode aware). */
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-canvas: var(--canvas);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-tint: var(--brand-tint);
+  --color-ring-brand: var(--ring-brand);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+  }
+}

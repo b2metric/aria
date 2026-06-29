@@ -55,7 +55,7 @@ export default function ChartControls({
               onClick={() => onConfigChange({ ...config, type: ct.value })}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                 config.type === ct.value
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-blue-600 text-[#ffffff] shadow-sm"
                   : "text-gray-600 hover:bg-gray-100"
               }`}
             >
@@ -76,7 +76,7 @@ export default function ChartControls({
                 onClick={() => onRangeChange(dr.days)}
                 className={`px-2.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
                   rangeDays === dr.days
-                    ? "bg-blue-600 text-white shadow-sm"
+                    ? "bg-blue-600 text-[#ffffff] shadow-sm"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >

@@ -25,6 +25,7 @@ import ChartArea from "@/components/ChartArea";
 import RecentConversations from "@/components/RecentConversations";
 import SavedQueries from "@/components/SavedQueries";
 import DashboardFilters from "@/components/DashboardFilters";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -154,8 +155,15 @@ export default function DashboardPage() {
 
   if (!data) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-pulse text-gray-400">Loading dashboard...</div>
+      <div className="p-4 md:p-6 space-y-6 max-w-[1400px] mx-auto" aria-busy="true">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-12 w-full" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-[360px] w-full" />
       </div>
     );
   }

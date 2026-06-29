@@ -127,7 +127,7 @@ describe("ChatPage", () => {
     render(<ChatPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/start a conversation/i)).toBeInTheDocument();
+      expect(screen.getByText(/what do you want to know/i)).toBeInTheDocument();
     });
     // Suggestions load asynchronously from fetchWorkspaceSuggestions, so wait for
     // the fetched chips to replace the initial defaults before asserting.

@@ -2,7 +2,7 @@
 
 import { ReactNode, useState } from "react";
 import Link from "next/link";
-import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare, Boxes } from "lucide-react";
+import { Database, Settings, ShieldAlert, ChevronLeft, ChevronRight, Users, Brain, Lock, LayoutDashboard, Activity, Cpu, Link2, MessagesSquare, Boxes, BookOpen } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { AdminGuard } from "@/components/AdminGuard";
 
@@ -97,7 +97,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               `}
               title="Team Conventions"
             >
-              <Users className="w-5 h-5 flex-shrink-0" />
+              <BookOpen className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span className="text-sm font-medium transition-opacity duration-300">Team Conventions</span>}
             </Link>
             

@@ -228,7 +228,7 @@ export default function TeamMemoryPage() {
             className={`px-4 py-2 rounded-lg font-medium text-sm transition-all ${
               creating || !newContent.trim()
                 ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                : "bg-blue-600 hover:bg-blue-700 text-[#ffffff] shadow-sm"
             }`}
           >
             {creating ? "Creating..." : "Add Convention"}

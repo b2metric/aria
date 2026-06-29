@@ -205,7 +205,7 @@ export default function LLMConfigPage() {
           <button
             onClick={handleSave}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-[#ffffff] rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             {loading ? "Saving..." : "Save Configuration"}

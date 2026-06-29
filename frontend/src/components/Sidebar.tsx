@@ -7,6 +7,7 @@ import { useState } from "react";
 import { LayoutDashboard, MessageSquare, Settings, ShieldAlert, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 
 import { keycloakLogout } from "@/lib/auth";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -73,6 +74,10 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="p-2 border-t border-gray-200">
+        <ThemeToggle collapsed={isCollapsed} />
+      </div>
 
       {status === "authenticated" && (
         <div className="p-2 border-t border-gray-200">

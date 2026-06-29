@@ -125,10 +125,12 @@ describe("DashboardPage", () => {
       update: vi.fn(),
     } as any);
 
-    render(<DashboardPage />);
+    const { container } = render(<DashboardPage />);
 
-    // When status is "loading", component shows a loading state
-    expect(screen.getByText(/loading dashboard/i)).toBeInTheDocument();
+    // When status is "loading", the component shows a skeleton placeholder
+    // (aria-busy region) instead of a blank screen or plain text.
+    expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
+    expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
   });
 
   it("renders dashboard heading when authenticated", async () => {
