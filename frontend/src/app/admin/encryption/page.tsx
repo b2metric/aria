@@ -29,7 +29,7 @@ interface AuditEntry {
 
 export default function EncryptionSettings() {
   const { data: session } = useSession();
-  const token = (session as any)?.accessToken;
+  const token = session?.accessToken;
   const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
   const [loading, setLoading] = useState(false);
