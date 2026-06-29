@@ -40,15 +40,15 @@
 | 19 | **LLM chart-selection subsystem dead** | `pipeline.py:1649` `use_llm=False` constant → all of `agents/chart_llm.py` unreachable | ✅ |
 | 20 | **`Artifact` DB model/table fully dead** | never written → dashboard "Saved Artifacts: 0" placeholder (`dashboard.py:111`) | ✅ |
 | 21 | **Memory-stats wrong namespaces** | `service.py:647,657` `team:default` + `:user` → admin shows ~0 team/user memories | ✅ |
-| 22 | **Memory decay dormant** | `cleanup_expired_memories` only manual admin `POST /cleanup`; no scheduler | ☐ |
+| 22 | **Memory decay dormant** | `cleanup_expired_memories` only manual admin `POST /cleanup`; no scheduler | ✅ |
 | 23 | **Sprint 9 QueryTrace + admin conversation-debug UI never built** | no `trace` field on `ConversationMessage`; no `/admin/conversations` | ☐ |
 | 24 | **`/admin` Overview + `/settings` index = `return null`** (blank page) | `app/admin/page.tsx`, `app/settings/page.tsx` | ✅ |
 | 25 | **CSV download link lost on reload** | `csv_url` not persisted in `ConversationMessage` | ☐ |
 | 26 | **Two-way vault sync (Obsidian↔MinIO) is fiction** | `vault_sync.py` one-way only | ❎ closed |
 | 27 | **LLM config "Phase 1" passthrough virtual key** | `llm_resolver.py:113` — upstream key used as proxy key; no per-customer isolation | ☐ |
-| 28 | **JWT audience check disabled** | `jwt.py:119` `verify_aud:False` → accepts another client's token in the realm | ☐ |
+| 28 | **JWT audience check disabled** | `jwt.py:119` `verify_aud:False` → accepts another client's token in the realm | ✅ |
 | 29 | **`keycloak_verify_ssl=False` default** + **Oracle `stc/stc123` dummy fallback** in live path | `config.py:61`, `pipeline.py:1031` (non-prod) | ✅ |
-| 30 | **`keycloak_admin.delete_user`/`create_team_group` unwired** | team KC group not created; user delete not propagated | ☐ |
+| 30 | **`keycloak_admin.delete_user`/`create_team_group` unwired** | team KC group not created; user delete not propagated | ⏸ migration |
 | 31 | **`/api/admin/metrics` no UI** + **onboarding self-register no abuse control** + **user↔team 1–1 not schema-enforced** (nullable) | | ☐ |
 
 ## ⚪ TIER 4 — LOW / cosmetic
