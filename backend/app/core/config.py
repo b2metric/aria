@@ -59,9 +59,11 @@ class Settings(BaseSettings):
     minio_bucket: str = "aria-artifacts"
     minio_secure: bool = False
 
-    # ── Keycloak ─────────────────────────────────────────────────────
-    keycloak_url: str = "http://localhost:8080/auth"
-    keycloak_realm: str = "aria"
+    # ── Keycloak (central SSO: b2metric-sso, shared realm `b2metric`) ──
+    # Repointed off aria's own Keycloak onto the central b2metric-sso IdP.
+    # Overridden in docker via KEYCLOAK_URL/KEYCLOAK_REALM env (compose).
+    keycloak_url: str = "http://sso.b2metric.localhost/auth"
+    keycloak_realm: str = "b2metric"
     keycloak_client_id: str = "aria-backend"
     keycloak_verify_ssl: bool = False
     jwt_leeway_seconds: int = 60
