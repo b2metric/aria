@@ -58,8 +58,10 @@ http:
           - url: "http://aria-keycloak:8080"
     minio-console-svc:
       loadBalancer:
+        # karlspace/MinIO-UI admin console (port 9090) — restores the admin UI +
+        # OpenID SSO that MinIO stripped from its built-in :9001 console.
         servers:
-          - url: "http://aria-minio:9001"
+          - url: "http://aria-minio-console:9090"
     litellm-svc:
       loadBalancer:
         servers:

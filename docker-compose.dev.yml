@@ -222,12 +222,20 @@ services:
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
-      # Console served behind Traefik at minio.aria.localhost (admin /admin/consoles).
       MINIO_BROWSER_REDIRECT_URL: http://minio.aria.localhost
-      # NOTE: MinIO Community console (RELEASE.2025-09+) removed OpenID/SSO login —
-      # MINIO_IDENTITY_OPENID_* no longer drives a console "Login with SSO" button
-      # (loginStrategy stays "form"). The embedded console therefore uses root
-      # creds. Re-add OIDC only if pinning an older console build that supports it.
+      # ── Keycloak SSO via the standalone karlspace admin console ──────────────
+      # MinIO's own Community console (RELEASE.2025-09+) dropped OpenID login, so the
+      # admin UI is the `admin-console` service (karlspace/MinIO-UI, v1.7.x). The
+      # SERVER still supports OIDC for STS AssumeRoleWithWebIdentity: it validates the
+      # Keycloak token and maps the hardcoded `policy=consoleAdmin` claim to a MinIO
+      # policy. The console discovers this IdP config and offers "Login with SSO".
+      MINIO_IDENTITY_OPENID_CONFIG_URL: http://auth.aria.localhost/auth/realms/aria/.well-known/openid-configuration
+      MINIO_IDENTITY_OPENID_CLIENT_ID: minio-console
+      MINIO_IDENTITY_OPENID_CLIENT_SECRET: minio-console-dev-secret
+      MINIO_IDENTITY_OPENID_CLAIM_NAME: policy
+      MINIO_IDENTITY_OPENID_SCOPES: "openid"
+      MINIO_IDENTITY_OPENID_DISPLAY_NAME: "Keycloak SSO"
+      MINIO_IDENTITY_OPENID_REDIRECT_URI: http://minio.aria.localhost/oauth_callback
     ports:
       - "9000:9000"   # S3 API
       - "9001:9001"   # Console
@@ -238,6 +246,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+    networks:
+      - aria-net
+
+  # ── MinIO admin console (karlspace/MinIO-UI fork) ────────────────────
+  # Standalone console restoring the full admin UI + OpenID SSO that MinIO removed
+  # from its own Community console. Talks to the MinIO S3 API (:9000); Keycloak SSO
+  # via the server's STS web-identity config above. Served at minio.aria.localhost.
+  minio-console:
+    image: ghcr.io/karlspace/minio-ui/minio-admin-console:latest
+    container_name: aria-minio-console
+    restart: unless-stopped
+    environment:
+      CONSOLE_MINIO_SERVER: http://minio:9000
+      CONSOLE_MINIO_REGION: us-east-1
+      # Public origin so the OAuth callback (/oauth_callback) resolves; dev JWT salt.
+      CONSOLE_BROWSER_REDIRECT_URL: http://minio.aria.localhost
+      CONSOLE_PBKDF_PASSPHRASE: aria-console-dev
+      CONSOLE_PBKDF_SALT: aria-console-dev-salt
+    depends_on:
+      minio:
+        condition: service_healthy
     networks:
       - aria-net
 

@@ -170,12 +170,42 @@ def allow_admin_console_framing(tok):
     print(f"relaxed master realm frame-ancestors -> {FRAME_ANCESTORS} ({s})")
 
 
+def _hardcoded_claim(name, claim, value):
+    return {
+        "name": name,
+        "protocol": "openid-connect",
+        "protocolMapper": "oidc-hardcoded-claim-mapper",
+        "config": {
+            "claim.name": claim,
+            "claim.value": value,
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+        },
+    }
+
+
+MINIO_SECRET = os.environ.get("MINIO_CONSOLE_SECRET", "minio-console-dev-secret")
+MINIO_REDIRECT = os.environ.get("MINIO_REDIRECT", "http://minio.aria.localhost/oauth_callback")
+MINIO_POLICY = os.environ.get("MINIO_POLICY", "consoleAdmin")
+
+
 def main():
     tok = admin_token()
     mappers = [
         _property_mapper("email", "email", "email"),
         _property_mapper("preferred_username", "username", "preferred_username"),
     ]
+    # MinIO admin console (karlspace/MinIO-UI fork) — the hardcoded `policy` claim
+    # maps the SSO user to a MinIO policy via STS AssumeRoleWithWebIdentity.
+    upsert_confidential_client(
+        tok,
+        "minio-console",
+        MINIO_SECRET,
+        [MINIO_REDIRECT, "http://minio.aria.localhost/*"],
+        mappers + [_hardcoded_claim("minio-policy", "policy", MINIO_POLICY)],
+    )
     upsert_confidential_client(
         tok, "litellm-ui", LITELLM_SECRET, [LITELLM_REDIRECT, "http://llm.aria.localhost/*"], mappers
     )
