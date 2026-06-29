@@ -1986,6 +1986,12 @@ async def _process_query_impl(
         ],
     }
 
+    # Resolved-model trace (item 23): captured after resolve_llm below, surfaced
+    # on the assistant message at Stage 6. Initialised here (always on the full
+    # path) so the name is bound regardless of which generation branch runs.
+    trace_model: str | None = None
+    trace_model_source: str | None = None
+
     # Stage 2: GENERATING_SQL
     yield {
         "event": "status",
@@ -2040,6 +2046,9 @@ async def _process_query_impl(
             resolved_llm = await resolve_llm(workspace_id, sess, operation="sql_generation")
             insight_llm = await resolve_llm(workspace_id, sess, operation="insight")
             logger.info("Using LLM configuration: %s", resolved_llm)
+            if resolved_llm is not None:
+                trace_model = getattr(resolved_llm, "model", None)
+                trace_model_source = getattr(resolved_llm, "source", None)
 
             # ── Token quota enforcement ────────────────────────────────────
             token_svc = None
@@ -2355,17 +2364,27 @@ async def _process_query_impl(
             logger.warning("Failed to store memory: %s", e)
 
     # Stage 6: COMPLETE
+    from backend.app.query.trace import build_query_trace
+
+    _chart_data = chart_result.get("chart_data", [])
     assistant_msg = ConversationMessage(
         role="assistant",
         content=explanation,
         sql=sql,
         chart_spec=chart_result.get("chart_config", {"type": "table"}),
         # Persist JSON data + MinIO url, NOT the multi-MB inline HTML (Redis/history bloat).
-        chart_data=chart_result.get("chart_data", []),
+        chart_data=_chart_data,
         chart_url=chart_result.get("chart_url", ""),
         csv_url=chart_result.get("csv_url", ""),
         summary=summary,
         suggestions=suggestions,
+        trace=build_query_trace(
+            mem_trace=mem_trace,
+            model=trace_model,
+            model_source=trace_model_source,
+            row_count=len(_chart_data or []),
+            sql=sql,
+        ),
     )
     conversation = await append_message(redis, workspace_id, cid, assistant_msg)
 

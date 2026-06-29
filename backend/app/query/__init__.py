@@ -51,6 +51,9 @@ class ConversationMessage(BaseModel):
     chart_data: list[dict[str, Any]] | None = None
     summary: str | None = None
     suggestions: list[str] | None = None
+    # Per-turn debug trace (item 23): model, row_count, sql_generated, memory
+    # context that influenced generation. Surfaced in /admin/conversations.
+    trace: dict[str, Any] | None = None
     timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
 
 
