@@ -84,6 +84,25 @@ async def list_conversations(
     return conversations
 
 
+async def list_workspace_conversations(
+    redis: Redis, workspace_id: str, limit: int = 50
+) -> list[Conversation]:
+    """List every conversation in a workspace, newest first (admin debug view).
+
+    Scans ``aria:conv:{workspace_id}:*`` so it spans all users in the workspace
+    (the per-user list keys are intentionally not used here). The trailing colon
+    delimiter prevents a prefix-colliding workspace slug from leaking in.
+    """
+    pattern = f"{CONVERSATION_PREFIX}{workspace_id}:*"
+    conversations: list[Conversation] = []
+    async for key in redis.scan_iter(match=pattern):
+        raw = await redis.get(key)
+        if raw:
+            conversations.append(Conversation.model_validate_json(raw))
+    conversations.sort(key=lambda c: c.updated_at, reverse=True)
+    return conversations[:limit]
+
+
 async def delete_conversation(
     redis: Redis, workspace_id: str, conversation_id: str, user_id: str
 ) -> bool:
