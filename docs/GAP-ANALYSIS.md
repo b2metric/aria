@@ -76,3 +76,36 @@ per-customer i18n · (recent) MinIO endpoint + Kaleido PNG + mem0 2.x + hybrid r
 
 Many gaps **fail silently** via broad `try/except` returning zeros/canned data (wrong column, unenforced quota,
 lost export result) — invisible without this audit. Remediation should prefer fail-loud over silent fallback.
+
+
+---
+
+## Remaining work (snapshot 2026-06-29)
+
+**Done & merged to main:** TIER 1 (1–5), TIER 2 (6–17), TIER 3 19,20,21,22,24,28,29, TIER 4 (console.log token-leak, dead `_detect_user_correction`). Item 26 CLOSED (not a gap — vault is intentionally one-way DB→md→Qdrant; Obsidian/MinIO sync never existed). Items 17 & audit-`success`-filter were audit false-positives (no change).
+
+### 18 — Prefect deploy-durability (Plan 2) — STARTED
+Foundation merged (`run_store`: `heartbeat_run`, `reclaim_stale_run`, `find_running_cids` + tests). Remaining chunks:
+1. Wire `heartbeat_run` into the detached producer (`backend/app/api/query.py`) so a long run keeps its lock alive.
+2. `backend/app/flows/reconcile.py` — Prefect `@flow reconcile_stalled_runs` (~60s scheduled): `find_running_cids` → `reclaim_stale_run` → re-run idempotently, record `prefect_flow_run_id`.
+3. `process_query(resume=True)` — skip re-appending the user message on a reconcile re-run.
+4. Prod `docker-compose.prod.yml`: add `prefect-server`/`prefect-worker` + `PREFECT_API_URL`; register the reconcile deployment.
+Spec: `docs/superpowers/specs/2026-06-28-durable-resumable-chat-streaming-design.md`. Concurrency-critical (fencing races) — do in a fresh focused session.
+
+### 23 — QueryTrace + admin conversation-debug UI — NOT STARTED (new feature)
+Add a `trace` field to the persisted conversation message + an `/admin/conversations` debug screen (Sprint 9 scope, never built).
+
+### 25 — CSV download link lost on reload — MEDIUM
+`csv_url` is not persisted on the assistant `ConversationMessage`, so it vanishes on F5. Persist it (FE history only reads `chart_url`).
+
+### 27 — BYOK per-customer virtual key (Phase 2) — MEDIUM (crypto — careful)
+`llm_resolver` uses the customer's upstream key directly as the proxy key ("Phase 1 passthrough"). Phase 2: mint/decrypt a per-customer LiteLLM virtual key. Touches `crypto`/key management — review carefully.
+
+### 30 — Keycloak team-group / delete-user — MEDIUM (needs migration)
+`create_team` writes only a DB row (no KC group); `delete_team` deletes by the wrong id (`team.id`, not the KC group id). Clean fix needs a `teams.kc_group_id` column (migration) + wire `create_team_group(name)` on create + use it on delete + a backfill for existing teams. Matters because JWT `groups` claims drive team-scoped SSO/RLS.
+
+### 31 — user↔team 1–1 not schema-enforced — MEDIUM (migration, risky)
+`User.team_id` is nullable & non-unique; "exactly one team" isn't enforced. Adding NOT NULL/constraints needs a migration + a data-cleanup of existing rows.
+
+### TIER 4 remaining (low/cosmetic)
+`chart_html` vestigial field (verify FE before removing); `ColumnInfo.comment` never populated (needs discovery-SQL change); telecom-biased regex descriptions + hardcoded fallback suggestions (intentional graceful fallbacks — keep); token dashboard has no charts / memory detail modal (FE features).
