@@ -9,11 +9,11 @@
 
 | # | Gap | Evidence | Problem | Status |
 |---|-----|----------|---------|--------|
-| 1 | **Backup-before-delete invariant NOT implemented** | AGENTS.md hard rule; no `backup`/`soft-delete`/`deleted_at` anywhere | `customers` `ON DELETE CASCADE` → deleting a customer hard-deletes `queries`+`token_usage_daily`+`background_jobs` with **no backup**. Most serious invariant breach. | ☐ |
-| 2 | **Master KEK hardcoded fallback** | `backend/app/services/crypto.py:68` `ARIA_SECRET_KEY` default `"fallback_secret_key_for_dev_only_change_in_prod"` + static salt `b"aria_salt"` | If env unset, the key wrapping **every customer DB password** is forgeable. | ☐ |
-| 3 | **Keycloak admin `admin/admin` hardcoded** | `backend/app/services/keycloak_admin.py:16-17` | Hardcoded secret; breaks against non-bootstrap prod KC. | ☐ |
-| 4 | **Default user password `123456` (non-temp)** | `keycloak_admin.py:53`; `admin/users.py` passes no password | Every admin-created user silently gets `123456`, never surfaced/rotated. | ☐ |
-| 5 | **Large-result export dead-end** | `pipeline.py:1396` fire-and-forget; `worker/tasks.py:66` returns URL but it's discarded; no FE `export`/`download` SSE case | >5000 rows → user told "link will be provided" but **nothing ever delivers it**; `BackgroundJob` never created. | ☐ |
+| 1 | **Backup-before-delete invariant NOT implemented** | AGENTS.md hard rule; no `backup`/`soft-delete`/`deleted_at` anywhere | `customers` `ON DELETE CASCADE` → deleting a customer hard-deletes `queries`+`token_usage_daily`+`background_jobs` with **no backup**. Most serious invariant breach. | ✅ |
+| 2 | **Master KEK hardcoded fallback** | `backend/app/services/crypto.py:68` `ARIA_SECRET_KEY` default `"fallback_secret_key_for_dev_only_change_in_prod"` + static salt `b"aria_salt"` | If env unset, the key wrapping **every customer DB password** is forgeable. | ✅ |
+| 3 | **Keycloak admin `admin/admin` hardcoded** | `backend/app/services/keycloak_admin.py:16-17` | Hardcoded secret; breaks against non-bootstrap prod KC. | ✅ |
+| 4 | **Default user password `123456` (non-temp)** | `keycloak_admin.py:53`; `admin/users.py` passes no password | Every admin-created user silently gets `123456`, never surfaced/rotated. | ✅ |
+| 5 | **Large-result export dead-end** | `pipeline.py:1396` fire-and-forget; `worker/tasks.py:66` returns URL but it's discarded; no FE `export`/`download` SSE case | >5000 rows → user told "link will be provided" but **nothing ever delivers it**; `BackgroundJob` never created. | ✅ |
 
 ## 🟠 TIER 2 — HIGH (promised-but-broken / unwired functionality)
 
