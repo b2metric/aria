@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, Field
+
+
+def _utcnow_iso() -> str:
+    """Current UTC time as a tz-naive ISO-8601 string.
+
+    Uses timezone-aware ``datetime.now(UTC)`` (``utcnow()`` is deprecated) but
+    drops the offset to keep the exact stored-history wire format unchanged.
+    """
+    return datetime.now(UTC).replace(tzinfo=None).isoformat()
 
 
 class QueryRequest(BaseModel):
@@ -54,7 +63,7 @@ class ConversationMessage(BaseModel):
     # Per-turn debug trace (item 23): model, row_count, sql_generated, memory
     # context that influenced generation. Surfaced in /admin/conversations.
     trace: dict[str, Any] | None = None
-    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    timestamp: str = Field(default_factory=_utcnow_iso)
 
 
 class Conversation(BaseModel):
@@ -65,8 +74,8 @@ class Conversation(BaseModel):
     user_id: str
     title: str = "New conversation"
     messages: list[ConversationMessage] = Field(default_factory=list)
-    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
-    updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    created_at: str = Field(default_factory=_utcnow_iso)
+    updated_at: str = Field(default_factory=_utcnow_iso)
 
 
 class QueryResponse(BaseModel):

@@ -167,12 +167,13 @@ def render_png(
     )
 
     try:
+        # Don't pass engine="kaleido": the `engine` arg is deprecated (Plotly
+        # removes it after Sept 2025, Kaleido becomes the only/default engine).
         img_bytes: bytes = fig.to_image(
             format="png",
             width=width,
             height=height,
             scale=scale,
-            engine="kaleido",
         )
     except Exception as e:
         log.warning("chart_renderer.kaleido_failed", error=str(e))

@@ -1461,18 +1461,41 @@ def _json_safe_rows(rows: list[dict]) -> list[dict]:
     return [{k: _json_safe(v) for k, v in row.items()} for row in rows]
 
 
-def _detect_requested_chart_type(question: str) -> str | None:
+_VIZ_CUE_RE = re.compile(r"\b(charts?|graphs?|plots?|visuali[sz]\w*|grafi\w*)\b")
+# An explicit "show it as a table/grid" request (display intent), as opposed to a
+# data reference like "from the recharge table".
+_TABLE_REQUEST_RE = re.compile(
+    r"\b(data\s+grid|grids?|(as|in|into|to)\s+(a\s+)?(data\s+)?(table|tablo))\b"
+)
+_CHART_TYPES = ("pie", "scatter", "area", "line", "bar")
+
+
+def _detect_requested_chart_type(question: str, *, require_viz_cue: bool = False) -> str | None:
     """Detect an explicit chart-type request in the question ('as a pie chart').
 
-    Returns one of bar/line/area/pie/scatter, or None if the user didn't ask.
+    Returns one of bar/line/area/pie/scatter/table, or None if the user didn't ask.
+
+    Matching is WHOLE-WORD, so the data word "lines" is not read as a *line* chart
+    request (nor "recharge table" as a grid). On a brand-new data query pass
+    ``require_viz_cue=True``: a chart-type word then only counts when the question
+    is actually about visualisation (mentions chart/graph/plot/… or an explicit
+    "as a table/grid"), so "number of lines per bucket" leaves the choice to the
+    heuristic/LLM. The chart-type-only follow-up path ("make it a pie") calls this
+    permissively, since the intent to change the chart is already established.
     """
     q = (question or "").lower()
-    if "grid" in q or "table" in q or "tablo" in q:
+
+    if require_viz_cue:
+        if _TABLE_REQUEST_RE.search(q):
+            return "table"
+        if not _VIZ_CUE_RE.search(q):
+            return None
+        return next((t for t in _CHART_TYPES if re.search(rf"\b{t}\b", q)), None)
+
+    # Permissive path (chart-type-only follow-up).
+    if re.search(r"\b(grid|table|tablo)\b", q):
         return "table"
-    for t in ("pie", "scatter", "area", "line", "bar"):
-        if t in q:
-            return t
-    return None
+    return next((t for t in _CHART_TYPES if re.search(rf"\b{t}\b", q)), None)
 
 
 _CHART_REQ_FILLER = {
@@ -2251,7 +2274,9 @@ async def _process_query_impl(
         rows=rows,
         question=request.question,
         conversation_id=cid,
-        forced_type=_detect_requested_chart_type(request.question),
+        # New data query: only honor an *explicit* chart request (viz cue), so data
+        # words like "number of lines" don't override the heuristic/LLM choice.
+        forced_type=_detect_requested_chart_type(request.question, require_viz_cue=True),
     )
 
     yield {

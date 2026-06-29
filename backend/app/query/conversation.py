@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 
-from backend.app.query import Conversation, ConversationMessage
+from backend.app.query import Conversation, ConversationMessage, _utcnow_iso
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +38,13 @@ async def get_conversation(
 async def save_conversation(redis: Redis, conversation: Conversation) -> None:
     """Save a conversation to Redis."""
     key = _conv_key(conversation.workspace_id, conversation.id)
-    conversation.updated_at = datetime.utcnow().isoformat()
+    conversation.updated_at = _utcnow_iso()
     await redis.set(key, conversation.model_dump_json(), ex=CONVERSATION_TTL)
-    # Add to user's conversation list
+    # Add to user's conversation list. Use an aware UTC timestamp: naive
+    # utcnow().timestamp() is interpreted as LOCAL time, producing a wrong epoch
+    # score (off by the host's UTC offset).
     list_key = _list_key(conversation.workspace_id, conversation.user_id)
-    await redis.zadd(list_key, {conversation.id: datetime.utcnow().timestamp()})
+    await redis.zadd(list_key, {conversation.id: datetime.now(UTC).timestamp()})
 
 
 async def append_message(
