@@ -32,6 +32,10 @@ vi.mock("next/navigation", () => ({
 // ── Mock API ─────────────────────────────────────────────────────────
 vi.mock("@/lib/api", () => ({
   streamQuery: vi.fn(),
+  // streamResume + getRunStatus are imported by the page (resumable streaming);
+  // the mock must export them or they resolve to undefined and break on mount.
+  streamResume: vi.fn(),
+  getRunStatus: vi.fn().mockResolvedValue({ status: null }),
   fetchConversations: vi.fn().mockResolvedValue([]),
   fetchConversation: vi.fn().mockResolvedValue(null),
   fetchWorkspaceSuggestions: vi.fn().mockResolvedValue([
@@ -68,7 +72,9 @@ const mockSignIn = vi.mocked(signIn);
 function mockAuth(status: string = "authenticated") {
   if (status === "authenticated") {
     mockUseSession.mockReturnValue({
-      data: { user: { name: "Test User" }, accessToken: "test-token" },
+      // workspaceId is required for the page's fetchWorkspaceSuggestions effect
+      // (guarded by `token && workspaceId`) to run and load dynamic suggestions.
+      data: { user: { name: "Test User", workspaceId: "ws-test" }, accessToken: "test-token" },
       status: "authenticated",
       update: vi.fn(),
     } as any);
@@ -123,7 +129,11 @@ describe("ChatPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/start a conversation/i)).toBeInTheDocument();
     });
-    expect(screen.getByText("Show monthly revenue by nationality")).toBeInTheDocument();
+    // Suggestions load asynchronously from fetchWorkspaceSuggestions, so wait for
+    // the fetched chips to replace the initial defaults before asserting.
+    await waitFor(() => {
+      expect(screen.getByText("Show monthly revenue by nationality")).toBeInTheDocument();
+    });
     expect(screen.getByText("Top 10 roaming partners by volume")).toBeInTheDocument();
     expect(screen.getByText("Daily active users trend")).toBeInTheDocument();
   });
