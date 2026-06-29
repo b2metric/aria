@@ -48,7 +48,7 @@
 | 27 | **LLM config "Phase 1" passthrough virtual key** | `llm_resolver.py:113` — upstream key used as proxy key; no per-customer isolation | ✅ Phase 2 implemented (mint per-customer virtual key when `LITELLM_MASTER_KEY` set; passthrough fallback) |
 | 28 | **JWT audience check disabled** | `jwt.py:119` `verify_aud:False` → accepts another client's token in the realm | ✅ |
 | 29 | **`keycloak_verify_ssl=False` default** + **Oracle `stc/stc123` dummy fallback** in live path | `config.py:61`, `pipeline.py:1031` (non-prod) | ✅ |
-| 30 | **`keycloak_admin.delete_user`/`create_team_group` unwired** | team KC group not created; user delete not propagated | ⏸ migration |
+| 30 | **`keycloak_admin.delete_user`/`create_team_group` unwired** | team KC group not created; user delete not propagated | ✅ team-group wired (`teams.kc_group_id` migration + create/delete); delete_user propagation still open |
 | 31 | **`/api/admin/metrics` no UI** + **onboarding self-register no abuse control** + **user↔team 1–1 not schema-enforced** (nullable) | | ☐ |
 
 ## ⚪ TIER 4 — LOW / cosmetic
@@ -185,8 +185,17 @@ Investigated 2026-06-29. Two corrections to the original gap:
   same value the `aria-litellm` proxy uses, then re-save each customer's LLM config
   to mint its virtual key. Until then, behavior is unchanged (passthrough).
 
-### 30 — Keycloak team-group / delete-user — MEDIUM (needs migration)
-`create_team` writes only a DB row (no KC group); `delete_team` deletes by the wrong id (`team.id`, not the KC group id). Clean fix needs a `teams.kc_group_id` column (migration) + wire `create_team_group(name)` on create + use it on delete + a backfill for existing teams. Matters because JWT `groups` claims drive team-scoped SSO/RLS.
+### 30 — Keycloak team-group / delete-user — team-group DONE; delete-user still open
+**Done 2026-06-29 (team-group):** `teams.kc_group_id` column (migration
+`e8b1f4a2c9d7`, applied to dev DB) + `Team.kc_group_id`. `create_team` now creates
+the KC group and stores its id (resilient: KC outage → team still created,
+kc_group_id=None); `delete_team` deletes by the STORED `kc_group_id` (was wrongly
+passing the local `team.id`), skipping cleanly when none is linked. Tests:
+`backend/tests/test_admin_teams.py` (4, fake-session + mocked KeycloakAdminService —
+no DB harness exists for the ORM endpoints).
+**Still open:** (a) a backfill that creates KC groups for pre-existing teams (their
+`kc_group_id` is NULL); (b) `delete_user` propagation to Keycloak on user delete.
+Both are follow-ons, not blockers for the team-group fix.
 
 ### 31 — user↔team 1–1 not schema-enforced — MEDIUM (migration, risky)
 `User.team_id` is nullable & non-unique; "exactly one team" isn't enforced. Adding NOT NULL/constraints needs a migration + a data-cleanup of existing rows.

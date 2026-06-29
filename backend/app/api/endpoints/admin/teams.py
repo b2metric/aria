@@ -95,11 +95,32 @@ async def create_team(
     customer_id = await resolve_customer_id(current_user, db)
 
     team = Team(name=body.name, customer_id=customer_id)
+
+    # Create the backing Keycloak group so team-scoped JWT `groups` claims (SSO/RLS)
+    # resolve, and store its id (item 30). Resilient: if Keycloak is unreachable the
+    # team is still created with kc_group_id=None and can be re-synced later — KC
+    # availability must not block tenant team management.
+    kc_service = KeycloakAdminService()
+    try:
+        team.kc_group_id = await kc_service.create_team_group(body.name)
+    except Exception as e:  # noqa: BLE001 — degrade gracefully, never block create
+        log.warning(
+            "Could not create Keycloak group for team %s; creating without it: %s",
+            body.name,
+            e,
+        )
+
     db.add(team)
     await db.commit()
     await db.refresh(team)
 
-    log.info("Created team %s (id=%s) for customer %s", team.name, team.id, customer_id)
+    log.info(
+        "Created team %s (id=%s, kc_group_id=%s) for customer %s",
+        team.name,
+        team.id,
+        team.kc_group_id,
+        customer_id,
+    )
     return TeamResponse.model_validate(team)
 
 
@@ -126,12 +147,15 @@ async def delete_team(
             detail="Team not found or does not belong to this workspace",
         )
 
-    # Delete from Keycloak if we used a KC UUID (assuming team.id matched group ID)
-    kc_service = KeycloakAdminService()
-    try:
-        await kc_service.delete_team_group(str(team.id))
-    except Exception as e:
-        log.warning("Failed to delete team group in Keycloak: %s", e)
+    # Delete the backing Keycloak group by its STORED id (item 30). The old code
+    # passed str(team.id) — the local team UUID, never a KC group id — so it never
+    # actually deleted the group. Skip cleanly when no KC group was linked.
+    if team.kc_group_id:
+        kc_service = KeycloakAdminService()
+        try:
+            await kc_service.delete_team_group(team.kc_group_id)
+        except Exception as e:  # noqa: BLE001 — best-effort cleanup
+            log.warning("Failed to delete team group %s in Keycloak: %s", team.kc_group_id, e)
 
     await db.delete(team)
     await db.commit()

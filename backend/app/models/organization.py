@@ -55,6 +55,10 @@ class Team(Base, UUIDMixin, TimestampMixin):
         index=True,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Keycloak group id backing this team (item 30). Nullable: pre-existing teams
+    # and KC-outage creates have none; the delete path skips KC cleanup when unset.
+    # JWT `groups` claims (team-scoped SSO/RLS) are driven by this KC group.
+    kc_group_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # relationships
     customer: Mapped["Customer"] = relationship(back_populates="teams")
