@@ -72,3 +72,6 @@ docs/business/pdf/
 
 # scratch debug scripts (throwaway, not real tests)
 backend/scripts/test_*.py
+
+# Playwright MCP debug artifacts (console logs, page snapshots, screenshots)
+.playwright-mcp/
