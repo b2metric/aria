@@ -9,6 +9,7 @@ const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
 
 function resolve(pref: ThemePreference): "light" | "dark" {
   if (pref !== "system") return pref;
+  if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
