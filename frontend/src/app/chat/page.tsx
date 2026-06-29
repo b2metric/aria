@@ -6,7 +6,7 @@ import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConve
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
-import { Sparkles } from "lucide-react";
+import { Sparkles, User } from "lucide-react";
 
 // Emoji for a chart artifact chip/header.
 function chartEmoji(type?: string): string {
@@ -724,8 +724,12 @@ function ChatPageContent() {
               >
                 {/* Avatar + role */}
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-sm">
-                    {msg.role === "user" ? "🧑" : "🤖"}
+                  <span
+                    className={`flex h-5 w-5 items-center justify-center rounded-full ${
+                      msg.role === "user" ? "bg-white/20 text-[#ffffff]" : "bg-blue-50 text-blue-600"
+                    }`}
+                  >
+                    {msg.role === "user" ? <User className="h-3 w-3" /> : <Sparkles className="h-3 w-3" />}
                   </span>
                   <span className="text-xs font-medium opacity-70">
                     {msg.role === "user" ? "You" : "ARIA"}
@@ -893,12 +897,12 @@ function ChatPageContent() {
               }}
               placeholder="Ask a question about your data..."
               disabled={isStreaming}
-              className="flex-1 px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+              className="flex-1 px-4 py-3.5 text-sm bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent hover:border-gray-300 transition-colors disabled:opacity-50"
             />
             <button
               onClick={() => handleSubmit()}
               disabled={!inputValue.trim() || isStreaming}
-              className="px-4 py-3 bg-blue-600 text-[#ffffff] rounded-xl hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+              className="px-4 py-3.5 bg-blue-600 text-[#ffffff] rounded-2xl cursor-pointer hover:bg-blue-700 active:scale-[0.98] disabled:bg-gray-300 disabled:cursor-not-allowed transition-all"
             >
               {isStreaming ? (
                 <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
