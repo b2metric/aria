@@ -11,6 +11,7 @@ chart-type-only follow-up path ("make it a pie") stays permissive.
 from __future__ import annotations
 
 from backend.app.query.pipeline import _detect_requested_chart_type as detect
+from backend.app.query.pipeline import _is_chart_type_only_request as is_type_only
 
 
 # ── New-data-query path (require_viz_cue=True): data words must NOT force a type
@@ -48,3 +49,24 @@ def test_whole_word_matching_avoids_false_positives():
     # Plurals / embedded words must not match the bare type token.
     assert detect("bars and lines") is None
     assert detect("areas of interest") is None
+
+
+# ── "datagrid" as a single word (no space) — display-format follow-up
+#
+# Live bug: "give me datagrid" fell through to a brand-new SQL query (and even a
+# different result set) because the single token "datagrid" was not recognized as
+# a grid/table request — only "data grid" (with a space), "grid", and "table" were.
+# It must be treated like "as a table" so the follow-up reuses the prior result.
+
+
+def test_datagrid_single_word_detected_as_table():
+    assert detect("give me datagrid") == "table"
+    assert detect("datagrid") == "table"
+    assert detect("show this as a datagrid", require_viz_cue=True) == "table"
+
+
+def test_datagrid_followup_is_chart_type_only():
+    # The whole question is display-format words → reuse prior data, no SQL.
+    assert is_type_only("give me datagrid") is True
+    # A real data query that merely mentions a datagrid still needs SQL.
+    assert is_type_only("revenue by region as datagrid") is False
