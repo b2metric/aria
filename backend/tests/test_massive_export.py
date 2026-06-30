@@ -67,13 +67,12 @@ async def test_export_failure_is_reported_not_swallowed():
     assert res["status"] == "error"  # pipeline turns this into a "export failed, narrow query"
 
 
-# ── Pipeline offload branch (_execute_sql) ─────────────────────────────────
-# The worker contract above is only half the feature. The DECISION to offload —
-# "EXPLAIN estimates too many rows → background export → deliver the link" —
-# lives in pipeline._execute_sql and was previously untested. These pin that
-# branch: when the planner estimates > UI_RENDER_THRESHOLD rows, the user must
-# get the download URL (success) or a clear "narrow the query" message (failure),
-# and an absurd estimate (> 100× the tenant limit) must be blocked outright.
+# ── Pipeline routing branch (_execute_sql) ─────────────────────────────────
+# The DECISION to display-vs-export lives in pipeline._execute_sql. Phase 2
+# routes on the TRUE size: EXPLAIN runs on the un-limited SQL and the result is
+# offloaded to a CSV export when the estimate exceeds the tenant's max_row_limit,
+# or when the display read overflows max_row_limit + 1 (EXPLAIN under-estimate).
+# A huge estimate is NO LONGER blocked outright — it routes to the export band.
 
 from backend.app.db import DatabaseType, DBConfig  # noqa: E402
 
@@ -90,26 +89,23 @@ def _pg_config(max_row_limit: int = 1000) -> DBConfig:
     )
 
 
-async def _run_offload(estimated_rows: int, export_result: dict | None):
-    """Drive _execute_sql to the EXPLAIN/offload branch with everything around it
-    mocked: security check is a no-op, the tenant DB config is synthetic, and
-    EXPLAIN + the export worker return canned values. db=None so the audit/RLS
-    side paths are skipped."""
+async def _run_routed(estimated_rows: int, export_result: dict | None, rows_returned: list | None = None):
+    """Drive _execute_sql past routing. EXPLAIN returns `estimated_rows` for the
+    BARE sql; the display path's execute_query returns `rows_returned` (default a
+    small list so the display branch returns normally)."""
     from backend.app.query import pipeline
+
+    if rows_returned is None:
+        rows_returned = [{"x": 1}]
 
     with (
         patch.object(pipeline, "verify_sql_security", new=AsyncMock(return_value=None)),
         patch.object(pipeline, "_get_db_config", new=AsyncMock(return_value=_pg_config())),
-        patch(
-            "backend.app.db.explain_query",
-            new=AsyncMock(return_value={"estimated_rows": estimated_rows}),
-        ),
-        patch(
-            "backend.app.worker.tasks.export_massive_query_to_minio",
-            new=AsyncMock(return_value=export_result),
-        ),
+        patch("backend.app.db.explain_query", new=AsyncMock(return_value={"estimated_rows": estimated_rows})),
+        patch("backend.app.db.execute_query", new=AsyncMock(return_value=rows_returned)),
+        patch("backend.app.worker.tasks.export_massive_query_to_minio", new=AsyncMock(return_value=export_result)),
     ):
-        await pipeline._execute_sql(
+        return await pipeline._execute_sql(
             sql="SELECT * FROM orders",
             engine=MagicMock(),
             workspace_id="ws1",
@@ -120,11 +116,32 @@ async def _run_offload(estimated_rows: int, export_result: dict | None):
 
 
 @pytest.mark.asyncio
-async def test_offload_delivers_download_url_when_estimate_exceeds_ui_threshold():
-    """> 5000 estimated rows → the export URL is surfaced to the user."""
-    export = {"status": "success", "url": "http://minio/aria-artifacts/exports/big.csv", "row_count": 50000}
+async def test_estimate_within_display_limit_returns_rows_inline():
+    """R̂ ≤ max_row_limit (1000) → display path returns rows, no export."""
+    export = AsyncMock()
+    from backend.app.query import pipeline
+
+    with (
+        patch.object(pipeline, "verify_sql_security", new=AsyncMock(return_value=None)),
+        patch.object(pipeline, "_get_db_config", new=AsyncMock(return_value=_pg_config())),
+        patch("backend.app.db.explain_query", new=AsyncMock(return_value={"estimated_rows": 50})),
+        patch("backend.app.db.execute_query", new=AsyncMock(return_value=[{"x": 1}, {"x": 2}])),
+        patch("backend.app.worker.tasks.export_massive_query_to_minio", new=export),
+    ):
+        out = await pipeline._execute_sql(
+            sql="SELECT * FROM orders", engine=MagicMock(), workspace_id="ws1",
+            db=None, user_id="u1", question="q",
+        )
+    assert out == [{"x": 1}, {"x": 2}]
+    export.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_estimate_above_display_limit_offloads_with_download_url():
+    """R̂ > max_row_limit → export band; the download URL is surfaced."""
+    export = {"status": "success", "url": "http://minio/exports/big.csv", "row_count": 50000}
     with pytest.raises(ValueError) as exc:
-        await _run_offload(estimated_rows=50_000, export_result=export)
+        await _run_routed(estimated_rows=50_000, export_result=export)
     msg = str(exc.value)
     assert export["url"] in msg
     assert "download" in msg.lower()
@@ -132,36 +149,30 @@ async def test_offload_delivers_download_url_when_estimate_exceeds_ui_threshold(
 
 @pytest.mark.asyncio
 async def test_offload_failure_asks_user_to_narrow_query():
-    """Background export failed (no URL) → a clear, non-silent failure message."""
     export = {"status": "error", "url": None, "error": "boom"}
     with pytest.raises(ValueError) as exc:
-        await _run_offload(estimated_rows=50_000, export_result=export)
+        await _run_routed(estimated_rows=50_000, export_result=export)
     assert "narrow the query" in str(exc.value).lower()
 
 
 @pytest.mark.asyncio
-async def test_absurd_estimate_is_blocked_before_export():
-    """> 100× the tenant row limit → blocked outright, never handed to the worker."""
-    export_called = AsyncMock(return_value={"status": "success", "url": "x"})
-    from backend.app.query import pipeline
+async def test_huge_estimate_offloads_instead_of_blocking():
+    """Phase 2 removes the >100x hard block: a huge estimate now ROUTES TO EXPORT
+    (bounded by max_export_row_limit downstream), it is NOT rejected outright."""
+    export = {"status": "success", "url": "http://minio/exports/huge.csv", "row_count": 1_000_000}
+    with pytest.raises(ValueError) as exc:
+        await _run_routed(estimated_rows=5_000_000, export_result=export)
+    m = str(exc.value).lower()
+    assert "download" in m
+    assert "security exception" not in m  # no longer blocked
 
-    with (
-        patch.object(pipeline, "verify_sql_security", new=AsyncMock(return_value=None)),
-        patch.object(pipeline, "_get_db_config", new=AsyncMock(return_value=_pg_config(1000))),
-        patch(
-            "backend.app.db.explain_query",
-            new=AsyncMock(return_value={"estimated_rows": 100_001}),  # > 1000 * 100
-        ),
-        patch("backend.app.worker.tasks.export_massive_query_to_minio", new=export_called),
-    ):
-        with pytest.raises(ValueError) as exc:
-            await pipeline._execute_sql(
-                sql="SELECT * FROM orders",
-                engine=MagicMock(),
-                workspace_id="ws1",
-                db=None,
-                user_id="u1",
-                question="dump everything",
-            )
-    assert "security exception" in str(exc.value).lower()
-    export_called.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_inline_safety_cap_offloads_when_read_overflows():
+    """EXPLAIN underestimates (≤ max_row_limit) but the display read returns
+    max_row_limit + 1 rows → switch to export band."""
+    over = [{"x": i} for i in range(1001)]  # max_row_limit(1000) + 1
+    export = {"status": "success", "url": "http://minio/exports/late.csv", "row_count": 1001}
+    with pytest.raises(ValueError) as exc:
+        await _run_routed(estimated_rows=200, export_result=export, rows_returned=over)
+    assert "download" in str(exc.value).lower()

@@ -21,7 +21,7 @@ import logging
 import re
 import uuid as _uuid
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -1277,7 +1277,6 @@ async def _execute_sql(
     # Transform SQL for target dialect (LIMIT → FETCH FIRST for Oracle)
     transformed_sql = _transform_sql_for_dialect(sql, config.db_type)
 
-    row_limit = getattr(config, "max_row_limit", 1000)
     # NOTE (Phase 2): the display limit is NOT injected here anymore — EXPLAIN must
     # run on the un-limited SQL to estimate the true result size. The limit is
     # injected on the display path only, after routing (see the EXPLAIN block below).
@@ -1363,49 +1362,38 @@ async def _execute_sql(
     try:
         import uuid
 
-        from backend.app.db import explain_query
+        from backend.app.db import execute_query, explain_query
         from backend.app.worker.tasks import export_massive_query_to_minio
 
-        # Sprint 14 Task 1: EXPLAIN Guard
         row_limit = getattr(config, "max_row_limit", 1000)
-        UI_RENDER_THRESHOLD = 5000  # noqa: N806  # Triggers background job if > 5000 rows
+        export_ceiling = getattr(config, "max_export_row_limit", 100_000)
 
+        # Route on the TRUE size: EXPLAIN the bare (un-limited) SQL. (Phase 2: the
+        # display limit is injected only on the display path below, so the estimate
+        # reflects the real result size, not the injected cap.)
         explain_res = await explain_query(transformed_sql, config)
         estimated_rows = explain_res.get("estimated_rows", 0)
 
-        # If estimated rows massively exceed limits (e.g., 100x max_row_limit = 100,000 for a 1k limit), block execution
-        if estimated_rows > row_limit * 100:
-            error_msg = f"Security Exception: Query execution blocked. Estimated rows ({estimated_rows:,}) vastly exceed the allowed safe limit."
-            logger.warning("Blocked massive query execution: Estimated %d rows", estimated_rows)
-            await _audit(success=False, error=error_msg, mem_trace=mem_trace)
-            raise ValueError(error_msg)
-
-        # Sprint 14 Task 2: Background Data Offload
-        if estimated_rows > UI_RENDER_THRESHOLD:
-            logger.info(
-                "Estimated rows (%d) exceeds UI threshold (%d). Offloading to background.",
-                estimated_rows,
-                UI_RENDER_THRESHOLD,
-            )
-
-            # Run the export and DELIVER the download link. Previously this was a
-            # fire-and-forget asyncio.create_task whose returned URL was discarded —
-            # the user was promised "a link when ready" that never arrived. We now
-            # await it (the heavy query runs in a thread pool, so the event loop is
-            # not blocked) and surface the URL in the response message.
+        async def _offload_to_export() -> NoReturn:
+            # Export band. Bounded by the tenant export ceiling (Phase 3 replaces
+            # this with a batched streaming Prefect flow + per_export truncation).
+            # Phase 3 gap: if the SQL already carries an explicit FETCH FIRST / LIMIT /
+            # TOP with N > export_ceiling, _inject_row_limit skips injection and the
+            # ceiling is not enforced here. Phase 3's streaming flow caps per-batch.
+            export_sql = _inject_row_limit(transformed_sql, config.db_type, export_ceiling)
             export_result = await export_massive_query_to_minio(
-                sql=transformed_sql,
+                sql=export_sql,
                 db_config=config,
                 conversation_id=str(uuid.uuid4())
                 if not workspace_id
                 else f"{workspace_id}_{user_id}",
                 workspace_id=workspace_id or "default",
             )
-            row_count = export_result.get("row_count", estimated_rows)
-            await _audit(success=True, row_count=row_count, mem_trace=mem_trace)
+            count = export_result.get("row_count", estimated_rows)
+            await _audit(success=True, row_count=count, mem_trace=mem_trace)
             if export_result.get("status") == "success" and export_result.get("url"):
                 raise ValueError(
-                    f"Your query returned ~{row_count:,} rows — too large to display here. "
+                    f"Your query returned ~{count:,} rows — too large to display here. "
                     f"Download the full result (CSV, valid 3 days): {export_result['url']}"
                 )
             raise ValueError(
@@ -1413,17 +1401,28 @@ async def _execute_sql(
                 "background export failed — please narrow the query and retry."
             )
 
-        result = await execute_query(transformed_sql, config)
+        # Estimate exceeds the display ceiling → straight to the export band.
+        if estimated_rows > row_limit:
+            logger.info(
+                "Estimated rows (%d) exceed display limit (%d) → export band.",
+                estimated_rows,
+                row_limit,
+            )
+            await _offload_to_export()
+
+        # Display path: cap the read at row_limit + 1 so we can detect an
+        # under-estimate. If we actually get row_limit + 1 rows, the true size
+        # exceeds the display ceiling → fall through to the export band.
+        display_sql = _inject_row_limit(transformed_sql, config.db_type, row_limit)
+        result = await execute_query(display_sql, config)
 
         if len(result) > row_limit:
-            logger.warning("Query exceeded tenant row limit (%d). Truncating result.", row_limit)
-            result = result[:row_limit]
-            explanation = (
-                explanation
-                + f"\n\n⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
-                if explanation
-                else f"⚠️ Result was truncated to the maximum allowed limit of {row_limit} rows."
+            logger.info(
+                "Inline read overflowed (%d > %d); EXPLAIN under-estimated → export band.",
+                len(result),
+                row_limit,
             )
+            await _offload_to_export()
 
         # ── Column-Level Security: defense-in-depth result post-filter ──────
         # Name-based strip of any denied column that reaches the result with its
