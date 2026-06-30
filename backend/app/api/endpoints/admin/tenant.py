@@ -30,6 +30,20 @@ log = logging.getLogger("aria.admin")
 router = APIRouter()
 
 
+def validate_row_limit_invariant(*, max_row: int, max_export: int, batch: int) -> None:
+    """Enforce 1 ≤ max_row ≤ max_export ≤ HARD_ROW_CEILING and batch ≤ max_export."""
+    if not (1 <= max_row <= max_export <= HARD_ROW_CEILING):
+        raise ValueError(
+            "Require 1 ≤ max_row_limit ≤ max_export_row_limit ≤ 1,000,000 "
+            f"(got max_row_limit={max_row}, max_export_row_limit={max_export})"
+        )
+    if not (1 <= batch <= max_export):
+        raise ValueError(
+            "Require 1 ≤ export_batch_size ≤ max_export_row_limit "
+            f"(got export_batch_size={batch}, max_export_row_limit={max_export})"
+        )
+
+
 class DBConfigModel(BaseModel):
     db_type: DatabaseType
     host: str
@@ -193,6 +207,8 @@ async def update_tenant_config(
     if (
         body.daily_token_limit is None
         and body.max_row_limit is None
+        and body.max_export_row_limit is None
+        and body.export_batch_size is None
         and body.db_config is None
         and body.language is None
     ):
@@ -275,6 +291,10 @@ async def update_tenant_config(
                     db_config_res.username = body.db_config.username
                     if body.max_row_limit is not None:
                         db_config_res.max_row_limit = body.max_row_limit
+                    if body.max_export_row_limit is not None:
+                        db_config_res.max_export_row_limit = body.max_export_row_limit
+                    if body.export_batch_size is not None:
+                        db_config_res.export_batch_size = body.export_batch_size
                     if body.db_config.password:
                         db_config_res.encrypted_password = await async_encrypt_password(
                             body.db_config.password, customer.id, session
@@ -289,6 +309,10 @@ async def update_tenant_config(
                         database=body.db_config.database,
                         username=body.db_config.username,
                         max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
+                        max_export_row_limit=body.max_export_row_limit
+                        or DEFAULT_MAX_EXPORT_ROW_LIMIT,
+                        export_batch_size=body.export_batch_size
+                        or DEFAULT_EXPORT_BATCH_SIZE,
                         encrypted_password=await async_encrypt_password(
                             body.db_config.password, customer.id, session
                         )
@@ -297,8 +321,16 @@ async def update_tenant_config(
                     )
                     session.add(db_config_res)
 
-            elif body.max_row_limit is not None:
-                # If only max_row_limit is updated but db_config is empty
+            elif (
+                body.max_row_limit is not None
+                or body.max_export_row_limit is not None
+                or body.export_batch_size is not None
+            ):
+                # NOTE: if no CustomerDBConfig row exists for this workspace these
+                # limit fields are silently dropped (and the invariant is skipped).
+                # Every workspace is backfilled in practice; if that ever changes,
+                # this branch would need a CREATE path like the db_config branch.
+                # If only row/export limit fields are updated but db_config is empty
                 customer = (
                     await session.execute(select(Customer).where(Customer.slug == workspace_id))
                 ).scalar_one_or_none()
@@ -311,7 +343,23 @@ async def update_tenant_config(
                         )
                     ).scalar_one_or_none()
                     if db_config_res:
-                        db_config_res.max_row_limit = body.max_row_limit
+                        if body.max_row_limit is not None:
+                            db_config_res.max_row_limit = body.max_row_limit
+                        if body.max_export_row_limit is not None:
+                            db_config_res.max_export_row_limit = body.max_export_row_limit
+                        if body.export_batch_size is not None:
+                            db_config_res.export_batch_size = body.export_batch_size
+
+            if db_config_res is not None:
+                try:
+                    validate_row_limit_invariant(
+                        max_row=db_config_res.max_row_limit,
+                        max_export=db_config_res.max_export_row_limit,
+                        batch=db_config_res.export_batch_size,
+                    )
+                except ValueError as e:
+                    await session.rollback()
+                    raise HTTPException(status_code=400, detail=str(e)) from e
 
             await session.commit()
 
@@ -324,6 +372,8 @@ async def update_tenant_config(
         return TenantConfigResponse(
             daily_token_limit=final_limit,
             max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
+            max_export_row_limit=body.max_export_row_limit or DEFAULT_MAX_EXPORT_ROW_LIMIT,
+            export_batch_size=body.export_batch_size or DEFAULT_EXPORT_BATCH_SIZE,
             source="db",
             language=await get_workspace_language(workspace_id),
             db_config={

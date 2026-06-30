@@ -61,3 +61,41 @@ def test_query_limit_has_no_lower_floor():
     # the previous ge=100 floor is removed
     body = TenantConfigUpdate(max_row_limit=1)
     assert body.max_row_limit == 1
+
+
+# ---------------------------------------------------------------------------
+# Task 6 — validate_row_limit_invariant helper tests
+# ---------------------------------------------------------------------------
+
+from backend.app.api.endpoints.admin.tenant import validate_row_limit_invariant
+
+
+def test_invariant_helper_accepts_valid_combo():
+    # display ≤ export ≤ 1M and batch ≤ export
+    validate_row_limit_invariant(max_row=1000, max_export=100_000, batch=50_000)  # no raise
+
+
+def test_invariant_helper_rejects_export_below_display():
+    with pytest.raises(ValueError):
+        validate_row_limit_invariant(max_row=200_000, max_export=100_000, batch=50_000)
+
+
+def test_invariant_helper_rejects_batch_above_export():
+    with pytest.raises(ValueError):
+        validate_row_limit_invariant(max_row=1000, max_export=100_000, batch=200_000)
+
+
+def test_invariant_helper_rejects_above_hard_ceiling():
+    with pytest.raises(ValueError):
+        validate_row_limit_invariant(max_row=1000, max_export=2_000_000, batch=50_000)
+
+
+def test_invariant_helper_accepts_equality_boundaries():
+    # max_row == max_export == ceiling and batch == max_export are all valid
+    from backend.app.api.endpoints.admin.tenant import HARD_ROW_CEILING
+
+    validate_row_limit_invariant(
+        max_row=HARD_ROW_CEILING,
+        max_export=HARD_ROW_CEILING,
+        batch=HARD_ROW_CEILING,
+    )  # no raise
