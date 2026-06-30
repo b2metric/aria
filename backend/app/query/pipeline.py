@@ -43,6 +43,11 @@ from backend.app.query import (
     QueryRequest,
     QueryStatus,
 )
+from backend.app.query.export_dispatch import (
+    ExportDispatched,
+    create_export_job,
+    dispatch_export_job,
+)
 from backend.app.services.audit import AuditService
 
 logger = logging.getLogger(__name__)
@@ -968,6 +973,24 @@ def _inject_row_limit(sql: str, db_type: DatabaseType, limit: int) -> str:
     return sql
 
 
+def _export_event(job_id: _uuid.UUID, estimated_rows: int) -> dict:
+    """SSE event announcing an async CSV export job (replaces the ValueError hack)."""
+    return {
+        "event": "export",
+        "data": json.dumps(
+            {
+                "export_job_id": str(job_id),
+                "status": "queued",
+                "estimated_rows": estimated_rows,
+                "message": (
+                    f"Your query returned ~{estimated_rows:,} rows — too large to display. "
+                    "Preparing a CSV export; the download link will appear here when ready."
+                ),
+            }
+        ),
+    }
+
+
 async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     """Fetch database config for the workspace from customer_db_configs.
 
@@ -1360,10 +1383,7 @@ async def _execute_sql(
     )
 
     try:
-        import uuid
-
         from backend.app.db import execute_query, explain_query
-        from backend.app.worker.tasks import export_massive_query_to_minio
 
         row_limit = getattr(config, "max_row_limit", 1000)
         export_ceiling = getattr(config, "max_export_row_limit", 100_000)
@@ -1375,31 +1395,41 @@ async def _execute_sql(
         estimated_rows = explain_res.get("estimated_rows", 0)
 
         async def _offload_to_export() -> NoReturn:
-            # Export band. Bounded by the tenant export ceiling (Phase 3 replaces
-            # this with a batched streaming Prefect flow + per_export truncation).
-            # Phase 3 gap: if the SQL already carries an explicit FETCH FIRST / LIMIT /
-            # TOP with N > export_ceiling, _inject_row_limit skips injection and the
-            # ceiling is not enforced here. Phase 3's streaming flow caps per-batch.
-            export_sql = _inject_row_limit(transformed_sql, config.db_type, export_ceiling)
-            export_result = await export_massive_query_to_minio(
-                sql=export_sql,
-                db_config=config,
-                conversation_id=str(uuid.uuid4())
-                if not workspace_id
-                else f"{workspace_id}_{user_id}",
-                workspace_id=workspace_id or "default",
-            )
-            count = export_result.get("row_count", estimated_rows)
-            await _audit(success=True, row_count=count, mem_trace=mem_trace)
-            if export_result.get("status") == "success" and export_result.get("url"):
+            # Export band (Phase 3): persist a durable job, dispatch the streaming
+            # Prefect flow, and signal the pipeline generator to emit an `export`
+            # SSE event. The flow streams the bounded sql in batches and truncates
+            # at max_export_row_limit; we bound the DB scan here too by injecting
+            # FETCH FIRST (export_ceiling + 1) so the cursor stops early.
+            if db is None:
+                # No session to record the job (e.g. schema-path). Fail safe with a
+                # plain message rather than half-dispatching an untracked export.
+                await _audit(success=False, error="export requires a db session", mem_trace=mem_trace)
                 raise ValueError(
-                    f"Your query returned ~{count:,} rows — too large to display here. "
-                    f"Download the full result (CSV, valid 3 days): {export_result['url']}"
+                    f"Query returned ~{estimated_rows:,} rows (too large to display); "
+                    "exports are unavailable in this context."
                 )
-            raise ValueError(
-                f"Query estimated ~{estimated_rows:,} rows (too large to display) but the "
-                "background export failed — please narrow the query and retry."
+            export_sql = _inject_row_limit(transformed_sql, config.db_type, export_ceiling)
+            job_id = await create_export_job(
+                db,
+                workspace_id=workspace_id or "default",
+                user_id=user_id,
+                conversation_id=f"{workspace_id}_{user_id}" if workspace_id else None,
+                question=question,
+                sql=export_sql,
+                total_estimate=int(estimated_rows or 0),
             )
+            await db.commit()  # make the queued row durable before dispatch
+            await dispatch_export_job(
+                job_id=job_id,
+                sql=export_sql,
+                config=config,
+                workspace_id=workspace_id or "default",
+                conversation_id=f"{workspace_id}_{user_id}" if workspace_id else None,
+                user_id=user_id,
+            )
+            await _audit(success=True, row_count=int(estimated_rows or 0), mem_trace=mem_trace)
+            await db.commit()  # persist the audit row written above
+            raise ExportDispatched(job_id=job_id, estimated_rows=int(estimated_rows or 0))
 
         # Estimate exceeds the display ceiling → straight to the export band.
         if estimated_rows > row_limit:
@@ -2239,6 +2269,10 @@ async def _process_query_impl(
                 mem_trace=mem_trace,
                 team_id=team_id,
             )
+    except ExportDispatched as exp:
+        yield _export_event(exp.job_id, exp.estimated_rows)
+        yield {"event": "done", "data": json.dumps({"conversation_id": cid})}
+        return
     except Exception as e:
         logger.warning("SQL execution failed. Attempting LLM self-correction. Error: %s", e)
         # Stage 4.1: SELF_CORRECTION
@@ -2282,18 +2316,23 @@ async def _process_query_impl(
                 ),
             }
             # Re-execute the corrected SQL
-            async with _ExecSession(engine) as sess:
-                rows = await _execute_sql(
-                    sql,
-                    engine,
-                    workspace_id=workspace_id,
-                    db=sess,
-                    user_id=user_id,
-                    question=request.question,
-                    explanation=explanation,
-                    mem_trace=mem_trace,
-                    team_id=team_id,
-                )
+            try:
+                async with _ExecSession(engine) as sess:
+                    rows = await _execute_sql(
+                        sql,
+                        engine,
+                        workspace_id=workspace_id,
+                        db=sess,
+                        user_id=user_id,
+                        question=request.question,
+                        explanation=explanation,
+                        mem_trace=mem_trace,
+                        team_id=team_id,
+                    )
+            except ExportDispatched as exp:
+                yield _export_event(exp.job_id, exp.estimated_rows)
+                yield {"event": "done", "data": json.dumps({"conversation_id": cid})}
+                return
         except Exception as retry_e:
             logger.exception("SQL self-correction failed")
             yield {
