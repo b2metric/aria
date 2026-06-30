@@ -29,6 +29,8 @@ class DBConfig:
         password: Connection password (decrypted)
         options: Additional connection options (SSL, timeout, etc.)
         max_row_limit: Maximum allowed rows for this tenant
+        max_export_row_limit: Maximum rows written to a CSV export artifact (export ceiling)
+        export_batch_size: Rows fetched per batch when streaming an export
     """
 
     db_type: DatabaseType
@@ -39,6 +41,8 @@ class DBConfig:
     password: str
     options: dict[str, Any] | None = None
     max_row_limit: int = 1000
+    max_export_row_limit: int = 100_000
+    export_batch_size: int = 50_000
 
     @property
     def default_port(self) -> int:
