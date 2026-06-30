@@ -2,11 +2,13 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-# Copy package files first
-COPY package.json package-lock.json ./
+# Copy package files first (.npmrc maps the @b2m-team scope to GitHub Packages)
+COPY package.json package-lock.json .npmrc ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies. The @b2m-team/ui package is private (GitHub Packages), so
+# npm needs an auth token — provided as a BuildKit secret (kept out of image
+# layers). Build with: docker build --secret id=npmrc,src=$HOME/.npmrc ...
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc npm ci
 
 # Copy the rest of the application
 COPY . .
