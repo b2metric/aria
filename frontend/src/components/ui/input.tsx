@@ -1,21 +1,4 @@
-import * as React from "react"
-import { cn } from "@/lib/utils"
-
-const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, type, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          "flex h-9 w-full rounded-md border border-gray-200 bg-transparent px-3 py-1 text-base shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-gray-950 placeholder:text-gray-500 hover:border-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm",
-          className
-        )}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
-Input.displayName = "Input"
-
-export { Input }
+// Adopted from the B2Metric design system. The Input primitive now comes from
+// @b2m-team/ui (shadcn HSL tokens, bridged in globals.css). Re-exported here so
+// existing `@/components/ui/input` imports keep working unchanged.
+export { Input } from "@b2m-team/ui";

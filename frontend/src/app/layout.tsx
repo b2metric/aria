@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+// @b2m-team/ui shadcn HSL tokens — imported BEFORE globals.css so the app's own
+// brand tokens win on the few shared names (--success/--warning/--info).
+import "@b2m-team/ui/styles.css";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Sidebar } from "@/components/Sidebar";
