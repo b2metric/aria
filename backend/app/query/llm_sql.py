@@ -28,7 +28,9 @@ Generate ONLY the SQL query, no explanations.
 
 RULES:
 1. Use Oracle SQL syntax (TRUNC for dates, FETCH FIRST N ROWS ONLY for limits, NVL for null handling)
-2. Always include reasonable limits (default: FETCH FIRST 100 ROWS ONLY)
+2. Do NOT add your own row limit — the system applies the row limit automatically.
+   Only add `FETCH FIRST N ROWS ONLY` when the user EXPLICITLY asks for a specific
+   count ("top 10", "first 50", "5 largest"). Otherwise return the query unlimited.
 3. Use proper date truncation: TRUNC(date_col, 'MM') for monthly, TRUNC(date_col) for daily
 4. Add GROUP BY / date bucketing ONLY when the user asks for a breakdown or a trend
    (over time, by month, daily, per X, "trend"). For a single aggregate — a ratio,
