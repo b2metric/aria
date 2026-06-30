@@ -8,7 +8,7 @@ const nextConfig = {
     return [
       {
         source: '/settings',
-        destination: '/settings/general',
+        destination: '/settings/profile',
         permanent: false,
       },
       {
