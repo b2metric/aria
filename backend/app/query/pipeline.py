@@ -1492,7 +1492,7 @@ _VIZ_CUE_RE = re.compile(r"\b(charts?|graphs?|plots?|visuali[sz]\w*|grafi\w*)\b"
 # An explicit "show it as a table/grid" request (display intent), as opposed to a
 # data reference like "from the recharge table".
 _TABLE_REQUEST_RE = re.compile(
-    r"\b(data\s+grid|grids?|(as|in|into|to)\s+(a\s+)?(data\s+)?(table|tablo))\b"
+    r"\b(datagrid|data\s+grid|grids?|(as|in|into|to)\s+(a\s+)?(data\s+)?(table|tablo))\b"
 )
 _CHART_TYPES = ("pie", "scatter", "area", "line", "bar")
 
@@ -1520,7 +1520,7 @@ def _detect_requested_chart_type(question: str, *, require_viz_cue: bool = False
         return next((t for t in _CHART_TYPES if re.search(rf"\b{t}\b", q)), None)
 
     # Permissive path (chart-type-only follow-up).
-    if re.search(r"\b(grid|table|tablo)\b", q):
+    if re.search(r"\b(datagrid|grid|table|tablo)\b", q):
         return "table"
     return next((t for t in _CHART_TYPES if re.search(rf"\b{t}\b", q)), None)
 
@@ -1564,6 +1564,7 @@ _CHART_REQ_FILLER = {
     "table",
     "tablo",
     "grid",
+    "datagrid",
     "data",
     "color",
     "colour",
