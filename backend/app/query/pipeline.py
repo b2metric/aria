@@ -950,6 +950,24 @@ def _transform_sql_for_dialect(sql: str, db_type: DatabaseType) -> str:
     return sql
 
 
+def _inject_row_limit(sql: str, db_type: DatabaseType, limit: int) -> str:
+    """Append a dialect-correct ``limit + 1`` cap, unless the SQL already has one.
+
+    The ``+1`` lets the caller detect overflow (got ``limit+1`` rows ⇒ there are
+    more than ``limit``). Skips injection when the SQL already carries a
+    FETCH FIRST / LIMIT / TOP (i.e. a user-intended explicit cap).
+    """
+    if db_type == DatabaseType.ORACLE:
+        if not re.search(r"FETCH\s+FIRST", sql, re.IGNORECASE):
+            return sql + f"\nFETCH FIRST {limit + 1} ROWS ONLY"
+        return sql
+    if not re.search(r"\bLIMIT\b", sql, re.IGNORECASE) and not re.search(
+        r"\bSELECT\s+TOP\b", sql, re.IGNORECASE
+    ):
+        return sql + f"\nLIMIT {limit + 1}"
+    return sql
+
+
 async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     """Fetch database config for the workspace from customer_db_configs.
 
@@ -1259,20 +1277,10 @@ async def _execute_sql(
     # Transform SQL for target dialect (LIMIT → FETCH FIRST for Oracle)
     transformed_sql = _transform_sql_for_dialect(sql, config.db_type)
 
-    # Apply row limits
-    import re
-
     row_limit = getattr(config, "max_row_limit", 1000)
-
-    # Simple limit injection for safety if the query doesn't already have one
-    if config.db_type.value == "oracle":
-        if not re.search(r"FETCH\s+FIRST", transformed_sql, re.IGNORECASE):
-            transformed_sql += f"\nFETCH FIRST {row_limit + 1} ROWS ONLY"
-    else:
-        if not re.search(r"\bLIMIT\b", transformed_sql, re.IGNORECASE) and not re.search(
-            r"\bTOP\b", transformed_sql, re.IGNORECASE
-        ):
-            transformed_sql += f"\nLIMIT {row_limit + 1}"
+    # NOTE (Phase 2): the display limit is NOT injected here anymore — EXPLAIN must
+    # run on the un-limited SQL to estimate the true result size. The limit is
+    # injected on the display path only, after routing (see the EXPLAIN block below).
 
     # ── Security Guard: read-only queries only (SELECT incl. WITH/CTE) ───────
     # Strip comments/whitespace first, then validate. A `WITH ... SELECT` CTE is
