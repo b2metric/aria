@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest  # noqa: F401  # used by later tasks in this file
+import pytest
 
 from backend.app.db.models import DBConfig, DatabaseType
 
@@ -21,3 +21,43 @@ def test_dbconfig_has_export_fields_with_defaults():
     # new export ceiling + batch size defaults
     assert cfg.max_export_row_limit == 100_000
     assert cfg.export_batch_size == 50_000
+
+
+# ---------------------------------------------------------------------------
+# Task 4 — TenantConfigUpdate request/response model tests
+# ---------------------------------------------------------------------------
+
+from pydantic import ValidationError
+
+from backend.app.api.endpoints.admin.tenant import TenantConfigUpdate
+
+
+def test_update_accepts_new_fields():
+    body = TenantConfigUpdate(
+        max_row_limit=1000, max_export_row_limit=200_000, export_batch_size=20_000
+    )
+    assert body.max_row_limit == 1000
+    assert body.max_export_row_limit == 200_000
+    assert body.export_batch_size == 20_000
+
+
+def test_update_rejects_export_below_query_when_both_present():
+    with pytest.raises(ValidationError):
+        TenantConfigUpdate(max_row_limit=50_000, max_export_row_limit=10_000)
+
+
+def test_update_rejects_batch_above_export_when_both_present():
+    with pytest.raises(ValidationError):
+        TenantConfigUpdate(max_export_row_limit=10_000, export_batch_size=20_000)
+
+
+def test_update_allows_partial_single_field():
+    # only one of the related fields → no cross-field error at request level
+    body = TenantConfigUpdate(export_batch_size=5_000)
+    assert body.export_batch_size == 5_000
+
+
+def test_query_limit_has_no_lower_floor():
+    # the previous ge=100 floor is removed
+    body = TenantConfigUpdate(max_row_limit=1)
+    assert body.max_row_limit == 1

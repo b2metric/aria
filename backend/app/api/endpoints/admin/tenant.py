@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -22,6 +22,9 @@ from backend.app.services.workspace_language import get_workspace_language
 
 DEFAULT_DAILY_TOKEN_LIMIT = 50000
 DEFAULT_MAX_ROW_LIMIT = 1000
+DEFAULT_MAX_EXPORT_ROW_LIMIT = 100000
+DEFAULT_EXPORT_BATCH_SIZE = 50000
+HARD_ROW_CEILING = 1_000_000
 
 log = logging.getLogger("aria.admin")
 router = APIRouter()
@@ -47,9 +50,21 @@ class TenantConfigUpdate(BaseModel):
     )
     max_row_limit: int | None = Field(
         default=None,
-        ge=100,
+        ge=1,
         le=1_000_000,
-        description="Max rows per query (100 - 1M)",
+        description="Max rows rendered per query in the UI (display ceiling)",
+    )
+    max_export_row_limit: int | None = Field(
+        default=None,
+        ge=1,
+        le=1_000_000,
+        description="Max rows written to a CSV export artifact (export ceiling)",
+    )
+    export_batch_size: int | None = Field(
+        default=None,
+        ge=1,
+        le=1_000_000,
+        description="Rows fetched per batch when streaming an export",
     )
     db_config: DBConfigModel | None = None
     language: str | None = Field(
@@ -58,12 +73,32 @@ class TenantConfigUpdate(BaseModel):
         description="Customer response language: 'en' or 'tr' (forces all chat/insight/suggestions)",
     )
 
+    @model_validator(mode="after")
+    def _check_ordering(self) -> "TenantConfigUpdate":
+        # Only validate the relationship between fields submitted together;
+        # the handler does the final check against stored values.
+        if (
+            self.max_row_limit is not None
+            and self.max_export_row_limit is not None
+            and self.max_row_limit > self.max_export_row_limit
+        ):
+            raise ValueError("max_row_limit must be ≤ max_export_row_limit")
+        if (
+            self.export_batch_size is not None
+            and self.max_export_row_limit is not None
+            and self.export_batch_size > self.max_export_row_limit
+        ):
+            raise ValueError("export_batch_size must be ≤ max_export_row_limit")
+        return self
+
 
 class TenantConfigResponse(BaseModel):
     """Tenant configuration response."""
 
     daily_token_limit: int
     max_row_limit: int
+    max_export_row_limit: int
+    export_batch_size: int
     source: str  # "db" or "default"
     db_config: dict | None = None
     language: str = "en"
