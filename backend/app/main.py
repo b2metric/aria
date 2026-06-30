@@ -15,6 +15,7 @@ from backend.app import __version__
 from backend.app.api.dashboard import router as dashboard_router
 from backend.app.api.endpoints.admin import router as admin_router
 from backend.app.api.endpoints.onboarding import router as onboarding_router
+from backend.app.api.exports import router as exports_router
 from backend.app.api.query import router as query_router
 from backend.app.api.schema import router as schema_router
 from backend.app.api.workspaces import router as workspaces_router
@@ -149,6 +150,7 @@ app = FastAPI(
 )
 
 app.include_router(query_router)
+app.include_router(exports_router)
 app.include_router(schema_router)
 app.include_router(workspaces_router)
 app.include_router(onboarding_router)
