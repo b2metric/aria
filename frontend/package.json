@@ -17,7 +17,7 @@
     "test:e2e:auth": "PLAYWRIGHT_NO_WEBSERVER=1 playwright test auth-flow"
   },
   "dependencies": {
-    "@b2m-team/ui": "^0.2.1",
+    "@b2m-team/ui": "^0.2.3",
     "@radix-ui/react-dialog": "^1.1.17",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/papaparse": "^5.5.2",
