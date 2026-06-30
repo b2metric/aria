@@ -371,9 +371,13 @@ async def update_tenant_config(
         )
         return TenantConfigResponse(
             daily_token_limit=final_limit,
-            max_row_limit=body.max_row_limit or DEFAULT_MAX_ROW_LIMIT,
-            max_export_row_limit=body.max_export_row_limit or DEFAULT_MAX_EXPORT_ROW_LIMIT,
-            export_batch_size=body.export_batch_size or DEFAULT_EXPORT_BATCH_SIZE,
+            max_row_limit=db_config_res.max_row_limit if db_config_res else DEFAULT_MAX_ROW_LIMIT,
+            max_export_row_limit=(
+                db_config_res.max_export_row_limit if db_config_res else DEFAULT_MAX_EXPORT_ROW_LIMIT
+            ),
+            export_batch_size=(
+                db_config_res.export_batch_size if db_config_res else DEFAULT_EXPORT_BATCH_SIZE
+            ),
             source="db",
             language=await get_workspace_language(workspace_id),
             db_config={
