@@ -186,7 +186,7 @@ class TestArtifactStoreConfig:
             s._client = mock_minio_client
             s._ensure_bucket()
             mock_minio_client.make_bucket.assert_called_once_with(
-                "aria-artifacts", region="us-east-1"
+                "aria-artifacts", location="us-east-1"
             )
 
     def test_connect_skips_bucket_when_exists(self, mock_minio_client):
