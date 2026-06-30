@@ -22,6 +22,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 from backend.app.db.models import DatabaseType, DBConfig
@@ -115,6 +116,19 @@ class DatabaseExecutor:
         """Explain SQL and return estimated rows and cost."""
         return {"estimated_rows": 0, "estimated_cost": 0, "raw": None}
 
+    def stream_query(
+        self, sql: str, params: dict[str, Any] | None = None, *, batch_size: int = 50_000
+    ) -> Iterator[list[dict[str, Any]]]:
+        """Yield rows in batches of ``batch_size`` without buffering the whole result.
+
+        Resource contract: the connection is closed in a ``finally`` that runs only
+        when the generator is exhausted or explicitly closed. Callers MUST either
+        fully drain the iterator or call ``.close()`` on it (e.g. via
+        ``contextlib.closing``) — an early ``break`` without closing leaks the
+        connection until GC.
+        """
+        raise NotImplementedError
+
 
 class PostgreSQLExecutor(DatabaseExecutor):
     """PostgreSQL executor using psycopg2."""
@@ -169,6 +183,33 @@ class PostgreSQLExecutor(DatabaseExecutor):
         finally:
             conn.close()
 
+    def stream_query(
+        self, sql: str, params: dict[str, Any] | None = None, *, batch_size: int = 50_000
+    ) -> Iterator[list[dict[str, Any]]]:
+        import psycopg2
+        import psycopg2.extras
+
+        conn = psycopg2.connect(
+            host=self.config.host,
+            port=self.config.get_port(),
+            dbname=self.config.database,
+            user=self.config.username,
+            password=self.config.password,
+            **(self.config.options or {}),
+        )
+        try:
+            # Named cursor → server-side; itersize controls network fetch batching.
+            with conn.cursor(name="aria_export", cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.itersize = batch_size
+                cur.execute(sql, params or {})
+                while True:
+                    chunk = cur.fetchmany(batch_size)
+                    if not chunk:
+                        break
+                    yield [dict(row) for row in chunk]
+        finally:
+            conn.close()
+
 
 class MySQLExecutor(DatabaseExecutor):
     """MySQL executor using pymysql."""
@@ -220,6 +261,32 @@ class MySQLExecutor(DatabaseExecutor):
                 rows = cur.fetchall() or []
                 est = max((int(r.get("rows") or 0) for r in rows), default=0)
                 return {"estimated_rows": est, "estimated_cost": 0, "raw": list(rows)}
+        finally:
+            conn.close()
+
+    def stream_query(
+        self, sql: str, params: dict[str, Any] | None = None, *, batch_size: int = 50_000
+    ) -> Iterator[list[dict[str, Any]]]:
+        import pymysql
+        import pymysql.cursors
+
+        conn = pymysql.connect(
+            host=self.config.host,
+            port=self.config.get_port(),
+            database=self.config.database,
+            user=self.config.username,
+            password=self.config.password,
+            cursorclass=pymysql.cursors.SSDictCursor,  # unbuffered, dict rows
+            **(self.config.options or {}),
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params or {})
+                while True:
+                    chunk = cur.fetchmany(batch_size)
+                    if not chunk:
+                        break
+                    yield list(chunk)
         finally:
             conn.close()
 
@@ -303,6 +370,32 @@ class OracleExecutor(DatabaseExecutor):
         finally:
             conn.close()
 
+    def stream_query(
+        self, sql: str, params: dict[str, Any] | None = None, *, batch_size: int = 50_000
+    ) -> Iterator[list[dict[str, Any]]]:
+        import oracledb
+
+        from backend.app.core.config import get_settings
+
+        settings = get_settings()
+        if settings.oracle_client_lib_dir:
+            _init_oracle_thick_mode()
+
+        dsn = f"{self.config.host}:{self.config.get_port()}/{self.config.database}"
+        conn = oracledb.connect(user=self.config.username, password=self.config.password, dsn=dsn)
+        try:
+            with conn.cursor() as cur:
+                cur.arraysize = batch_size  # round-trip efficiency
+                cur.execute(sql, params or {})
+                columns = [d[0] for d in cur.description] if cur.description else []
+                while True:
+                    chunk = cur.fetchmany(batch_size)
+                    if not chunk:
+                        break
+                    yield [dict(zip(columns, row, strict=False)) for row in chunk]
+        finally:
+            conn.close()
+
 
 class MSSQLExecutor(DatabaseExecutor):
     """Microsoft SQL Server executor using pymssql."""
@@ -325,6 +418,31 @@ class MSSQLExecutor(DatabaseExecutor):
                 if cur.description:
                     return list(cur.fetchall())
                 return []
+        finally:
+            conn.close()
+
+    def stream_query(
+        self, sql: str, params: dict[str, Any] | None = None, *, batch_size: int = 50_000
+    ) -> Iterator[list[dict[str, Any]]]:
+        import pymssql
+
+        conn = pymssql.connect(
+            server=self.config.host,
+            port=str(self.config.get_port()),
+            database=self.config.database,
+            user=self.config.username,
+            password=self.config.password,
+            as_dict=True,
+            **(self.config.options or {}),
+        )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(sql, params or {})
+                while True:
+                    chunk = cur.fetchmany(batch_size)
+                    if not chunk:
+                        break
+                    yield list(chunk)
         finally:
             conn.close()
 
@@ -423,6 +541,22 @@ def execute_query_sync(
         config.database,
     )
     return executor.execute(sql, params)
+
+
+def stream_query_sync(
+    sql: str,
+    config: DBConfig,
+    *,
+    batch_size: int = 50_000,
+    params: dict[str, Any] | None = None,
+) -> Iterator[list[dict[str, Any]]]:
+    """Stream a SQL query's rows in batches (memory-bounded). Synchronous; run in a
+    thread pool from async callers — see app/flows/export.py.
+
+    Caller must fully drain the returned iterator or close() it (see
+    DatabaseExecutor.stream_query)."""
+    executor = get_executor(config)
+    return executor.stream_query(sql, params, batch_size=batch_size)
 
 
 async def execute_query(
