@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Any
 
 import litellm
@@ -9,6 +10,52 @@ from backend.app.services.llm_resolver import ResolvedLLM
 from backend.app.services.workspace_language import language_directive
 
 logger = logging.getLogger(__name__)
+
+# Models name the follow-up array inconsistently; accept the common variants
+# instead of silently dropping suggestions that arrived under a different key.
+_SUGGESTION_KEYS = ("suggestions", "follow_ups", "followups", "questions")
+# When a suggestion arrives as an object, pull the text from the first key present.
+_SUGGESTION_TEXT_KEYS = ("question", "text", "q", "value", "suggestion")
+# Strip leading list markers ("1. ", "2) ", "- ", "* ", "• ") from string forms.
+_LIST_MARKER_RE = re.compile(r"^\s*(?:\d+[.)]|[-*•])\s*")
+
+
+def _coerce_suggestion(item: Any) -> str | None:
+    """Coerce one suggestion item (string or object) to clean text, or None."""
+    if isinstance(item, str):
+        text = _LIST_MARKER_RE.sub("", item).strip()
+        return text or None
+    if isinstance(item, dict):
+        for key in _SUGGESTION_TEXT_KEYS:
+            val = item.get(key)
+            if isinstance(val, str) and val.strip():
+                return _LIST_MARKER_RE.sub("", val).strip()
+    return None
+
+
+def _normalize_suggestions(result: dict[str, Any]) -> list[str]:
+    """Tolerantly extract up to 3 follow-up questions from an LLM JSON object.
+
+    Handles the shapes seen in the wild: a list of strings, a list of objects
+    (``[{"question": ...}]``), a newline-delimited string, and the array living
+    under an alternate key (``follow_ups``/``questions``). Anything unparseable
+    yields ``[]`` (the caller logs that case for diagnosis).
+    """
+    for key in _SUGGESTION_KEYS:
+        raw = result.get(key)
+        if not raw:
+            continue
+        items: list[Any]
+        if isinstance(raw, str):
+            items = raw.splitlines()
+        elif isinstance(raw, list):
+            items = raw
+        else:
+            continue
+        cleaned = [s for s in (_coerce_suggestion(i) for i in items) if s]
+        if cleaned:
+            return cleaned[:3]
+    return []
 
 
 async def generate_insight_and_suggestions(
@@ -77,13 +124,20 @@ Result Sample:
         content = response.choices[0].message.content
         result = json.loads(content)
 
-        # Ensure correct structure
+        # Ensure correct structure. Suggestions arrive in inconsistent shapes
+        # (list of strings/objects, newline string, alternate key); normalize
+        # tolerantly instead of silently dropping anything that isn't a
+        # list[str] — that drop cost real answers their follow-ups with no trace.
         summary = result.get("summary", "Query executed successfully.")
-        suggestions = result.get("suggestions", [])
-        if not isinstance(suggestions, list):
-            suggestions = []
+        suggestions = _normalize_suggestions(result if isinstance(result, dict) else {})
 
-        return {"summary": summary, "suggestions": suggestions[:3]}
+        if summary and not suggestions:
+            logger.warning(
+                "Insight produced a summary but no usable suggestions; raw content: %s",
+                (content or "")[:500],
+            )
+
+        return {"summary": summary, "suggestions": suggestions}
     except Exception as e:
         logger.warning(f"Failed to generate insights: {e}")
         return {"summary": "Data retrieved successfully.", "suggestions": []}
