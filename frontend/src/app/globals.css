@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind 4 skips node_modules by default; explicitly scan the @b2m-team/ui
+   package so its utility classes (bg-primary, border-input, bg-card, …) are
+   generated. Without this the adopted package primitives render unstyled. */
+@source "../../node_modules/@b2m-team/ui/dist";
+
 /* B2Metric brand tokens — single source of truth.
    Light is active today; the dark block is scaffolding for a later phase
    (flip by setting data-theme="dark" on <html>). */
