@@ -59,6 +59,18 @@ class CustomerDBConfig(Base, UUIDMixin, TimestampMixin):
         server_default="1000",
         comment="Hard limit for rows returned per query",
     )
+    max_export_row_limit: Mapped[int] = mapped_column(
+        Integer,
+        default=100_000,
+        server_default="100000",
+        comment="Max rows written to a CSV export artifact (export ceiling)",
+    )
+    export_batch_size: Mapped[int] = mapped_column(
+        Integer,
+        default=50_000,
+        server_default="50000",
+        comment="Rows fetched per batch when streaming an export",
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
