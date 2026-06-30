@@ -22,9 +22,12 @@ Usage:
 
 from __future__ import annotations
 
+import csv
 import io
+import itertools
 import os
 import uuid
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -125,11 +128,42 @@ _CONTENT_TYPES: dict[str, str] = {
     "json": "application/json; charset=utf-8",
 }
 
+_MULTIPART_PART_SIZE = 10 * 1024 * 1024  # 10 MiB MinIO multipart part
+
 
 def _ext_to_format(ext: str) -> str:
     """Map file extension to artifact format name."""
     ext = ext.lower().lstrip(".")
     return {"html": "html", "htm": "html", "png": "png", "csv": "csv", "json": "json"}.get(ext, ext)
+
+
+# ── Streaming CSV adapter ────────────────────────────────────────────────────
+
+
+class _IteratorIO(io.RawIOBase):
+    """Adapt an iterator of byte chunks into a read()-able binary stream so the
+    MinIO SDK can pull from it for a multipart upload without materializing the
+    whole CSV. Tracks total bytes for the ArtifactRef size."""
+
+    def __init__(self, chunks: Iterator[bytes]) -> None:
+        self._chunks = chunks
+        self._leftover = b""
+        self.bytes_read = 0
+
+    def readable(self) -> bool:
+        return True
+
+    def readinto(self, b) -> int:  # type: ignore[override]
+        if not self._leftover:
+            try:
+                self._leftover = next(self._chunks)
+            except StopIteration:
+                return 0
+        n = min(len(b), len(self._leftover))
+        b[:n] = self._leftover[:n]
+        self._leftover = self._leftover[n:]
+        self.bytes_read += n
+        return n
 
 
 # ── Artifact Store ──────────────────────────────────────────────────────────
@@ -287,6 +321,74 @@ class ArtifactStore:
             key=key,
             format="csv",
             content_type="text/csv; charset=utf-8",
+        )
+
+    def upload_csv_stream(
+        self,
+        batches: Iterator[list[dict[str, object]]],
+        *,
+        key: str,
+        content_type: str = "text/csv; charset=utf-8",
+    ) -> ArtifactRef | None:
+        """Stream batches of dict rows to MinIO as a single CSV, multipart.
+
+        Neither the full result set nor the full CSV is held in memory: a lazy
+        generator yields CSV byte chunks (header from the first row's keys, then
+        rows with safe per-cell coercion), wrapped in a read()-able stream and
+        uploaded via ``put_object(length=-1, part_size=...)`` (MinIO multipart).
+
+        Returns None (no upload) if the iterator yields no rows.
+        Columns are fixed from the first non-empty batch; keys appearing only in
+        later batches are not added to the CSV.
+        """
+        # Peek the first non-empty batch to derive the header. If there are no
+        # rows at all, skip the upload entirely.
+        first_batch: list[dict[str, object]] | None = None
+        for b in batches:
+            if b:
+                first_batch = b
+                break
+        if first_batch is None:
+            log.info("artifact_store.csv_stream_empty", key=key)
+            return None
+
+        fieldnames = list(first_batch[0].keys())
+
+        def _safe(v: object) -> str:
+            return "" if v is None else str(v)
+
+        def _byte_chunks() -> Iterator[bytes]:
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=fieldnames)
+            writer.writeheader()
+            for batch in itertools.chain([first_batch], batches):
+                for row in batch:
+                    writer.writerow({k: _safe(row.get(k)) for k in fieldnames})
+                chunk = buf.getvalue().encode("utf-8")
+                buf.seek(0)
+                buf.truncate(0)
+                if chunk:
+                    yield chunk
+
+        stream = _IteratorIO(_byte_chunks())
+        result = self.client.put_object(
+            bucket_name=self._bucket,
+            object_name=key,
+            data=stream,
+            length=-1,
+            part_size=_MULTIPART_PART_SIZE,
+            content_type=content_type,
+        )
+        log.info("artifact_store.csv_stream_uploaded", key=key, etag=result.etag)
+        return ArtifactRef(
+            key=key,
+            bucket=self._bucket,
+            format="csv",
+            size_bytes=getattr(stream, "bytes_read", 0),
+            content_type=content_type,
+            created_at=datetime.now(UTC).isoformat(),
+            etag=result.etag,
+            _store=self,
         )
 
     def upload_json(
