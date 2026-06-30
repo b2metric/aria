@@ -69,3 +69,23 @@ async def test_read_events_empty_when_nothing_new(redis):
     await run_store.acquire_run(redis, "cid-1", "run-a")
     events, last_id = await run_store.read_events(redis, "cid-1", "$", block_ms=0)
     assert events == []
+
+
+async def test_acquire_run_resets_prior_run_stream(redis):
+    """A new run must start with an empty event log.
+
+    The per-conversation stream accumulates across turns, but the live tailer
+    replays from id "0" and stops at the first ``done``. If a prior turn's
+    events (incl. its ``done``) survive, a new turn replays the OLD answer
+    instantly and never shows the new one. Starting a run must clear them.
+    """
+    # First turn: produce some events incl. a terminal `done`, then complete.
+    await run_store.acquire_run(redis, "cid-1", "run-a")
+    await run_store.append_event(redis, "cid-1", {"event": "sql", "data": '{"sql":"OLD"}'})
+    await run_store.append_event(redis, "cid-1", {"event": "done", "data": "{}"})
+    await run_store.finish_run(redis, "cid-1", "complete")
+
+    # Second turn on the SAME conversation must not inherit turn 1's stream.
+    assert await run_store.acquire_run(redis, "cid-1", "run-b") is True
+    events, _ = await run_store.read_events(redis, "cid-1", "0", block_ms=0)
+    assert events == []
