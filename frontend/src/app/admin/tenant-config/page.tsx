@@ -18,6 +18,8 @@ interface DBConfig {
 interface TenantConfig {
   daily_token_limit: number;
   max_row_limit: number;
+  max_export_row_limit: number;
+  export_batch_size: number;
   source: "db" | "default";
   db_config?: DBConfig;
   language?: string;
@@ -30,6 +32,8 @@ export default function TenantConfigPage() {
   const [config, setConfig] = useState<TenantConfig | null>(null);
   const [tokenLimit, setTokenLimit] = useState(50000);
   const [rowLimit, setRowLimit] = useState(1000);
+  const [exportRowLimit, setExportRowLimit] = useState<number>(100000);
+  const [exportBatchSize, setExportBatchSize] = useState<number>(50000);
   const [language, setLanguage] = useState("en");
 
   const [dbType, setDbType] = useState("postgresql");
@@ -54,6 +58,8 @@ export default function TenantConfigPage() {
         setConfig(data);
         setTokenLimit(data.daily_token_limit);
         setRowLimit(data.max_row_limit);
+        setExportRowLimit(data.max_export_row_limit);
+        setExportBatchSize(data.export_batch_size);
         if (data.language) setLanguage(data.language);
         if (data.db_config) {
           setDbType(data.db_config.db_type);
@@ -78,6 +84,15 @@ export default function TenantConfigPage() {
   }, [token]);
 
   const handleSave = async () => {
+    if (!(rowLimit <= exportRowLimit && exportRowLimit <= 1000000)) {
+      setMessage({ type: "error", text: "Max Rows per Query must be ≤ Max Rows per Export ≤ 1,000,000" });
+      return;
+    }
+    if (!(exportBatchSize <= exportRowLimit)) {
+      setMessage({ type: "error", text: "Export Batch Size must be ≤ Max Rows per Export" });
+      return;
+    }
+
     setSaving(true);
     setMessage(null);
 
@@ -85,6 +100,8 @@ export default function TenantConfigPage() {
       const payload: any = {
         daily_token_limit: tokenLimit,
         max_row_limit: rowLimit,
+        max_export_row_limit: exportRowLimit,
+        export_batch_size: exportBatchSize,
         language,
       };
 
@@ -213,12 +230,46 @@ export default function TenantConfigPage() {
                 type="number"
                 value={rowLimit}
                 onChange={(e) => setRowLimit(Number(e.target.value))}
-                min={100}
+                min={1}
                 max={1000000}
                 className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
               />
               <p className="text-xs text-gray-500 mt-2">
-                Queries exceeding this limit will trigger a high-row artifact upload to MinIO. Range: 100 - 1,000,000
+                Queries exceeding this limit will trigger a high-row artifact upload to MinIO. Range: 1 - 1,000,000
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Max Rows per Export (CSV)
+              </label>
+              <input
+                type="number"
+                value={exportRowLimit}
+                onChange={(e) => setExportRowLimit(Number(e.target.value))}
+                min={1}
+                max={1000000}
+                className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Results above the per-query limit are exported as a CSV up to this many rows. Must be ≥ Max Rows per Query and ≤ 1,000,000.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Export Batch Size
+              </label>
+              <input
+                type="number"
+                value={exportBatchSize}
+                onChange={(e) => setExportBatchSize(Number(e.target.value))}
+                min={1}
+                max={1000000}
+                className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Rows fetched per batch while streaming an export. Must be ≤ Max Rows per Export.
               </p>
             </div>
 
