@@ -121,6 +121,8 @@ async def get_tenant_config(
     db_config_res = None
     workspace_id = getattr(current_user, "workspace_id", None) or "default"
     row_limit = DEFAULT_MAX_ROW_LIMIT
+    export_row_limit = DEFAULT_MAX_EXPORT_ROW_LIMIT
+    export_batch = DEFAULT_EXPORT_BATCH_SIZE
 
     try:
         async with get_sessionmaker()() as session:
@@ -146,9 +148,11 @@ async def get_tenant_config(
                     )
                 ).scalar_one_or_none()
 
-                # Also fetch max_row_limit if it exists
+                # Also fetch row/export limits if they exist
                 if db_config_res:
                     row_limit = db_config_res.max_row_limit
+                    export_row_limit = db_config_res.max_export_row_limit
+                    export_batch = db_config_res.export_batch_size
 
     except SQLAlchemyError as exc:
         log.warning("admin.tenant: query failed (table not migrated?): %s", exc)
@@ -156,6 +160,8 @@ async def get_tenant_config(
     return TenantConfigResponse(
         daily_token_limit=quota.token_limit if quota else DEFAULT_DAILY_TOKEN_LIMIT,
         max_row_limit=row_limit,
+        max_export_row_limit=export_row_limit,
+        export_batch_size=export_batch,
         source="db" if quota else "default",
         language=await get_workspace_language(workspace_id),
         db_config={
