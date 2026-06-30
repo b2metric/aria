@@ -62,6 +62,13 @@ async def acquire_run(
     acquired = await redis.set(_lock_key(cid), run_id, nx=True, ex=LOCK_TTL_S)
     if not acquired:
         return False
+    # Start this run with a clean event log. The stream key is per-conversation
+    # and accumulates across turns, but the tailer replays from id "0" and stops
+    # at the first ``done`` — so a surviving prior turn would be replayed instead
+    # of this run. Clearing it here restores the "stream holds only the current
+    # turn" invariant the replay/resume logic depends on. (Conversation history
+    # is persisted separately in the conversation store, not in this stream.)
+    await redis.delete(_stream_key(cid))
     mapping: dict[str, str] = {"run_id": run_id, "status": RUNNING}
     if context is not None:
         # Redis hash values must be strings: None optionals → "", bool → "1"/"0".
