@@ -26,6 +26,7 @@ type TokenUsage = {
   usage_date: string;
   tokens_used: number;
   model: string;
+  cost_usd?: number;
 };
 
 export default function TokenManagementPage() {
@@ -340,9 +341,17 @@ export default function TokenManagementPage() {
                         <span className="text-xs text-gray-500">{u.model}</span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-blue-600">{u.tokens_used.toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">tokens</p>
+                    <div className="flex items-center gap-6 text-right">
+                      <div>
+                        <p className="font-semibold text-blue-600">{u.tokens_used.toLocaleString()}</p>
+                        <p className="text-xs text-gray-500">tokens</p>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-emerald-600">
+                          ${(u.cost_usd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
+                        </p>
+                        <p className="text-xs text-gray-500">cost</p>
+                      </div>
                     </div>
                   </div>
                 ))}

@@ -37,6 +37,39 @@ async def test_get_quotas_tolerates_str_period() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_token_usage_includes_cost_usd(monkeypatch) -> None:
+    """Sprint 2 Task 11: the /admin/tokens/usage rows expose ``cost_usd`` so the
+    admin usage table can show a Cost column alongside tokens."""
+    from backend.app.api.endpoints.admin import tokens as tokens_ep
+
+    class _Row:
+        id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        usage_date = "2026-07-01"
+        tokens_used = 9504
+        model = "claude-sonnet"
+        cost_usd = Decimal("0.0300")
+
+    scalars = MagicMock()
+    scalars.all.return_value = [_Row()]
+    result = MagicMock()
+    result.scalars.return_value = scalars
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result)
+
+    async def _fake_resolve(_user, _db):
+        return uuid.uuid4()
+
+    monkeypatch.setattr(tokens_ep, "resolve_customer_id", _fake_resolve)
+
+    user = MagicMock()
+    user.can_admin = True
+    rows = await tokens_ep.get_token_usage(limit=10, current_user=user, db=db)
+    assert rows[0]["tokens_used"] == 9504
+    assert rows[0]["cost_usd"] == 0.03
+
+
+@pytest.mark.asyncio
 async def test_record_llm_usage_meters_with_operation_and_cost() -> None:
     # 1M prompt tokens of deepseek-chat @ 0.27 USD/1M → cost 0.27.
     resp = {"model": "deepseek-chat", "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 0}}

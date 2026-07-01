@@ -23,6 +23,8 @@ type ConversationSummary = {
   message_count: number;
   created_at: string;
   updated_at: string;
+  total_tokens?: number;
+  cost_usd?: number;
 };
 
 type QueryTrace = {
@@ -131,21 +133,27 @@ export default function AdminConversationsPage() {
                 <th className="px-6 py-3 font-semibold">Title</th>
                 <th className="px-6 py-3 font-semibold">User ID</th>
                 <th className="px-6 py-3 font-semibold">Messages</th>
+                <th className="px-6 py-3 font-semibold">Tokens / Cost</th>
                 <th className="px-6 py-3 font-semibold">Updated</th>
                 <th className="px-6 py-3 font-semibold"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && conversations.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading conversations...</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading conversations...</td></tr>
               ) : conversations.length === 0 ? (
-                <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-500">No conversations in this workspace yet.</td></tr>
+                <tr><td colSpan={6} className="px-6 py-8 text-center text-gray-500">No conversations in this workspace yet.</td></tr>
               ) : (
                 conversations.map((c) => (
                   <tr key={c.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 font-medium text-gray-900 max-w-xs truncate" title={c.title}>{c.title}</td>
                     <td className="px-6 py-4 font-mono text-xs text-gray-600">{c.user_id}</td>
                     <td className="px-6 py-4 text-gray-600">{c.message_count}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="font-medium text-blue-600">{(c.total_tokens ?? 0).toLocaleString()}</span>
+                      <span className="text-gray-400"> · </span>
+                      <span className="font-medium text-emerald-600">${(c.cost_usd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">{new Date(c.updated_at).toLocaleString()}</td>
                     <td className="px-6 py-4">
                       <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openConversation(c.id)}>

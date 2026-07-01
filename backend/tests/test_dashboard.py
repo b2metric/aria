@@ -180,6 +180,45 @@ async def test_workspace_stats_apply_team_filter_and_echo(monkeypatch):
     assert ws_stats["Workspace Queries"] == "5"
 
 
+# ── Sprint 2 Task 11: Cost Today card ────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_workspace_stats_include_cost_today(monkeypatch):
+    """The workspace block surfaces a "Cost Today (USD)" card summing
+    ``TokenUsageDaily.cost_usd`` for today, next to the token total."""
+    from decimal import Decimal
+
+    from backend.app.api import dashboard
+
+    customer_id = uuid.uuid4()
+    per_user_session = _FakeSession(customer_row=None, scalar_returns=[])
+    # Workspace scalar order: ws_total, ws_today, ws_tokens_today, ws_cost_today,
+    # ws_active_users, then 7 trend-day counts.
+    workspace_session = _FakeSession(
+        customer_row=(customer_id,),
+        scalar_returns=[7, 0, 12884, Decimal("0.0330"), 0, 0, 0, 0, 0, 0, 0, 0],
+    )
+    monkeypatch.setattr(
+        dashboard,
+        "get_sessionmaker",
+        lambda: _sessionmaker_returning(per_user_session, workspace_session),
+    )
+
+    async def _no_saved(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr("backend.app.query.saved_queries.list_saved_queries", _no_saved)
+
+    body = await dashboard.get_user_dashboard(
+        workspace_id="acme", current_user=_non_uuid_user()
+    )
+
+    ws_stats = {s["label"]: s["value"] for s in body["workspaceStats"]}
+    assert ws_stats["Tokens Today"] == "12,884"
+    assert ws_stats["Cost Today (USD)"] == "$0.0330"
+
+
 # ── Task 2: _coerce_user_uuid ────────────────────────────────────────────────
 
 

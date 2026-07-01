@@ -10,15 +10,21 @@ slug from their JWT), preserving tenant isolation.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from redis.asyncio import Redis
+from sqlalchemy import func, select, text
 
 from backend.app.auth.dependencies import CurrentUser
 from backend.app.auth.models import Role
 from backend.app.auth.rbac import require_role
 from backend.app.core.config import get_settings
+from backend.app.db.session import get_sessionmaker
+from backend.app.models.token import TokenUsageEvent
 from backend.app.query.conversation import get_conversation, list_workspace_conversations
 
+log = logging.getLogger("aria.admin.conversations")
 router = APIRouter()
 
 
@@ -26,6 +32,68 @@ def _get_redis() -> Redis:
     """Redis connection for conversation storage (patchable in tests)."""
     settings = get_settings()
     return Redis.from_url(settings.redis_url, decode_responses=True)
+
+
+def _with_token_totals(
+    summaries: list[dict], totals: dict[str, dict]
+) -> list[dict]:
+    """Attach cumulative ``total_tokens`` + ``cost_usd`` to each conversation summary.
+
+    ``totals`` maps ``conversation_id`` → ``{"tokens": int, "cost": float}`` (summed from
+    ``token_usage_events``). A conversation with no LLM events yet gets zeros, never a
+    missing key, so the admin table can always render the columns.
+    """
+    return [
+        {
+            **s,
+            "total_tokens": int(totals.get(s["id"], {}).get("tokens", 0) or 0),
+            "cost_usd": float(totals.get(s["id"], {}).get("cost", 0) or 0),
+        }
+        for s in summaries
+    ]
+
+
+async def _conversation_token_totals(
+    workspace_id: str, conversation_ids: list[str]
+) -> dict[str, dict]:
+    """Sum tokens + USD cost per conversation from ``token_usage_events``.
+
+    Tenant-scoped by the workspace's ``customer_id``. Best-effort: any failure (DB down,
+    slug unresolved) returns an empty map so the conversation list still renders.
+    """
+    if not conversation_ids:
+        return {}
+    try:
+        async with get_sessionmaker()() as session:
+            row = (
+                await session.execute(
+                    text("SELECT id FROM customers WHERE slug = :slug"),
+                    {"slug": workspace_id},
+                )
+            ).fetchone()
+            if not row:
+                return {}
+            customer_id = row[0]
+
+            result = await session.execute(
+                select(
+                    TokenUsageEvent.conversation_id,
+                    func.sum(TokenUsageEvent.total_tokens),
+                    func.sum(TokenUsageEvent.cost_usd),
+                )
+                .where(
+                    TokenUsageEvent.customer_id == customer_id,
+                    TokenUsageEvent.conversation_id.in_(conversation_ids),
+                )
+                .group_by(TokenUsageEvent.conversation_id)
+            )
+            return {
+                cid: {"tokens": int(tokens or 0), "cost": float(cost or 0)}
+                for cid, tokens, cost in result.all()
+            }
+    except Exception as exc:  # noqa: BLE001 — totals are advisory, never break the list
+        log.warning("Conversation token-total aggregation failed: %s", exc)
+        return {}
 
 
 @router.get("", summary="List all conversations in the workspace (admin debug)")
@@ -38,7 +106,7 @@ async def list_all_conversations(
     redis = _get_redis()
     try:
         convs = await list_workspace_conversations(redis, user.workspace_id, limit=limit)
-        return [
+        summaries = [
             {
                 "id": c.id,
                 "user_id": c.user_id,
@@ -51,6 +119,11 @@ async def list_all_conversations(
         ]
     finally:
         await redis.aclose()
+
+    totals = await _conversation_token_totals(
+        user.workspace_id, [s["id"] for s in summaries]
+    )
+    return _with_token_totals(summaries, totals)
 
 
 @router.get("/{conversation_id}", summary="Get a conversation with its QueryTraces (admin debug)")

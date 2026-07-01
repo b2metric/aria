@@ -193,6 +193,7 @@ async def get_token_usage(
             "usage_date": str(r.usage_date),
             "tokens_used": r.tokens_used,
             "model": r.model,
+            "cost_usd": float(r.cost_usd or 0),
         }
         for r in records
     ]

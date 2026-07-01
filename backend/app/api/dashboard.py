@@ -43,6 +43,7 @@ async def get_user_dashboard(
     total_queries = 0
     queries_today = 0
     tokens_today = 0
+    cost_today = 0
     recent_trend = []
 
     # resolve_identity_uuid never raises (UUID → passthrough, non-UUID → uuid5,
@@ -85,6 +86,17 @@ async def get_user_dashboard(
                     or 0
                 )
 
+                # 3b. Cost Today (USD) — same scope as Tokens Today
+                cost_today = (
+                    await session.scalar(
+                        select(func.sum(TokenUsageDaily.cost_usd)).where(
+                            TokenUsageDaily.user_id == user_uuid,
+                            TokenUsageDaily.usage_date == today.date(),
+                        )
+                    )
+                    or 0
+                )
+
                 # 4. Chart Data (Last 7 Days)
                 for i in range(6, -1, -1):
                     day = today - timedelta(days=i)
@@ -117,6 +129,7 @@ async def get_user_dashboard(
     ws_total = 0
     ws_today = 0
     ws_tokens_today = 0
+    ws_cost_today = 0
     ws_active_users = 0
     ws_trend: list[dict] = []
 
@@ -168,6 +181,17 @@ async def get_user_dashboard(
                 ws_tokens_today = (
                     await session.scalar(
                         select(func.sum(TokenUsageDaily.tokens_used)).where(
+                            TokenUsageDaily.customer_id == customer_id,
+                            TokenUsageDaily.usage_date == today.date(),
+                            *token_extra,
+                        )
+                    )
+                    or 0
+                )
+
+                ws_cost_today = (
+                    await session.scalar(
+                        select(func.sum(TokenUsageDaily.cost_usd)).where(
                             TokenUsageDaily.customer_id == customer_id,
                             TokenUsageDaily.usage_date == today.date(),
                             *token_extra,
@@ -240,6 +264,7 @@ async def get_user_dashboard(
             "icon": "Activity",
         },
         {"label": "Tokens Used Today", "value": f"{tokens_today:,}", "icon": "Zap"},
+        {"label": "Cost Today (USD)", "value": f"${float(cost_today):,.4f}", "icon": "DollarSign"},
         {
             "label": "Saved Queries",
             "value": str(saved_queries_count),
@@ -257,6 +282,11 @@ async def get_user_dashboard(
             "icon": "Activity",
         },
         {"label": "Tokens Today", "value": f"{ws_tokens_today:,}", "icon": "Zap"},
+        {
+            "label": "Cost Today (USD)",
+            "value": f"${float(ws_cost_today):,.4f}",
+            "icon": "DollarSign",
+        },
         {"label": "Active Users (7d)", "value": str(ws_active_users), "icon": "Users"},
     ]
 
