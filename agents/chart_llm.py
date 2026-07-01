@@ -267,9 +267,13 @@ async def _run_chart_llm(
         content = response.choices[0].message.content
         choice = LlmChartChoice.model_validate(json.loads(content))
         # Attach token usage so the caller can meter this call (operation=chart).
-        from backend.app.services.llm_cost import extract_usage
+        from backend.app.services.llm_cost import extract_cost, extract_usage
 
-        choice.usage = extract_usage(response)
+        usage = extract_usage(response)
+        # Carry LiteLLM's response_cost forward for metering (Task 13).
+        _cost = extract_cost(response)
+        usage["_response_cost"] = str(_cost) if _cost is not None else None
+        choice.usage = usage
         return choice
     except Exception as exc:  # noqa: BLE001 — degrade to table on any LLM/parse error
         log.warning("chart_llm.failed", error=str(exc))

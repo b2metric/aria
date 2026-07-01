@@ -242,6 +242,9 @@ Generate the SQL query:"""
             )
             response.raise_for_status()
             data = response.json()
+            # LiteLLM reports the authoritative USD cost in a response header (proxy over HTTP
+            # doesn't put it in the JSON body). Carry it forward for metering (Task 13).
+            response_cost = response.headers.get("x-litellm-response-cost")
 
         sql = data["choices"][0]["message"]["content"].strip()
 
@@ -257,6 +260,7 @@ Generate the SQL query:"""
             "prompt_tokens": usage.get("prompt_tokens", 0),
             "completion_tokens": usage.get("completion_tokens", 0),
             "model": model,
+            "_response_cost": response_cost,
         }
 
         logger.info(

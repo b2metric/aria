@@ -68,3 +68,33 @@ def test_extract_usage_missing_usage_is_zeroed() -> None:
         "completion_tokens": 0,
         "model": "unknown",
     }
+
+
+# ── Sprint 2.5 Task 13: extract_cost (LiteLLM response_cost) ──────────────────
+
+
+def test_extract_cost_from_sdk_hidden_params() -> None:
+    class _Resp:
+        _hidden_params = {"response_cost": 0.0304}
+
+    assert llm_cost.extract_cost(_Resp()) == Decimal("0.0304")
+
+
+def test_extract_cost_from_dict_response_cost_key() -> None:
+    # httpx path: the x-litellm-response-cost header is stashed as `_response_cost`.
+    assert llm_cost.extract_cost({"_response_cost": "2.1e-06"}) == Decimal("2.1e-06")
+
+
+def test_extract_cost_from_dict_hidden_params() -> None:
+    assert llm_cost.extract_cost({"_hidden_params": {"response_cost": 0.5}}) == Decimal("0.5")
+
+
+def test_extract_cost_absent_returns_none() -> None:
+    assert llm_cost.extract_cost({"usage": {"prompt_tokens": 5}}) is None
+    assert llm_cost.extract_cost(object()) is None
+
+
+def test_extract_cost_zero_is_returned_not_none() -> None:
+    # A self-hosted model routed via LiteLLM reports response_cost 0.0 — that is a real
+    # (unpriced) signal, distinct from "no cost field present".
+    assert llm_cost.extract_cost({"_response_cost": "0"}) == Decimal("0")

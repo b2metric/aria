@@ -111,6 +111,13 @@ class TokenUsageEvent(Base, UUIDMixin):
     cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(12, 6), default=0, server_default="0", nullable=False
     )
+    # Whether this call had a real (billable) price. True = priced by LiteLLM (response_cost > 0)
+    # or a fallback rate; False = unpriced/self-hosted (e.g. a local HF embedder, cost 0). Set
+    # from the cost SOURCE, NOT from cost_usd > 0 (a priced call can round to $0). Lets usage be
+    # split into priced vs unpriced tokens while cost sums over priced only.
+    priced: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=sa.func.now(), nullable=False, index=True
     )

@@ -31,7 +31,12 @@ async def test_run_chart_llm_attaches_usage() -> None:
         m.acompletion = AsyncMock(return_value=_Resp())
         choice = await chart_llm._run_chart_llm("prompt", model_name="gemini-chat")
 
-    assert choice.usage == {"prompt_tokens": 40, "completion_tokens": 12, "model": "gemini-chat"}
+    assert choice.usage == {
+        "prompt_tokens": 40,
+        "completion_tokens": 12,
+        "model": "gemini-chat",
+        "_response_cost": None,
+    }
 
 
 @pytest.mark.asyncio

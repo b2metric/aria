@@ -191,6 +191,7 @@ class TokenService:
         operation: str = "sql_generation",
         conversation_id: str | None = None,
         cost_usd: Decimal | float | int = 0,
+        priced: bool = True,
     ) -> None:
         """Increment Redis counters + persist a granular ``TokenUsageEvent`` and the
         daily rollup.
@@ -242,6 +243,7 @@ class TokenService:
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                     cost_usd=cost,
+                    priced=priced,
                 )
             )
 
@@ -290,14 +292,25 @@ async def record_llm_usage(
     if customer_uuid is None:
         return
     try:
-        from backend.app.services.llm_cost import compute_cost, extract_usage
+        from backend.app.services.llm_cost import compute_cost, extract_cost, extract_usage
 
         usage = extract_usage(response)
         prompt = usage["prompt_tokens"]
         completion = usage["completion_tokens"]
         if prompt + completion <= 0:
             return
-        cost = compute_cost(usage["model"], prompt, completion)
+
+        # Cost source of truth: LiteLLM's response_cost (Task 12/13). Only fall back to the
+        # local estimate when the proxy reported nothing. A reported 0 (self-hosted model) is
+        # honoured as unpriced — tokens are still recorded, priced=False.
+        rc = extract_cost(response)
+        if rc is not None:
+            cost = rc
+            priced = rc > 0
+        else:
+            cost = compute_cost(usage["model"], prompt, completion)
+            priced = cost > 0
+
         await TokenService(db=db, redis=redis).record_usage(
             customer_id=customer_uuid,
             user_id=user_uuid,
@@ -309,6 +322,7 @@ async def record_llm_usage(
             operation=operation,
             conversation_id=conversation_id,
             cost_usd=cost,
+            priced=priced,
         )
     except Exception:  # noqa: BLE001 — metering is best-effort, never break the turn
         logger.exception("record_llm_usage failed for operation=%s", operation)

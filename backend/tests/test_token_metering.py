@@ -94,6 +94,46 @@ async def test_record_llm_usage_meters_with_operation_and_cost() -> None:
 
 
 @pytest.mark.asyncio
+async def test_record_llm_usage_prefers_response_cost_and_marks_priced() -> None:
+    # LiteLLM reported a real cost → use it verbatim, mark priced=True, ignore the local map.
+    resp = {
+        "model": "claude-sonnet",
+        "usage": {"prompt_tokens": 100, "completion_tokens": 50},
+        "_response_cost": "0.0304",
+    }
+    with patch.object(token_svc.TokenService, "record_usage", new=AsyncMock()) as rec:
+        await token_svc.record_llm_usage(
+            db=AsyncMock(), redis=AsyncMock(), customer_uuid=uuid.uuid4(),
+            user_uuid=uuid.uuid4(), team_uuid=None, conversation_id="c",
+            operation="sql_generation", response=resp,
+        )
+    kwargs = rec.await_args.kwargs
+    assert kwargs["cost_usd"] == Decimal("0.0304")
+    assert kwargs["priced"] is True
+
+
+@pytest.mark.asyncio
+async def test_record_llm_usage_zero_response_cost_is_unpriced_but_counted() -> None:
+    # Self-hosted model routed via LiteLLM → response_cost 0 → tokens still recorded, priced=False.
+    resp = {
+        "model": "local-embed",
+        "usage": {"prompt_tokens": 20, "completion_tokens": 0},
+        "_response_cost": "0",
+    }
+    with patch.object(token_svc.TokenService, "record_usage", new=AsyncMock()) as rec:
+        await token_svc.record_llm_usage(
+            db=AsyncMock(), redis=AsyncMock(), customer_uuid=uuid.uuid4(),
+            user_uuid=None, team_uuid=None, conversation_id=None,
+            operation="mem0_embedding", response=resp,
+        )
+    rec.assert_awaited_once()
+    kwargs = rec.await_args.kwargs
+    assert kwargs["prompt_tokens"] == 20
+    assert kwargs["cost_usd"] == Decimal("0")
+    assert kwargs["priced"] is False
+
+
+@pytest.mark.asyncio
 async def test_record_llm_usage_noop_without_customer() -> None:
     with patch.object(token_svc.TokenService, "record_usage", new=AsyncMock()) as rec:
         await token_svc.record_llm_usage(

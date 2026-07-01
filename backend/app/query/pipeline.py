@@ -2255,6 +2255,7 @@ async def _process_query_impl(
                             "prompt_tokens": token_usage.get("prompt_tokens", 0),
                             "completion_tokens": token_usage.get("completion_tokens", 0),
                         },
+                        "_response_cost": token_usage.get("_response_cost"),
                     },
                 )
     except Exception as e:
@@ -2370,6 +2371,7 @@ async def _process_query_impl(
                                 "prompt_tokens": token_usage.get("prompt_tokens", 0),
                                 "completion_tokens": token_usage.get("completion_tokens", 0),
                             },
+                            "_response_cost": token_usage.get("_response_cost"),
                         },
                     )
 
@@ -2453,6 +2455,7 @@ async def _process_query_impl(
                         "prompt_tokens": _chart_usage.get("prompt_tokens", 0),
                         "completion_tokens": _chart_usage.get("completion_tokens", 0),
                     },
+                    "_response_cost": _chart_usage.get("_response_cost"),
                 },
             )
 
@@ -2523,6 +2526,7 @@ async def _process_query_impl(
                             "prompt_tokens": _insight_usage.get("prompt_tokens", 0),
                             "completion_tokens": _insight_usage.get("completion_tokens", 0),
                         },
+                        "_response_cost": _insight_usage.get("_response_cost"),
                     },
                 )
 

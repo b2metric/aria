@@ -108,6 +108,34 @@ def compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> Deci
     return Decimal("0")
 
 
+def extract_cost(resp: Any) -> Decimal | None:
+    """Return LiteLLM's authoritative ``response_cost`` (USD) for a call, or ``None`` when the
+    proxy did not report one. Sources, in order:
+
+    - SDK object (``litellm.acompletion``): ``resp._hidden_params["response_cost"]``.
+    - raw httpx dict: ``resp["_response_cost"]`` — the ``x-litellm-response-cost`` header stashed
+      by the call site (``query/llm_sql.py``) — or ``resp["_hidden_params"]["response_cost"]``.
+
+    A reported ``0`` is returned as ``Decimal("0")`` (a real *unpriced* signal, e.g. a self-hosted
+    model), distinct from ``None`` ("no cost field") so the caller can tell them apart.
+    """
+    raw: Any = None
+    if isinstance(resp, dict):
+        if "_response_cost" in resp and resp["_response_cost"] is not None:
+            raw = resp["_response_cost"]
+        else:
+            raw = (resp.get("_hidden_params") or {}).get("response_cost")
+    else:
+        raw = (getattr(resp, "_hidden_params", None) or {}).get("response_cost")
+
+    if raw is None or raw == "":
+        return None
+    try:
+        return Decimal(str(raw))
+    except (ArithmeticError, ValueError, TypeError):
+        return None
+
+
 def extract_usage(resp: Any) -> dict[str, Any]:
     """Return ``{prompt_tokens, completion_tokens, model}`` from a proxy JSON dict or a
     litellm/openai response object. Missing fields default to 0 / "unknown"."""

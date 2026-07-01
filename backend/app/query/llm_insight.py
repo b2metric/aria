@@ -137,9 +137,14 @@ Result Sample:
                 (content or "")[:500],
             )
 
-        from backend.app.services.llm_cost import extract_usage
+        from backend.app.services.llm_cost import extract_cost, extract_usage
 
-        return {"summary": summary, "suggestions": suggestions, "usage": extract_usage(response)}
+        usage = extract_usage(response)
+        # Carry LiteLLM's response_cost forward for metering (Task 13); str() so the value
+        # survives the pipeline's dict rebuild uniformly with the httpx-header path.
+        _cost = extract_cost(response)
+        usage["_response_cost"] = str(_cost) if _cost is not None else None
+        return {"summary": summary, "suggestions": suggestions, "usage": usage}
     except Exception as e:
         logger.warning(f"Failed to generate insights: {e}")
         return {"summary": "Data retrieved successfully.", "suggestions": []}
