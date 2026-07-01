@@ -11,6 +11,8 @@ model_list:
       model: openai/deepseek-v4-pro
       api_base: https://api.deepseek.com/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000055
+      output_cost_per_token: 0.00000219
     model_info:
       max_input_tokens: 1000000
       max_output_tokens: 384000
@@ -19,6 +21,8 @@ model_list:
       model: openai/deepseek-v4-pro
       api_base: https://api.deepseek.com/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000055
+      output_cost_per_token: 0.00000219
     model_info:
       max_input_tokens: 1000000
       max_output_tokens: 384000
@@ -28,6 +32,8 @@ model_list:
       model: openai/deepseek-v4-flash
       api_base: https://api.deepseek.com/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000014
+      output_cost_per_token: 0.00000028
     model_info:
       max_input_tokens: 1000000
       max_output_tokens: 384000
@@ -36,6 +42,8 @@ model_list:
       model: openai/deepseek-v4-flash
       api_base: https://api.deepseek.com/v1
       api_key: os.environ/DEEPSEEK_API_KEY
+      input_cost_per_token: 0.00000014
+      output_cost_per_token: 0.00000028
     model_info:
       max_input_tokens: 1000000
       max_output_tokens: 384000
@@ -189,22 +197,30 @@ model_list:
       model: openai/glm-4-plus
       api_base: https://open.bigmodel.cn/api/paas/v4
       api_key: os.environ/GLM_API_KEY
+      input_cost_per_token: 0.0000006
+      output_cost_per_token: 0.0000022
   - model_name: custom:litellm:glm-chat
     litellm_params:
       model: openai/glm-4-plus
       api_base: https://open.bigmodel.cn/api/paas/v4
       api_key: os.environ/GLM_API_KEY
+      input_cost_per_token: 0.0000006
+      output_cost_per_token: 0.0000022
 
   - model_name: glm-reasoner
     litellm_params:
       model: openai/glm-z1-air
       api_base: https://open.bigmodel.cn/api/paas/v4
       api_key: os.environ/GLM_API_KEY
+      input_cost_per_token: 0.0000006
+      output_cost_per_token: 0.0000022
   - model_name: custom:litellm:glm-reasoner
     litellm_params:
       model: openai/glm-z1-air
       api_base: https://open.bigmodel.cn/api/paas/v4
       api_key: os.environ/GLM_API_KEY
+      input_cost_per_token: 0.0000006
+      output_cost_per_token: 0.0000022
 
   # backward-compat alias → chat
   - model_name: glm-4
@@ -212,11 +228,15 @@ model_list:
       model: openai/glm-4-plus
       api_base: https://open.bigmodel.cn/api/paas/v4
       api_key: os.environ/GLM_API_KEY
+      input_cost_per_token: 0.0000006
+      output_cost_per_token: 0.0000022
   - model_name: custom:litellm:glm-4
     litellm_params:
       model: openai/glm-4-plus
       api_base: https://open.bigmodel.cn/api/paas/v4
       api_key: os.environ/GLM_API_KEY
+      input_cost_per_token: 0.0000006
+      output_cost_per_token: 0.0000022
 
   # --- OpenAI Embeddings ---
   - model_name: text-embedding-3-small
