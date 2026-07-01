@@ -70,8 +70,12 @@ async def test_get_token_usage_includes_cost_usd(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_record_llm_usage_meters_with_operation_and_cost() -> None:
-    # 1M prompt tokens of deepseek-chat @ 0.27 USD/1M → cost 0.27.
+async def test_record_llm_usage_meters_with_operation_and_cost(monkeypatch) -> None:
+    # No response_cost on the payload → falls back to compute_cost (LiteLLM's own pricing,
+    # stubbed here for determinism after the local PRICING map was removed in Task 15).
+    from backend.app.services import llm_cost
+
+    monkeypatch.setattr(llm_cost, "_litellm_cost", lambda *a, **k: 0.27)
     resp = {"model": "deepseek-chat", "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 0}}
     with patch.object(token_svc.TokenService, "record_usage", new=AsyncMock()) as rec:
         await token_svc.record_llm_usage(

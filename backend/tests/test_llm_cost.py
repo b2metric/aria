@@ -6,24 +6,9 @@ from decimal import Decimal
 
 from backend.app.services import llm_cost
 
-
-def test_compute_cost_known_model_exact() -> None:
-    # deepseek-chat seeded at (0.27, 1.10) USD / 1M tokens.
-    cost = llm_cost.compute_cost("deepseek-chat", 1_000_000, 1_000_000)
-    assert cost == Decimal("0.27") + Decimal("1.10")
-
-
-def test_compute_cost_partial_tokens() -> None:
-    # 500k prompt @0.27/1M = 0.135 ; 0 completion.
-    cost = llm_cost.compute_cost("deepseek-chat", 500_000, 0)
-    assert cost == Decimal("0.135")
-
-
-def test_compute_cost_normalizes_alias_prefixes() -> None:
-    # `custom:litellm:` and provider `deepseek/` prefixes resolve to the same price.
-    base = llm_cost.compute_cost("deepseek-chat", 1_000_000, 0)
-    assert llm_cost.compute_cost("custom:litellm:deepseek-chat", 1_000_000, 0) == base
-    assert llm_cost.compute_cost("deepseek/deepseek-chat", 1_000_000, 0) == base
+# compute_cost is now a thin FALLBACK (LiteLLM's own pricing) used only when the proxy
+# reported no response_cost. The local PRICING map was removed in Sprint 2.5 Task 15 —
+# the proxy (infra/llm/config.yaml) is the single source of truth (see extract_cost).
 
 
 def test_compute_cost_unknown_model_is_zero(monkeypatch) -> None:

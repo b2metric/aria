@@ -1,20 +1,16 @@
-"""LLM usage extraction + USD cost estimation (Sprint 1 — token metering).
+"""LLM usage + USD cost extraction (Sprint 1 metering; Sprint 2.5 convergence).
 
-Two responsibilities, both provider-agnostic:
+The LiteLLM proxy is the single source of truth for cost: it prices every call from
+``infra/llm/config.yaml`` and reports the USD via ``response_cost`` (SDK ``_hidden_params``)
+or the ``x-litellm-response-cost`` HTTP header. ARIA reads that (``extract_cost``) instead of
+re-deriving it, so there is no local price map to drift.
 
-- ``extract_usage(resp)`` — normalize prompt/completion tokens + model out of the two
-  response shapes the codebase produces: the raw httpx LiteLLM-proxy JSON
-  (``{"usage": {...}, "model": ...}``, used by ``query/llm_sql.py``) and the
-  ``litellm.acompletion()`` response object (``resp.usage``, ``resp.model``).
-- ``compute_cost(model, prompt_tokens, completion_tokens)`` — USD via a LOCAL price
-  map first (authoritative for our custom model aliases like ``gemini-reasoner`` /
-  ``deepseek-*`` that LiteLLM's built-in map may not know), falling back to
-  ``litellm.completion_cost()`` for anything else, and ``0`` (logged once) when even
-  that fails — so metering never crashes a turn.
-
-Prices are USD per 1,000,000 tokens ``(prompt, completion)``. They mirror the proxy
-catalog in ``infra/llm/config.yaml`` and are approximate public list prices — EDIT
-them to match the real contracted rates; unknown models simply cost 0 until added.
+- ``extract_usage(resp)`` — normalize prompt/completion tokens + model out of the two response
+  shapes the codebase produces: the raw httpx proxy JSON (``{"usage": {...}, "model": ...}``,
+  ``query/llm_sql.py``) and the ``litellm.acompletion()`` object (``resp.usage``, ``resp.model``).
+- ``extract_cost(resp)`` — LiteLLM's authoritative ``response_cost`` (or ``None``).
+- ``compute_cost(model, ...)`` — thin FALLBACK only, used when the proxy reported no cost:
+  ``litellm.completion_cost()``, else ``0`` (logged once). Never crashes a turn.
 """
 
 from __future__ import annotations
@@ -25,57 +21,11 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_MILLION = Decimal(1_000_000)
-
-# model-alias → (prompt_usd_per_1M, completion_usd_per_1M). Matched case-insensitively
-# by exact key then longest prefix, after stripping `custom:litellm:` and `<provider>/`.
-PRICING: dict[str, tuple[Decimal, Decimal]] = {
-    "deepseek-chat": (Decimal("0.27"), Decimal("1.10")),
-    "deepseek-reasoner": (Decimal("0.55"), Decimal("2.19")),
-    "deepseek-v4-flash": (Decimal("0.14"), Decimal("0.28")),
-    "deepseek-v4-pro": (Decimal("0.55"), Decimal("2.19")),
-    "deepseek-pro": (Decimal("0.55"), Decimal("2.19")),
-    "claude-haiku": (Decimal("0.80"), Decimal("4.00")),
-    "claude-sonnet": (Decimal("3.00"), Decimal("15.00")),
-    "claude-opus": (Decimal("15.00"), Decimal("75.00")),
-    "gemini-chat": (Decimal("0.10"), Decimal("0.40")),
-    "gemini-reasoner": (Decimal("1.25"), Decimal("10.00")),
-    "glm-chat": (Decimal("0.60"), Decimal("2.20")),
-    "glm-reasoner": (Decimal("0.60"), Decimal("2.20")),
-    "glm-4": (Decimal("0.60"), Decimal("2.20")),
-    "text-embedding-3-small": (Decimal("0.02"), Decimal("0.00")),
-    "text-embedding-3-large": (Decimal("0.13"), Decimal("0.00")),
-}
-
-_PROVIDER_PREFIXES = ("openai/", "anthropic/", "deepseek/", "gemini/", "azure/", "vertex_ai/")
 _seen_unpriced: set[str] = set()
 
 
-def _normalize(model: str) -> str:
-    m = (model or "").strip().lower()
-    if m.startswith("custom:litellm:"):
-        m = m[len("custom:litellm:") :]
-    for prefix in _PROVIDER_PREFIXES:
-        if m.startswith(prefix):
-            m = m[len(prefix) :]
-            break
-    return m
-
-
-def _match_price(model: str) -> tuple[Decimal, Decimal] | None:
-    m = _normalize(model)
-    if m in PRICING:
-        return PRICING[m]
-    best_key: str | None = None
-    for key in PRICING:
-        if m.startswith(key) and (best_key is None or len(key) > len(best_key)):
-            best_key = key
-    return PRICING[best_key] if best_key else None
-
-
 def _litellm_cost(model: str, prompt_tokens: int, completion_tokens: int) -> float | None:
-    """LiteLLM's built-in pricing (for models not in the local map). Isolated so tests
-    can stub it. Returns None on any failure/unknown model."""
+    """LiteLLM's built-in pricing. Isolated so tests can stub it. None on any failure."""
     try:
         import litellm
 
@@ -88,23 +38,20 @@ def _litellm_cost(model: str, prompt_tokens: int, completion_tokens: int) -> flo
 
 
 def compute_cost(model: str, prompt_tokens: int, completion_tokens: int) -> Decimal:
-    """USD cost for a call. Local price map first, LiteLLM fallback, else 0 (logged once)."""
-    price = _match_price(model)
-    if price is not None:
-        prompt_price, completion_price = price
-        return (
-            Decimal(int(prompt_tokens or 0)) * prompt_price
-            + Decimal(int(completion_tokens or 0)) * completion_price
-        ) / _MILLION
-
+    """Fallback USD cost when the proxy did not report ``response_cost`` — LiteLLM's own
+    pricing, else 0 (logged once). The proxy value (``extract_cost``) is preferred upstream."""
     fallback = _litellm_cost(model, int(prompt_tokens or 0), int(completion_tokens or 0))
     if fallback is not None:
         return Decimal(str(fallback))
 
-    key = _normalize(model)
+    key = (model or "").strip().lower()
     if key not in _seen_unpriced:
         _seen_unpriced.add(key)
-        logger.warning("No pricing for model %r — cost recorded as 0. Add it to llm_cost.PRICING.", model)
+        logger.warning(
+            "No cost for model %r (no response_cost + no LiteLLM price) — recorded as 0. "
+            "Add input/output_cost_per_token to infra/llm/config.yaml.",
+            model,
+        )
     return Decimal("0")
 
 
