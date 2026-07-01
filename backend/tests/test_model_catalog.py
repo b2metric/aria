@@ -6,7 +6,9 @@ from backend.app.api.endpoints.admin.llm_config import (
     ModelCatalogEntry,
     _infer_provider,
     _map_catalog,
+    _provider_str,
 )
+from backend.app.models.enums import LLMProvider
 
 
 def test_infer_provider() -> None:
@@ -39,3 +41,13 @@ def test_map_catalog_dedupes_and_drops_custom_alias() -> None:
 def test_map_catalog_empty() -> None:
     assert _map_catalog({}) == []
     assert _map_catalog({"data": None}) == []
+
+
+def test_provider_str_handles_enum_and_raw_string() -> None:
+    """The `provider` column is a native PG ENUM that SQLAlchemy hands back as a
+    plain ``str`` at runtime — bare ``.value`` on it raises AttributeError and made
+    GET /api/admin/llm-config silently fall back to the empty default. ``_provider_str``
+    must accept both an ``LLMProvider`` enum and a raw string."""
+    assert _provider_str(LLMProvider.OPENAI) == "openai"
+    assert _provider_str("openai") == "openai"
+    assert _provider_str("anthropic") == "anthropic"

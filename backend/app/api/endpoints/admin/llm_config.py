@@ -45,6 +45,17 @@ class ModelCatalogEntry(BaseModel):
     provider: str
 
 
+def _provider_str(provider: Any) -> str:
+    """Normalise the ``provider`` column to a plain string.
+
+    ``CustomerLLMConfig.provider`` is a native PG ``ENUM`` that SQLAlchemy hands back as a
+    bare ``str`` at runtime (not an ``LLMProvider`` member). A naive ``provider.value`` then
+    raises ``AttributeError``, which the GET handler swallowed — silently returning the empty
+    default so saved BYOK/operation-model config never showed up. Accept both forms.
+    """
+    return provider.value if hasattr(provider, "value") else str(provider)
+
+
 def _infer_provider(model_id: str) -> str:
     """Best-effort provider label from a model alias, for grouping in the picker."""
     m = model_id.lower()
@@ -122,7 +133,7 @@ async def get_llm_config(current_user: Any = Depends(get_current_user)):
 
                 if llm_config:
                     return LLMConfigResponse(
-                        provider=llm_config.provider.value,
+                        provider=_provider_str(llm_config.provider),
                         upstream_api_base=llm_config.upstream_api_base,
                         api_key_set=bool(llm_config.encrypted_upstream_api_key),
                         model_name=llm_config.model_name,
@@ -224,9 +235,7 @@ async def update_llm_config(body: LLMConfigModel, current_user: Any = Depends(ge
             await session.commit()
 
             return LLMConfigResponse(
-                provider=llm_config.provider.value
-                if hasattr(llm_config.provider, "value")
-                else llm_config.provider,
+                provider=_provider_str(llm_config.provider),
                 upstream_api_base=llm_config.upstream_api_base,
                 api_key_set=bool(llm_config.encrypted_upstream_api_key),
                 model_name=llm_config.model_name,

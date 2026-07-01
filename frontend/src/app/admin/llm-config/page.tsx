@@ -2,8 +2,16 @@
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
-import { Cpu, Save } from "lucide-react";
+import { Cpu, Save, SlidersHorizontal } from "lucide-react";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+interface OperationModel {
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+type OperationModels = Record<string, OperationModel>;
 
 interface LLMConfig {
   provider: string;
@@ -12,7 +20,21 @@ interface LLMConfig {
   model_name: string;
   deployment_or_version: string | null;
   enabled: boolean;
+  operation_models: OperationModels | null;
 }
+
+interface ModelCatalogEntry {
+  id: string;
+  provider: string;
+}
+
+// Per-operation LLM routing. Absent/empty → inherit the top-level Model Name.
+const OPERATIONS: ReadonlyArray<{ key: string; label: string; hint: string }> = [
+  { key: "sql_generation", label: "SQL Generation", hint: "Natural-language → SQL" },
+  { key: "insight", label: "Insight", hint: "Narrative summary of results" },
+  { key: "suggestion", label: "Suggestions", hint: "Follow-up question prompts" },
+  { key: "chart", label: "Chart", hint: "Chart-type + encoding selection" },
+];
 
 export default function LLMConfigPage() {
   const { data: session } = useSession();
@@ -25,6 +47,8 @@ export default function LLMConfigPage() {
   const [modelName, setModelName] = useState("gpt-4");
   const [deployment, setDeployment] = useState("");
   const [enabled, setEnabled] = useState(false);
+  const [operationModels, setOperationModels] = useState<OperationModels>({});
+  const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -45,6 +69,7 @@ export default function LLMConfigPage() {
           setModelName(data.model_name);
           setDeployment(data.deployment_or_version || "");
           setEnabled(data.enabled);
+          setOperationModels(data.operation_models || {});
         }
       } catch (err) {
         console.error("Failed to fetch LLM config", err);
@@ -52,8 +77,38 @@ export default function LLMConfigPage() {
         setLoading(false);
       }
     }
+
+    async function fetchCatalog() {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/llm-config/models`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data: ModelCatalogEntry[] = await res.json();
+          setCatalog(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch model catalog", err);
+      }
+    }
+
     fetchConfig();
+    fetchCatalog();
   }, [token]);
+
+  // Immutable update of a single operation's routing. Empty model → drop the entry
+  // (so the operation inherits the top-level Model Name), keeping the payload clean.
+  const setOperationModel = (op: string, patch: OperationModel) => {
+    setOperationModels((prev) => {
+      const next: OperationModels = { ...prev, [op]: { ...prev[op], ...patch } };
+      const entry = next[op];
+      if (!entry.model && entry.temperature === undefined && entry.max_tokens === undefined) {
+        const { [op]: _dropped, ...rest } = next;
+        return rest;
+      }
+      return next;
+    });
+  };
 
   const handleSave = async () => {
     if (!token) return;
@@ -68,6 +123,7 @@ export default function LLMConfigPage() {
         model_name: modelName,
         deployment_or_version: deployment || null,
         enabled,
+        operation_models: Object.keys(operationModels).length > 0 ? operationModels : null,
       };
 
       const res = await fetch(`${API_BASE}/api/admin/llm-config`, {
@@ -82,6 +138,7 @@ export default function LLMConfigPage() {
       if (res.ok) {
         const data: LLMConfig = await res.json();
         setConfig(data);
+        setOperationModels(data.operation_models || {});
         setApiKey(""); // Clear the input field for security
         setMessage({ type: "success", text: "LLM configuration saved successfully" });
       } else {
@@ -199,6 +256,91 @@ export default function LLMConfigPage() {
               />
             </div>
           )}
+        </div>
+
+        <div className="pt-6 border-t border-gray-100">
+          <div className="mb-4">
+            <h2 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+              <SlidersHorizontal className="w-5 h-5 text-indigo-600" />
+              Per-Operation Models
+            </h2>
+            <p className="text-sm text-gray-500">
+              Route individual pipeline steps to specific models. Leave a step on{" "}
+              <span className="font-medium">Default</span> to inherit the Model Name above.
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            {OPERATIONS.map((op) => {
+              const current = operationModels[op.key] || {};
+              const modelValue = current.model || "";
+              // Show the stored model even if the live catalog doesn't list it (proxy down / custom alias).
+              const inCatalog = catalog.some((c) => c.id === modelValue);
+              return (
+                <div
+                  key={op.key}
+                  className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center rounded-md border border-gray-100 bg-gray-50/60 p-3"
+                >
+                  <div className="md:col-span-1">
+                    <div className="text-sm font-medium text-gray-800">{op.label}</div>
+                    <div className="text-xs text-gray-500">{op.hint}</div>
+                  </div>
+
+                  <div className="md:col-span-1">
+                    <select
+                      aria-label={`${op.label} model`}
+                      value={modelValue}
+                      onChange={(e) => setOperationModel(op.key, { model: e.target.value || undefined })}
+                      disabled={!enabled}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 text-sm"
+                    >
+                      <option value="">Default (inherit)</option>
+                      {modelValue && !inCatalog && <option value={modelValue}>{modelValue}</option>}
+                      {catalog.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.provider} · {c.id}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-1 grid grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="2"
+                      aria-label={`${op.label} temperature`}
+                      value={current.temperature ?? ""}
+                      onChange={(e) =>
+                        setOperationModel(op.key, {
+                          temperature: e.target.value === "" ? undefined : Number(e.target.value),
+                        })
+                      }
+                      disabled={!enabled}
+                      placeholder="temp"
+                      className="w-full px-2 py-2 border border-gray-300 rounded-md bg-white focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 text-sm"
+                    />
+                    <input
+                      type="number"
+                      step="1"
+                      min="1"
+                      aria-label={`${op.label} max tokens`}
+                      value={current.max_tokens ?? ""}
+                      onChange={(e) =>
+                        setOperationModel(op.key, {
+                          max_tokens: e.target.value === "" ? undefined : Number(e.target.value),
+                        })
+                      }
+                      disabled={!enabled}
+                      placeholder="max tok"
+                      className="w-full px-2 py-2 border border-gray-300 rounded-md bg-white focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100 text-sm"
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="pt-6 border-t border-gray-100 flex justify-end">
