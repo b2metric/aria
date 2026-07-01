@@ -94,7 +94,8 @@ def _coerce(value: Any) -> Any:
 # ── Oracle catalog SQL (ALL_* with an owner filter; owner may differ from user) ──
 _COLUMNS_SQL = """
 SELECT column_name, data_type,
-       CASE WHEN nullable = 'Y' THEN 'YES' ELSE 'NO' END AS is_nullable
+       CASE WHEN nullable = 'Y' THEN 'YES' ELSE 'NO' END AS is_nullable,
+       num_distinct
 FROM ALL_TAB_COLUMNS
 WHERE owner = :owner AND table_name = :t
 ORDER BY column_id
@@ -142,8 +143,10 @@ class OracleCatalog:
     logic (``build_table_entry`` etc.) can be unit-tested against a fake.
     """
 
-    def __init__(self, cursor: Any) -> None:
+    def __init__(self, cursor: Any, parallel: int | None = None, sample_pct: float | None = None) -> None:
         self._cur = cursor
+        self._hint = f"/*+ PARALLEL({int(parallel)}) */ " if parallel else ""
+        self._sample_pct = sample_pct
 
     def _rows(self, sql: str, params: dict) -> list[dict]:
         self._cur.execute(sql, params)
@@ -167,15 +170,18 @@ class OracleCatalog:
 
     def distinct_count(self, owner: str, t: str, col: str) -> int | None:
         qt = f'"{owner}".{_quote_ident(t)}'
-        self._cur.execute(f"SELECT COUNT(DISTINCT {_quote_ident(col)}) FROM {qt}")
+        self._cur.execute(f"SELECT {self._hint}COUNT(DISTINCT {_quote_ident(col)}) FROM {qt}")
         n = self._cur.fetchone()[0]
         return None if n is None else int(n)
 
     def distinct_values(self, owner: str, t: str, col: str, limit: int) -> list[str]:
         qt = f'"{owner}".{_quote_ident(t)}'
         qc = _quote_ident(col)
+        # SAMPLE(pct) reads only a fraction of blocks — bounds cost on huge tables
+        # (an enum column's small value set is very likely still fully captured).
+        sample = f" SAMPLE ({self._sample_pct})" if self._sample_pct else ""
         self._cur.execute(
-            f"SELECT DISTINCT {qc} FROM {qt} WHERE {qc} IS NOT NULL "
+            f"SELECT {self._hint}DISTINCT {qc} FROM {qt}{sample} WHERE {qc} IS NOT NULL "
             f"FETCH FIRST {int(limit)} ROWS ONLY"
         )
         return sorted(
@@ -184,7 +190,7 @@ class OracleCatalog:
 
     def sample_rows(self, owner: str, t: str, limit: int) -> list[dict]:
         qt = f'"{owner}".{_quote_ident(t)}'
-        self._cur.execute(f"SELECT * FROM {qt} FETCH FIRST {int(limit)} ROWS ONLY")
+        self._cur.execute(f"SELECT {self._hint}* FROM {qt} FETCH FIRST {int(limit)} ROWS ONLY")
         names = [d[0] for d in self._cur.description]
         out: list[dict] = []
         for row in self._cur.fetchall():
@@ -212,6 +218,7 @@ def build_table_entry(
     *,
     max_cardinality: int = 50,
     sample_limit: int = 20,
+    skip_enums: bool = False,
 ) -> tuple[dict, list[dict]]:
     """Assemble one table's metadata entry (+ a per-table errors list).
 
@@ -254,6 +261,9 @@ def build_table_entry(
         for c in cols
     ]
     entry["columns"] = col_dicts
+    # Optimizer-stats cardinality per column (ALL_TAB_COLUMNS.NUM_DISTINCT) — lets
+    # us skip high-cardinality columns WITHOUT a COUNT(DISTINCT) full-table scan.
+    nd_map = {c["COLUMN_NAME"]: c.get("NUM_DISTINCT") for c in cols}
 
     try:
         entry["row_count"] = catalog.row_count(owner, table)
@@ -275,20 +285,28 @@ def build_table_entry(
         errors.append({"table": table, "stage": "fks", "error": str(e)})
 
     # Low-cardinality enum sampling (the "Bundles not Bundle" fix).
-    for c in col_dicts:
-        if not _is_varchar(c["data_type"]):
-            continue
-        col = c["name"]
-        try:
-            n = catalog.distinct_count(owner, table, col)
-            if n is None or n == 0 or n > max_cardinality:
+    if not skip_enums:
+        for c in col_dicts:
+            if not _is_varchar(c["data_type"]):
                 continue
-            vals = catalog.distinct_values(owner, table, col, max_cardinality)
-            if vals:
-                entry["enum_values"][col] = vals
-                c["example_values"] = vals[:10]
-        except Exception as e:  # noqa: BLE001
-            errors.append({"table": table, "stage": "enum", "column": col, "error": str(e)})
+            col = c["name"]
+            try:
+                approx = nd_map.get(col)
+                if approx is not None:
+                    # cardinality from optimizer stats → no scan needed to gate
+                    if approx == 0 or approx > max_cardinality:
+                        continue
+                else:
+                    # stats missing → fall back to a COUNT(DISTINCT) scan
+                    n = catalog.distinct_count(owner, table, col)
+                    if n is None or n == 0 or n > max_cardinality:
+                        continue
+                vals = catalog.distinct_values(owner, table, col, max_cardinality)
+                if vals:
+                    entry["enum_values"][col] = vals
+                    c["example_values"] = vals[:10]
+            except Exception as e:  # noqa: BLE001
+                errors.append({"table": table, "stage": "enum", "column": col, "error": str(e)})
 
     # Materialized-view / view definition when the object itself is a view/MV.
     try:
@@ -426,6 +444,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--tables-file", help="File with table names (one per line or comma-separated)")
     p.add_argument("--max-cardinality", type=int, default=50,
                    help="Skip enum sampling for columns with more distinct values")
+    p.add_argument("--skip-enums", action="store_true",
+                   help="Skip enum sampling entirely (fastest; no DISTINCT queries)")
+    p.add_argument("--parallel", type=int, default=None,
+                   help="Add an Oracle /*+ PARALLEL(N) */ hint to enum/sample scans")
+    p.add_argument("--enum-sample-pct", type=float, default=None,
+                   help="Use SAMPLE(pct) for the DISTINCT-value fetch (bounds cost on huge tables)")
     p.add_argument("--sample-rows", type=int, default=20,
                    help="Sample rows per table (0 disables; PII — artifact only)")
     p.add_argument("--no-related-views", action="store_true",
@@ -487,7 +511,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     cur = conn.cursor()
-    catalog = OracleCatalog(cur)
+    catalog = OracleCatalog(cur, parallel=args.parallel, sample_pct=args.enum_sample_pct)
     out_tables: list[dict] = []
     all_errors: list[dict] = []
 
@@ -496,6 +520,7 @@ def main(argv: list[str] | None = None) -> int:
         entry, errs = build_table_entry(
             catalog, owner, t,
             max_cardinality=args.max_cardinality, sample_limit=args.sample_rows,
+            skip_enums=args.skip_enums,
         )
         out_tables.append(entry)
         all_errors.extend(errs)

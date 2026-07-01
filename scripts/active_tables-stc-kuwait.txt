@@ -9,4 +9,4 @@ FCT_PREP_RECHARGE
 FCT_PREP_REV
 FCT_PREP_ROAMING
 FCT_PREP_USAGE
-FCT_PREP_USAGE_BIG
+# FCT_PREP_USAGE_BIG   # excluded on purpose (very large table); enable to include it

@@ -54,6 +54,31 @@ Outputs in `--out-dir`:
 - `parquet/<TABLE>.parquet` — per-table sample rows (needs `pyarrow`).
 - `manifest.json` — summary + counts + error count.
 
+### Performance on big / history tables
+
+Enum sampling is the only expensive step. By default the extractor gates
+enum-candidacy on the optimizer's `ALL_TAB_COLUMNS.NUM_DISTINCT` — so
+high-cardinality columns are skipped **without any table scan**. If a table has no
+stats (`NUM_DISTINCT` NULL) it falls back to `COUNT(DISTINCT col)`, which is a full
+scan per VARCHAR column — brutal on huge history tables like `FCT_PREP_MASTER_HIST`
+/ `FCT_PREP_USAGE_BIG`.
+
+Knobs when a table is slow:
+- `--parallel 8` — adds `/*+ PARALLEL(8) */` to the enum/sample scans.
+- `--enum-sample-pct 1` — read DISTINCT values from a 1% block `SAMPLE` (an enum's
+  few values are still almost certainly all captured).
+- `--skip-enums` — skip enum sampling entirely (fastest; do the big tables in a
+  second pass, or rely on stats only).
+- Or gather stats first (DBA): `EXEC DBMS_STATS.GATHER_TABLE_STATS('COMMBI_PROD','FCT_PREP_MASTER_HIST')`
+  → then the default stats-gate needs no scan at all.
+
+Example for the giants:
+```bash
+python vault-extract-remote.py --thick --lib-dir ~/oracle/instantclient_23_3 \
+    --tables FCT_PREP_MASTER_HIST,FCT_PREP_USAGE_BIG \
+    --parallel 8 --enum-sample-pct 1 --out-dir ./stc-vault-snapshot ...
+```
+
 > ⚠️ **PII:** with `--sample-rows > 0` the artifacts contain real row values. Keep
 > them internal. Sample rows are **never** written into the vault. Use
 > `--sample-rows 0` to skip them entirely.

@@ -36,6 +36,7 @@ class FakeCatalog:
         self._data = data
         self._dependents = dependents or {}
         self._views = views or {}
+        self.distinct_count_calls = 0
 
     def columns(self, owner, t):
         return self._data[t]["columns"]
@@ -50,6 +51,7 @@ class FakeCatalog:
         return self._data[t].get("fks", [])
 
     def distinct_count(self, owner, t, col):
+        self.distinct_count_calls += 1
         return self._data[t].get("distinct_counts", {}).get(col)
 
     def distinct_values(self, owner, t, col, limit):
@@ -162,6 +164,68 @@ def test_self_materialized_view_captured():
     entry, _ = mod.build_table_entry(FakeCatalog(data, views=views), "STC", "MV_REV", sample_limit=0)
     assert entry["materialized_view"]["kind"] == "materialized view"
     assert "SELECT 1" in entry["materialized_view"]["query"]
+
+
+def _cols_nd(*specs):
+    # spec: (name, dtype, nullable_bool, num_distinct)
+    return [
+        {
+            "COLUMN_NAME": n,
+            "DATA_TYPE": d,
+            "IS_NULLABLE": "YES" if nu else "NO",
+            "NUM_DISTINCT": nd,
+        }
+        for (n, d, nu, nd) in specs
+    ]
+
+
+def test_enum_gate_uses_optimizer_stats_without_scan():
+    # NUM_DISTINCT present → gate WITHOUT a COUNT(DISTINCT) full-table scan.
+    data = {
+        "BIG": {
+            "columns": _cols_nd(
+                ("BS_TYPE", "VARCHAR2", True, 3),      # low card → sampled
+                ("NAME", "VARCHAR2", True, 5_000_000),  # high card → skipped, no scan
+            ),
+            "distinct_values": {"BS_TYPE": ["Data", "M2M", "Voice"]},
+        }
+    }
+    cat = FakeCatalog(data)
+    entry, errors = mod.build_table_entry(cat, "STC", "BIG", max_cardinality=50, sample_limit=0)
+
+    assert errors == []
+    assert entry["enum_values"] == {"BS_TYPE": ["Data", "M2M", "Voice"]}
+    assert "NAME" not in entry["enum_values"]
+    assert cat.distinct_count_calls == 0  # stats gate → zero scans
+
+
+def test_enum_gate_falls_back_to_count_when_stats_missing():
+    # NUM_DISTINCT None → fall back to a COUNT(DISTINCT) scan.
+    data = {
+        "T": {
+            "columns": _cols_nd(("BS_TYPE", "VARCHAR2", True, None)),
+            "distinct_counts": {"BS_TYPE": 2},
+            "distinct_values": {"BS_TYPE": ["A", "B"]},
+        }
+    }
+    cat = FakeCatalog(data)
+    entry, _ = mod.build_table_entry(cat, "STC", "T", sample_limit=0)
+    assert entry["enum_values"] == {"BS_TYPE": ["A", "B"]}
+    assert cat.distinct_count_calls == 1  # scanned because stats were absent
+
+
+def test_skip_enums_does_no_enum_work():
+    data = {
+        "T": {
+            "columns": _cols_nd(("BS_TYPE", "VARCHAR2", True, None)),
+            "distinct_counts": {"BS_TYPE": 2},
+            "distinct_values": {"BS_TYPE": ["A", "B"]},
+        }
+    }
+    cat = FakeCatalog(data)
+    entry, _ = mod.build_table_entry(cat, "STC", "T", sample_limit=0, skip_enums=True)
+    assert entry["enum_values"] == {}
+    assert cat.distinct_count_calls == 0
 
 
 # ── collect_related_views ───────────────────────────────────────────────────────
