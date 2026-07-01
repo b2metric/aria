@@ -79,5 +79,20 @@ if [ "${SKIP_VAULT_GUARD:-0}" != "1" ]; then
   fi
 fi
 
+# 8) dev-domain guard (memory: dev-domain-localhost-not-local, code-enforced).
+#    macOS mDNS adds ~5s to every *.local request; the dev stack uses *.aria.localhost.
+#    Block a NEWLY-ADDED hostname ending in `.local` (but NOT `.localhost`) in infra/code.
+#    Skips *.md docs (they legitimately explain the rule). Override: SKIP_LOCALHOST_GUARD=1.
+if [ "${SKIP_LOCALHOST_GUARD:-0}" != "1" ]; then
+  while IFS= read -r f; do
+    case "$f" in *.md) continue;; esac
+    added=$(git diff --cached -U0 -- "$ROOT/$f" | grep -E '^\+' | grep -vE '^\+\+\+' || true)
+    if printf '%s\n' "$added" | grep -qE '[A-Za-z0-9_-]+\.local([^A-Za-z0-9]|$)'; then
+      echo "BLOCKED (dev-domain): $f adds a *.local host — use *.aria.localhost (.local adds ~5s mDNS on macOS). Override: SKIP_LOCALHOST_GUARD=1"
+      fail=1
+    fi
+  done < <(staged)
+fi
+
 [ "$fail" -eq 1 ] && { echo "--- pre-commit guard failed (engineering-core) ---"; exit 1; }
 exit 0
