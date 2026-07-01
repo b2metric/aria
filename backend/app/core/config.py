@@ -105,6 +105,15 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     qdrant_collection: str = "aria_memory"
 
+    # ── mem0 embedder metering (Task 17) ─────────────────────────────
+    # mem0's embed() discards token/cost info and, on a self-hosted model, bypasses
+    # LiteLLM entirely — so ARIA meters it code-side. ``mem0_embedding_model`` names
+    # the embedder (also fed to mem0's config so the label matches). The per-token
+    # rate prices those tokens: default 0 → self-hosted / unpriced (Task 18); set a
+    # positive rate when the embedder is a real priced model routed via LiteLLM.
+    mem0_embedding_model: str = "gemini-embedding"
+    mem0_embedding_cost_per_token: float = 0.0
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         # If litellm_api_key not set from .env, try system env. The dummy fallback

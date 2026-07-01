@@ -25,6 +25,8 @@ except ImportError:  # mem0ai not installed — memory features degrade to a no-
     Memory = None  # type: ignore[assignment, misc]
 
 from backend.app.core.config import get_settings
+from backend.app.memory.embedding_meter import current_workspace as _embed_workspace
+from backend.app.memory.embedding_meter import wrap_embedding_model
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +165,9 @@ class MemoryService:
             qdrant_host = "localhost"
             qdrant_port = 6333
 
+        # Embedder model — settings-driven so metering labels match (Task 17).
+        embedder_model = settings.mem0_embedding_model
+
         # Mem0 config with Qdrant vector store
         # Use OpenAI provider pointing to LiteLLM proxy for both LLM and embeddings
         config = {
@@ -186,7 +191,10 @@ class MemoryService:
             "embedder": {
                 "provider": "openai",
                 "config": {
-                    "model": "gemini-embedding",  # Use Gemini via LiteLLM (OpenAI quota exceeded)
+                    # Gemini via LiteLLM by default (OpenAI quota exceeded); the
+                    # model name is settings-driven so the metered label stays in
+                    # sync with the actual embedder (Task 17).
+                    "model": embedder_model,
                     "embedding_dims": 3072,  # Gemini embedding-001 outputs 3072 dims
                     "openai_base_url": settings.litellm_api_base,
                     "api_key": settings.litellm_api_key or "***",
@@ -198,6 +206,15 @@ class MemoryService:
             if Memory is None:
                 raise RuntimeError("mem0 package not installed")
             self._memory = Memory.from_config(config)
+            # Meter the embedder code-side (Task 17): mem0's embed() discards usage
+            # and, on a self-hosted model, bypasses LiteLLM — so wrap it to record
+            # token_usage_events per call. Best-effort; never breaks recall.
+            wrap_embedding_model(
+                getattr(self._memory, "embedding_model", None),
+                get_workspace=_embed_workspace.get,
+                model_name=embedder_model,
+                cost_per_token=settings.mem0_embedding_cost_per_token,
+            )
             logger.info(
                 "MemoryService initialized: qdrant=%s:%d, collection=%s",
                 qdrant_host,
@@ -243,6 +260,8 @@ class MemoryService:
         similar_queries = []
         all_memories = []
 
+        # Attribute the embed() calls mem0 makes below to this workspace (Task 17).
+        _tok = _embed_workspace.set(workspace_id)
         try:
             # Search user memories. mem0 2.x: the scope goes inside ``filters=``
             # (a top-level ``user_id=`` raises "not supported in search()") and the
@@ -311,6 +330,8 @@ class MemoryService:
 
         except Exception as e:
             logger.warning("Memory lookup failed: %s", e)
+        finally:
+            _embed_workspace.reset(_tok)
 
         return MemoryContext(
             user_preferences=user_prefs,
@@ -384,6 +405,8 @@ class MemoryService:
         else:  # QUERY_CACHE
             mem_user_id = f"{workspace_id}:query_cache"
 
+        # Attribute the embed() call mem0 makes on add() to this workspace (Task 17).
+        _tok = _embed_workspace.set(workspace_id)
         try:
             # infer=False stores the content verbatim. Mem0 2.x defaults to
             # infer=True (LLM fact-extraction), which silently drops short,
@@ -407,6 +430,8 @@ class MemoryService:
         except Exception as e:
             logger.warning("Failed to store memory: %s", e)
             return None
+        finally:
+            _embed_workspace.reset(_tok)
 
     def store_query(
         self,
