@@ -144,12 +144,14 @@ async def get_llm_config(current_user: Any = Depends(get_current_user)):
     except Exception as exc:
         log.warning(f"Failed to fetch LLM config: {exc}")
 
-    # Return empty representation
+    # Return empty representation. Default to the platform model (a valid LiteLLM
+    # proxy alias) — NOT a hardcoded "gpt-4", which does not exist on the proxy and
+    # made insight/chart/suggestion 400 → silent fallback when saved unchanged.
     return LLMConfigResponse(
         provider="openai",
         upstream_api_base=None,
         api_key_set=False,
-        model_name="gpt-4",
+        model_name=get_settings().llm_model,
         deployment_or_version=None,
         enabled=False,
         operation_models=None,
