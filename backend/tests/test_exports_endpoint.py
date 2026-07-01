@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import patch
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -23,6 +24,19 @@ async def _engine_with_job(**job_kwargs) -> tuple:
     return engine, jid
 
 
+async def _engine_with_jobs(*job_kwargs_list) -> tuple:
+    """Like _engine_with_job but seeds multiple rows; returns (engine, [ids])."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(ExportJob.__table__.create)
+    ids = [uuid.uuid4() for _ in job_kwargs_list]
+    async with AsyncSession(engine) as sess:
+        for jid, kwargs in zip(ids, job_kwargs_list, strict=True):
+            sess.add(ExportJob(id=jid, **kwargs))
+        await sess.commit()
+    return engine, ids
+
+
 @pytest.mark.asyncio
 async def test_status_returns_job_for_owning_workspace():
     from backend.app.api import exports
@@ -32,7 +46,10 @@ async def test_status_returns_job_for_owning_workspace():
         sql="SELECT 1", status=ExportStatus.SUCCESS, row_count=100_000, truncated=True,
         minio_key="exports/ws1/c/data.csv",
     )
-    with patch.object(exports, "_get_engine", return_value=engine):
+    with (
+        patch.object(exports, "_get_engine", return_value=engine),
+        patch.object(exports, "_tenant_ttl_days", AsyncMock(return_value=3)),
+    ):
         out = await exports.get_export_status(str(jid), workspace_id="ws1", user=None)
     assert out["status"] == ExportStatus.SUCCESS
     assert out["row_count"] == 100_000
@@ -101,10 +118,93 @@ async def test_download_streams_csv_bytes_for_ready_job():
 
     with (
         patch.object(exports, "_get_engine", return_value=engine),
+        patch.object(exports, "_tenant_ttl_days", AsyncMock(return_value=3)),
         patch("agents.artifact_store.ArtifactStore", _FakeStore),
     ):
         resp = await exports.download_export(str(jid), workspace_id="ws1", user=None)
     assert resp.media_type == "text/csv; charset=utf-8"
     assert b"id,amt" in resp.body
     assert "attachment" in resp.headers["content-disposition"]
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/exports — list endpoint
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_exports_returns_workspace_jobs_newest_first():
+    from backend.app.api import exports
+
+    now = datetime.now(UTC)
+    engine, (jid_old, jid_new, jid_other_ws) = await _engine_with_jobs(
+        {
+            "workspace_id": "ws1", "user_id": "u1", "conversation_id": "c1", "question": "older",
+            "sql": "SELECT 1", "status": ExportStatus.SUCCESS,
+            "created_at": now - timedelta(hours=2),
+        },
+        {
+            "workspace_id": "ws1", "user_id": "u1", "conversation_id": "c2", "question": "newer",
+            "sql": "SELECT 1", "status": ExportStatus.QUEUED,
+            "created_at": now - timedelta(minutes=5),
+        },
+        {
+            "workspace_id": "ws2", "user_id": "u2", "conversation_id": "c3", "question": "other ws",
+            "sql": "SELECT 1", "status": ExportStatus.SUCCESS,
+            "created_at": now,
+        },
+    )
+    with (
+        patch.object(exports, "_get_engine", return_value=engine),
+        patch.object(exports, "_tenant_ttl_days", AsyncMock(return_value=3)),
+    ):
+        out = await exports.list_exports(workspace_id="ws1", user=None)
+
+    assert [row["id"] for row in out] == [str(jid_new), str(jid_old)]
+    assert {row["question"] for row in out} == {"newer", "older"}
+    await engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# Export link TTL enforcement
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_download_410s_when_expired():
+    from backend.app.api import exports
+
+    stale = datetime.now(UTC) - timedelta(days=10)
+    engine, jid = await _engine_with_job(
+        workspace_id="ws1", user_id="u1", conversation_id="c", question="q",
+        sql="SELECT 1", status=ExportStatus.SUCCESS, row_count=2,
+        minio_key="exports/ws1/c/data.csv", completed_at=stale,
+    )
+    with (
+        patch.object(exports, "_get_engine", return_value=engine),
+        patch.object(exports, "_tenant_ttl_days", AsyncMock(return_value=3)),
+        pytest.raises(HTTPException) as exc,
+    ):
+        await exports.download_export(str(jid), workspace_id="ws1", user=None)
+    assert exc.value.status_code == 410
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_download_ready_false_when_expired():
+    from backend.app.api import exports
+
+    stale = datetime.now(UTC) - timedelta(days=10)
+    engine, jid = await _engine_with_job(
+        workspace_id="ws1", user_id="u1", conversation_id="c", question="q",
+        sql="SELECT 1", status=ExportStatus.SUCCESS, row_count=2,
+        minio_key="exports/ws1/c/data.csv", completed_at=stale,
+    )
+    with (
+        patch.object(exports, "_get_engine", return_value=engine),
+        patch.object(exports, "_tenant_ttl_days", AsyncMock(return_value=3)),
+    ):
+        out = await exports.get_export_status(str(jid), workspace_id="ws1", user=None)
+    assert out["download_ready"] is False
     await engine.dispose()

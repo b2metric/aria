@@ -24,6 +24,7 @@ DEFAULT_DAILY_TOKEN_LIMIT = 50000
 DEFAULT_MAX_ROW_LIMIT = 1000
 DEFAULT_MAX_EXPORT_ROW_LIMIT = 100000
 DEFAULT_EXPORT_BATCH_SIZE = 50000
+DEFAULT_EXPORT_LINK_TTL_DAYS = 3
 HARD_ROW_CEILING = 1_000_000
 
 log = logging.getLogger("aria.admin")
@@ -80,6 +81,11 @@ class TenantConfigUpdate(BaseModel):
         le=1_000_000,
         description="Rows fetched per batch when streaming an export",
     )
+    export_link_ttl_days: int | None = Field(
+        default=None,
+        ge=1,
+        description="Days an exported CSV stays downloadable before it expires",
+    )
     db_config: DBConfigModel | None = None
     language: str | None = Field(
         default=None,
@@ -113,6 +119,7 @@ class TenantConfigResponse(BaseModel):
     max_row_limit: int
     max_export_row_limit: int
     export_batch_size: int
+    export_link_ttl_days: int
     source: str  # "db" or "default"
     db_config: dict | None = None
     language: str = "en"
@@ -137,6 +144,7 @@ async def get_tenant_config(
     row_limit = DEFAULT_MAX_ROW_LIMIT
     export_row_limit = DEFAULT_MAX_EXPORT_ROW_LIMIT
     export_batch = DEFAULT_EXPORT_BATCH_SIZE
+    export_link_ttl = DEFAULT_EXPORT_LINK_TTL_DAYS
 
     try:
         async with get_sessionmaker()() as session:
@@ -167,6 +175,7 @@ async def get_tenant_config(
                     row_limit = db_config_res.max_row_limit
                     export_row_limit = db_config_res.max_export_row_limit
                     export_batch = db_config_res.export_batch_size
+                    export_link_ttl = db_config_res.export_link_ttl_days
 
     except SQLAlchemyError as exc:
         log.warning("admin.tenant: query failed (table not migrated?): %s", exc)
@@ -176,6 +185,7 @@ async def get_tenant_config(
         max_row_limit=row_limit,
         max_export_row_limit=export_row_limit,
         export_batch_size=export_batch,
+        export_link_ttl_days=export_link_ttl,
         source="db" if quota else "default",
         language=await get_workspace_language(workspace_id),
         db_config={
@@ -209,6 +219,7 @@ async def update_tenant_config(
         and body.max_row_limit is None
         and body.max_export_row_limit is None
         and body.export_batch_size is None
+        and body.export_link_ttl_days is None
         and body.db_config is None
         and body.language is None
     ):
@@ -295,6 +306,8 @@ async def update_tenant_config(
                         db_config_res.max_export_row_limit = body.max_export_row_limit
                     if body.export_batch_size is not None:
                         db_config_res.export_batch_size = body.export_batch_size
+                    if body.export_link_ttl_days is not None:
+                        db_config_res.export_link_ttl_days = body.export_link_ttl_days
                     if body.db_config.password:
                         db_config_res.encrypted_password = await async_encrypt_password(
                             body.db_config.password, customer.id, session
@@ -313,6 +326,8 @@ async def update_tenant_config(
                         or DEFAULT_MAX_EXPORT_ROW_LIMIT,
                         export_batch_size=body.export_batch_size
                         or DEFAULT_EXPORT_BATCH_SIZE,
+                        export_link_ttl_days=body.export_link_ttl_days
+                        or DEFAULT_EXPORT_LINK_TTL_DAYS,
                         encrypted_password=await async_encrypt_password(
                             body.db_config.password, customer.id, session
                         )
@@ -325,6 +340,7 @@ async def update_tenant_config(
                 body.max_row_limit is not None
                 or body.max_export_row_limit is not None
                 or body.export_batch_size is not None
+                or body.export_link_ttl_days is not None
             ):
                 # NOTE: if no CustomerDBConfig row exists for this workspace these
                 # limit fields are silently dropped (and the invariant is skipped).
@@ -349,6 +365,8 @@ async def update_tenant_config(
                             db_config_res.max_export_row_limit = body.max_export_row_limit
                         if body.export_batch_size is not None:
                             db_config_res.export_batch_size = body.export_batch_size
+                        if body.export_link_ttl_days is not None:
+                            db_config_res.export_link_ttl_days = body.export_link_ttl_days
 
             if db_config_res is not None:
                 try:
@@ -377,6 +395,11 @@ async def update_tenant_config(
             ),
             export_batch_size=(
                 db_config_res.export_batch_size if db_config_res else DEFAULT_EXPORT_BATCH_SIZE
+            ),
+            export_link_ttl_days=(
+                db_config_res.export_link_ttl_days
+                if db_config_res
+                else DEFAULT_EXPORT_LINK_TTL_DAYS
             ),
             source="db",
             language=await get_workspace_language(workspace_id),

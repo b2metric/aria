@@ -71,6 +71,12 @@ class CustomerDBConfig(Base, UUIDMixin, TimestampMixin):
         server_default="50000",
         comment="Rows fetched per batch when streaming an export",
     )
+    export_link_ttl_days: Mapped[int] = mapped_column(
+        Integer,
+        default=3,
+        server_default="3",
+        comment="Days an exported CSV stays downloadable before it expires",
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

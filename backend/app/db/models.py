@@ -31,6 +31,7 @@ class DBConfig:
         max_row_limit: Maximum allowed rows for this tenant
         max_export_row_limit: Maximum rows written to a CSV export artifact (export ceiling)
         export_batch_size: Rows fetched per batch when streaming an export
+        export_link_ttl_days: Days an exported CSV stays downloadable before it expires
     """
 
     db_type: DatabaseType
@@ -43,6 +44,7 @@ class DBConfig:
     max_row_limit: int = 1000
     max_export_row_limit: int = 100_000
     export_batch_size: int = 50_000
+    export_link_ttl_days: int = 3
 
     @property
     def default_port(self) -> int:
