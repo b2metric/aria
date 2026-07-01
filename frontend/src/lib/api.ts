@@ -519,6 +519,33 @@ export async function getExportStatus(
   return res.json();
 }
 
+export interface ExportListItem {
+  id: string;
+  status: "queued" | "running" | "success" | "error";
+  question: string | null;
+  row_count: number | null;
+  truncated: boolean;
+  total_estimate: number | null;
+  error: string | null;
+  created_at: string | null;
+  completed_at: string | null;
+  download_ready: boolean;
+}
+
+/**
+ * List the caller's recent export jobs (workspace-scoped, newest first).
+ * Mirrors {@link getExportStatus}'s auth/credentials shape.
+ */
+export async function listExports(tokenOverride?: string): Promise<ExportListItem[]> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/exports`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) return [];
+  return res.json();
+}
+
 /**
  * Fetch the CSV with auth and trigger a browser download. A plain `<a href>`
  * can't be used here because the download endpoint requires Bearer auth.

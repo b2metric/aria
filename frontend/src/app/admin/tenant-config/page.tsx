@@ -20,6 +20,7 @@ interface TenantConfig {
   max_row_limit: number;
   max_export_row_limit: number;
   export_batch_size: number;
+  export_link_ttl_days: number;
   source: "db" | "default";
   db_config?: DBConfig;
   language?: string;
@@ -34,6 +35,7 @@ export default function TenantConfigPage() {
   const [rowLimit, setRowLimit] = useState(1000);
   const [exportRowLimit, setExportRowLimit] = useState<number>(100000);
   const [exportBatchSize, setExportBatchSize] = useState<number>(50000);
+  const [exportLinkTtlDays, setExportLinkTtlDays] = useState<number>(3);
   const [language, setLanguage] = useState("en");
 
   const [dbType, setDbType] = useState("postgresql");
@@ -60,6 +62,7 @@ export default function TenantConfigPage() {
         setRowLimit(data.max_row_limit);
         setExportRowLimit(data.max_export_row_limit);
         setExportBatchSize(data.export_batch_size);
+        setExportLinkTtlDays(data.export_link_ttl_days ?? 3);
         if (data.language) setLanguage(data.language);
         if (data.db_config) {
           setDbType(data.db_config.db_type);
@@ -92,6 +95,10 @@ export default function TenantConfigPage() {
       setMessage({ type: "error", text: "Export Batch Size must be ≤ Max Rows per Export" });
       return;
     }
+    if (!(exportLinkTtlDays >= 1)) {
+      setMessage({ type: "error", text: "Export Link Validity must be at least 1 day" });
+      return;
+    }
 
     setSaving(true);
     setMessage(null);
@@ -102,6 +109,7 @@ export default function TenantConfigPage() {
         max_row_limit: rowLimit,
         max_export_row_limit: exportRowLimit,
         export_batch_size: exportBatchSize,
+        export_link_ttl_days: exportLinkTtlDays,
         language,
       };
 
@@ -270,6 +278,22 @@ export default function TenantConfigPage() {
               />
               <p className="text-xs text-gray-500 mt-2">
                 Rows fetched per batch while streaming an export. Must be ≤ Max Rows per Export.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Export Link Validity (days)
+              </label>
+              <input
+                type="number"
+                value={exportLinkTtlDays}
+                onChange={(e) => setExportLinkTtlDays(Number(e.target.value))}
+                min={1}
+                className="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                How many days an exported CSV stays downloadable.
               </p>
             </div>
 

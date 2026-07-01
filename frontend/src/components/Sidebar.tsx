@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useState } from "react";
-import { LayoutDashboard, MessageSquare, Settings, ShieldAlert, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Download, Settings, ShieldAlert, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 
 import { keycloakLogout } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -17,6 +17,7 @@ export function Sidebar() {
   const navItems = [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Chat", href: "/chat", icon: MessageSquare },
+    { name: "Exports", href: "/exports", icon: Download },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
