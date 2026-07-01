@@ -252,6 +252,8 @@ async def _run_chart_llm(
     raising.
     """
     try:
+        from backend.app.services.litellm_meta import litellm_meta
+
         response = await litellm.acompletion(
             model=_resolve_model(model_name),
             messages=[
@@ -263,6 +265,8 @@ async def _run_chart_llm(
             api_base=llm_base_url,
             api_key=llm_api_key or "sk-dummy",
             custom_llm_provider="openai",
+            # Tenant not threaded through the chart chain (5 hops); app+operation still attribute it.
+            **litellm_meta("chart"),
         )
         content = response.choices[0].message.content
         choice = LlmChartChoice.model_validate(json.loads(content))

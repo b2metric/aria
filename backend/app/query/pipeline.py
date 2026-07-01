@@ -2499,7 +2499,8 @@ async def _process_query_impl(
         sample_rows = _json_safe_rows(rows[:10])
         language = await get_workspace_language(workspace_id)
         insight_res = await generate_insight_and_suggestions(
-            request.question, sql, sample_rows, llm=insight_llm, language=language
+            request.question, sql, sample_rows, llm=insight_llm, language=language,
+            workspace_id=workspace_id,
         )
         summary = insight_res.get("summary", "")
         suggestions = insight_res.get("suggestions", [])

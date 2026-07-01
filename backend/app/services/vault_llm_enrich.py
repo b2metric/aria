@@ -245,6 +245,8 @@ async def generate_table_enrichment(
     )
 
     try:
+        from backend.app.services.litellm_meta import litellm_meta
+
         resp = await litellm.acompletion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -253,6 +255,7 @@ async def generate_table_enrichment(
             api_base=api_base,
             api_key=api_key,
             custom_llm_provider="openai",
+            **litellm_meta("vault_enrichment", tenant=workspace_id),
         )
         # Meter this system LLM call (operation=vault_enrichment).
         from backend.app.services.token import record_system_llm_usage

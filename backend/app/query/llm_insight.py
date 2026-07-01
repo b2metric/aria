@@ -6,6 +6,7 @@ from typing import Any
 import litellm
 
 from backend.app.core.config import get_settings
+from backend.app.services.litellm_meta import litellm_meta
 from backend.app.services.llm_resolver import ResolvedLLM
 from backend.app.services.workspace_language import language_directive
 
@@ -64,6 +65,7 @@ async def generate_insight_and_suggestions(
     data_rows: list[dict[str, Any]],
     llm: ResolvedLLM | None = None,
     language: str = "en",
+    workspace_id: str | None = None,
 ) -> dict:
     """Generate executive summary and follow-up suggestions from query results.
 
@@ -119,6 +121,7 @@ Result Sample:
             api_base=api_base,
             api_key=api_key,
             custom_llm_provider="openai",
+            **litellm_meta("insight", tenant=workspace_id),
         )
 
         content = response.choices[0].message.content

@@ -86,6 +86,7 @@ async def _embed(text: str, workspace_id: str | None = None) -> list[float]:
     import litellm
 
     from backend.app.core.config import get_settings
+    from backend.app.services.litellm_meta import litellm_meta
 
     settings = get_settings()
     resp = await litellm.aembedding(
@@ -94,6 +95,7 @@ async def _embed(text: str, workspace_id: str | None = None) -> list[float]:
         api_base=settings.litellm_api_base,
         api_key=settings.litellm_api_key or "sk-dummy",
         timeout=20.0,
+        **litellm_meta("vault_embedding", tenant=workspace_id),
     )
     if workspace_id:
         from backend.app.services.token import record_system_llm_usage

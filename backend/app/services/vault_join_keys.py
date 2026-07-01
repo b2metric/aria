@@ -180,6 +180,8 @@ async def infer_grains(workspace_id: str, llm=None, overwrite: bool = False) -> 
     )
 
     try:
+        from backend.app.services.litellm_meta import litellm_meta
+
         resp = await litellm.acompletion(
             model=model,
             messages=[{"role": "user", "content": prompt}],
@@ -188,6 +190,7 @@ async def infer_grains(workspace_id: str, llm=None, overwrite: bool = False) -> 
             api_base=api_base,
             api_key=api_key,
             custom_llm_provider="openai",
+            **litellm_meta("vault_join_keys", tenant=workspace_id),
         )
         # Meter this system LLM call (operation=vault_join_keys).
         from backend.app.services.token import record_system_llm_usage

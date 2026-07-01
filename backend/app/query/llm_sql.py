@@ -19,6 +19,7 @@ import httpx
 
 from backend.app.core.config import get_settings
 from backend.app.memory.service import MemoryContext
+from backend.app.services.litellm_meta import litellm_meta
 
 logger = logging.getLogger(__name__)
 
@@ -223,12 +224,16 @@ Generate the SQL query:"""
 
     # Call LiteLLM proxy
     try:
+        # Attribution for LiteLLM spend analytics (Task 14): tags via the x-litellm-tags
+        # header (proxy ignores body metadata.tags on raw calls), user in the body.
+        _meta = litellm_meta("sql_generation", tenant=workspace_id)
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{api_base}/chat/completions",
                 headers={
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
+                    **_meta["extra_headers"],
                 },
                 json={
                     "model": model,
@@ -238,6 +243,7 @@ Generate the SQL query:"""
                     ],
                     "temperature": temperature,
                     "max_tokens": max_tokens,
+                    "user": _meta["user"],
                 },
             )
             response.raise_for_status()
