@@ -41,6 +41,7 @@ type TableDetail = {
   columns: TableColumn[];
   relationships: TableRelationship[];
   example_queries: { question: string; answer: string; sql: string }[];
+  sampled_values: Record<string, string[]>;
   enriched_at: string;
   generated_at: string;
 };
@@ -790,14 +791,15 @@ export default function SchemaPage() {
                                 </div>
                               </div>
                             ) : (
+                              <>
                               <div className="flex items-start justify-between min-h-[28px]">
                                 <span className={col.description ? "text-gray-700 leading-relaxed" : "text-gray-400 italic"}>
                                   {col.description || "No description"}
                                 </span>
                                 {isAdmin && (
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon" 
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
                                     className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-gray-400 hover:text-blue-600 hover:bg-blue-50 -mt-1 -mr-2"
                                     onClick={() => {
                                       setEditingField({ type: 'column', name: col.name });
@@ -808,6 +810,21 @@ export default function SchemaPage() {
                                   </Button>
                                 )}
                               </div>
+                              {(selectedTable.sampled_values?.[col.name]?.length ?? 0) > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1.5" title="Sampled distinct values">
+                                  {selectedTable.sampled_values[col.name].slice(0, 12).map((v) => (
+                                    <span key={v} className="font-mono text-[11px] bg-purple-50 text-purple-700 border border-purple-100 rounded px-1.5 py-0.5">
+                                      {v}
+                                    </span>
+                                  ))}
+                                  {selectedTable.sampled_values[col.name].length > 12 && (
+                                    <span className="text-[11px] text-gray-400 self-center">
+                                      +{selectedTable.sampled_values[col.name].length - 12}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                              </>
                             )}
                           </td>
                         </tr>
@@ -816,6 +833,37 @@ export default function SchemaPage() {
                   </table>
                 </div>
               </Card>
+
+              {/* Sampled Values Section */}
+              {selectedTable.sampled_values && Object.keys(selectedTable.sampled_values).length > 0 && (
+                <Card className="border-gray-200 shadow-sm">
+                  <CardHeader className="border-b border-gray-100 bg-gray-50/50 pb-4">
+                    <CardTitle className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <Database className="w-5 h-5 text-gray-500" />
+                      Sampled Values
+                      <span className="text-xs font-normal text-gray-400">
+                        ({Object.keys(selectedTable.sampled_values).length} columns)
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-4 space-y-3">
+                    {Object.entries(selectedTable.sampled_values).map(([colName, vals]) => (
+                      <div key={colName} className="flex flex-col sm:flex-row sm:items-start gap-2">
+                        <span className="font-mono text-xs font-semibold text-gray-700 sm:w-48 shrink-0 pt-1">
+                          {colName}
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {vals.map((v) => (
+                            <span key={v} className="font-mono text-[11px] bg-purple-50 text-purple-700 border border-purple-100 rounded px-1.5 py-0.5">
+                              {v}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Relationships Section */}
               <Card className="border-gray-200 shadow-sm">

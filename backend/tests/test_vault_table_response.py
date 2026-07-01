@@ -40,3 +40,40 @@ def test_generated_at_bare_timestamp_is_coerced_and_response_builds(tmp_path):
     resp = VaultTableResponse(**data)
     assert resp.generated_at is not None and resp.generated_at.startswith("2026-07-01")
     assert resp.table_name == "FCT_X"
+
+
+_MD_WITH_ENUM = """---
+table: FCT_Y
+database: oracle
+workspace: stc-kuwait
+description: "Y"
+---
+
+# FCT_Y
+
+## Columns
+
+| Column | Type | Nullable | PK | Description |
+|--------|------|----------|----|-----------—|
+| BS_TYPE | VARCHAR2 | ✓ |  | basic service |
+
+<!-- ARIA:ENUM-VALUES-START -->
+
+## Sampled Values
+*Auto-updated by vault sync. Last sampled: 2026-07-01T00:00:00+00:00*
+
+- **BS_TYPE**: `DATA`, `FIBER`, `VOICE`
+
+<!-- ARIA:ENUM-VALUES-END -->
+"""
+
+
+def test_sampled_values_are_exposed_in_response(tmp_path):
+    f = tmp_path / "fct_y.md"
+    f.write_text(_MD_WITH_ENUM, encoding="utf-8")
+
+    data = _parse_vault_file_for_api(f)
+    assert data["sampled_values"] == {"BS_TYPE": ["DATA", "FIBER", "VOICE"]}
+
+    resp = VaultTableResponse(**data)
+    assert resp.sampled_values["BS_TYPE"] == ["DATA", "FIBER", "VOICE"]

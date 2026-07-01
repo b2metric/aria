@@ -41,6 +41,7 @@ from backend.app.schema_discovery.suggestions import generate_vault_suggestions
 from backend.app.schema_discovery.vault_generator import (
     generate_vault_async,
 )
+from backend.app.services.vault_md import read_enum_block
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +165,9 @@ class VaultTableResponse(BaseModel):
     # though _parse_vault_file_for_api populates them — the bug that hid curated
     # Example Queries from the admin UI.
     example_queries: list[dict[str, Any]] = Field(default_factory=list)
+    # Sampled enum values per column (from the ## Sampled Values block) so the
+    # admin Data Dictionary can display the real value sets.
+    sampled_values: dict[str, list[str]] = Field(default_factory=dict)
     enriched_at: str | None = None
     generated_at: str | None = None
 
@@ -1069,6 +1073,7 @@ def _parse_vault_file_for_api(filepath: Path) -> dict[str, Any]:
         "columns": columns,
         "relationships": relationships,
         "example_queries": parse_example_queries(filepath),
+        "sampled_values": read_enum_block(filepath),
         # YAML parses a bare ISO timestamp (generated_at: 2026-...) as a datetime;
         # VaultTableResponse expects str | None → coerce, or the detail endpoint 500s
         # (surfacing to the browser as a CORS-less "Failed to fetch").
