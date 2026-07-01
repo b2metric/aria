@@ -38,6 +38,17 @@ def _completion(content: str) -> MagicMock:
     return resp
 
 
+def _completion_with_usage(
+    content: str, *, prompt: int, completion: int, cost: float, model: str
+) -> MagicMock:
+    resp = MagicMock()
+    resp.choices = [MagicMock(message=MagicMock(content=content))]
+    resp.usage = MagicMock(prompt_tokens=prompt, completion_tokens=completion)
+    resp.model = model
+    resp._hidden_params = {"response_cost": cost}
+    return resp
+
+
 async def test_empty_resolved_key_falls_back_to_a_usable_key():
     """A ResolvedLLM with an empty api_key must NOT be sent verbatim — the call
     must receive a non-empty key (settings key / placeholder), like the SQL path."""
@@ -76,6 +87,49 @@ async def test_llm_failure_returns_graceful_fallback():
         )
     assert out["summary"] == "Data retrieved successfully."
     assert out["suggestions"] == []
+
+
+async def test_parse_failure_still_returns_usage_for_metering():
+    """Task 16 leak fix: when the LLM call SUCCEEDS but its content isn't valid
+    JSON, the summary falls back — but the tokens/cost the proxy already billed
+    MUST still be returned as ``usage`` so the pipeline meters them (previously
+    the except branch dropped usage entirely → un-metered spend)."""
+    resp = _completion_with_usage(
+        "Here is a prose answer, not JSON at all.",
+        prompt=500,
+        completion=224,
+        cost=0.00712,
+        model="claude-opus-4-5",
+    )
+    with patch(
+        "backend.app.query.llm_insight.litellm.acompletion",
+        new=AsyncMock(return_value=resp),
+    ):
+        out = await generate_insight_and_suggestions(
+            question="q", sql="s", data_rows=[{"x": 1}], llm=_resolved("sk-real")
+        )
+    assert out["summary"] == "Data retrieved successfully."  # fallback summary
+    assert out["suggestions"] == []
+    usage = out.get("usage")
+    assert usage is not None, "parse-failure fallback must still carry usage for metering"
+    assert usage["prompt_tokens"] == 500
+    assert usage["completion_tokens"] == 224
+    assert usage["model"] == "claude-opus-4-5"
+    assert usage["_response_cost"] == "0.00712"
+
+
+async def test_acompletion_error_reports_no_usage():
+    """When the LLM call itself RAISES, there is no response → nothing was billed
+    to meter, so the fallback must NOT fabricate a usage record."""
+    with patch(
+        "backend.app.query.llm_insight.litellm.acompletion",
+        new=AsyncMock(side_effect=RuntimeError("network down")),
+    ):
+        out = await generate_insight_and_suggestions(
+            question="q", sql="s", data_rows=[{"x": 1}], llm=_resolved("sk-real")
+        )
+    assert out["summary"] == "Data retrieved successfully."
+    assert out.get("usage") is None
 
 
 async def test_suggestions_as_list_of_objects_are_normalized():
@@ -139,11 +193,10 @@ async def test_empty_suggestions_with_summary_logs_warning(caplog):
     with patch(
         "backend.app.query.llm_insight.litellm.acompletion",
         new=AsyncMock(return_value=_completion(payload)),
-    ):
-        with caplog.at_level("WARNING", logger="backend.app.query.llm_insight"):
-            out = await generate_insight_and_suggestions(
-                question="q", sql="s", data_rows=[{"x": 1}], llm=_resolved("sk-real")
-            )
+    ), caplog.at_level("WARNING", logger="backend.app.query.llm_insight"):
+        out = await generate_insight_and_suggestions(
+            question="q", sql="s", data_rows=[{"x": 1}], llm=_resolved("sk-real")
+        )
     assert out["summary"] == "A real summary."
     assert out["suggestions"] == []
     assert any("suggestion" in r.message.lower() for r in caplog.records), (

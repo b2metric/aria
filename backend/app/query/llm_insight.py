@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import re
@@ -59,6 +60,20 @@ def _normalize_suggestions(result: dict[str, Any]) -> list[str]:
     return []
 
 
+def _usage_from_response(response: Any) -> dict[str, Any]:
+    """Extract metering usage (tokens + LiteLLM ``response_cost``) from a raw LLM
+    response. Used on BOTH the success and the parse-failure fallback paths so a
+    call the proxy has already billed is metered even when its content wasn't
+    usable JSON (Task 16 leak fix). ``str()`` on the cost so the value survives the
+    pipeline's dict rebuild uniformly with the httpx-header path."""
+    from backend.app.services.llm_cost import extract_cost, extract_usage
+
+    usage = extract_usage(response)
+    _cost = extract_cost(response)
+    usage["_response_cost"] = str(_cost) if _cost is not None else None
+    return usage
+
+
 async def generate_insight_and_suggestions(
     question: str,
     sql: str,
@@ -99,6 +114,7 @@ Result Sample:
 {json.dumps(data_rows, default=str)}
 """
 
+    response = None
     try:
         # Mirror llm_sql.py's credential derivation: a resolved LLM with an EMPTY
         # api_key must still fall back to the platform key / placeholder. Passing
@@ -140,14 +156,19 @@ Result Sample:
                 (content or "")[:500],
             )
 
-        from backend.app.services.llm_cost import extract_cost, extract_usage
-
-        usage = extract_usage(response)
-        # Carry LiteLLM's response_cost forward for metering (Task 13); str() so the value
-        # survives the pipeline's dict rebuild uniformly with the httpx-header path.
-        _cost = extract_cost(response)
-        usage["_response_cost"] = str(_cost) if _cost is not None else None
-        return {"summary": summary, "suggestions": suggestions, "usage": usage}
+        return {
+            "summary": summary,
+            "suggestions": suggestions,
+            "usage": _usage_from_response(response),
+        }
     except Exception as e:
         logger.warning(f"Failed to generate insights: {e}")
-        return {"summary": "Data retrieved successfully.", "suggestions": []}
+        fallback: dict[str, Any] = {"summary": "Data retrieved successfully.", "suggestions": []}
+        # If the LLM call itself SUCCEEDED but parsing/handling failed, still meter
+        # the tokens the proxy already billed (Task 16 leak fix). If acompletion
+        # raised, ``response`` is None → nothing was billed, nothing to meter.
+        if response is not None:
+            # Never let usage extraction break the graceful fallback.
+            with contextlib.suppress(Exception):
+                fallback["usage"] = _usage_from_response(response)
+        return fallback
