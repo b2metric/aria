@@ -196,7 +196,9 @@ def generate_table_markdown(
     if custom_metadata:
         for key, value in custom_metadata.items():
             lines.append(f"{key}: {value}")
-    lines.append(f"generated_at: {datetime.now(UTC).isoformat()}")
+    # Quote the timestamp so YAML reads it back as a string, not a datetime
+    # (a bare ISO timestamp is auto-parsed as datetime, breaking str-typed readers).
+    lines.append(f'generated_at: "{datetime.now(UTC).isoformat()}"')
     lines.append("---")
     lines.append("")
 
@@ -342,7 +344,7 @@ def _generate_index(snapshot: SchemaSnapshot) -> str:
         f"workspace: {snapshot.workspace_id}",
         f"database: {snapshot.db_type}",
         f"table_count: {snapshot.table_count}",
-        f"generated_at: {datetime.now(UTC).isoformat()}",
+        f'generated_at: "{datetime.now(UTC).isoformat()}"',
         "---",
         "",
         f"# {snapshot.workspace_id} Knowledge Base",

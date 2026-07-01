@@ -991,6 +991,16 @@ async def apply_vault_llm(
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+def _fm_str(value: Any) -> str | None:
+    """Coerce a frontmatter value to str|None. YAML parses bare ISO timestamps as
+    datetime objects; string response fields need them stringified."""
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
 def _parse_vault_file_for_api(filepath: Path) -> dict[str, Any]:
     """Parse vault markdown file and return structured data for API."""
     import yaml
@@ -1059,8 +1069,11 @@ def _parse_vault_file_for_api(filepath: Path) -> dict[str, Any]:
         "columns": columns,
         "relationships": relationships,
         "example_queries": parse_example_queries(filepath),
-        "enriched_at": frontmatter.get("enriched_at"),
-        "generated_at": frontmatter.get("generated_at"),
+        # YAML parses a bare ISO timestamp (generated_at: 2026-...) as a datetime;
+        # VaultTableResponse expects str | None → coerce, or the detail endpoint 500s
+        # (surfacing to the browser as a CORS-less "Failed to fetch").
+        "enriched_at": _fm_str(frontmatter.get("enriched_at")),
+        "generated_at": _fm_str(frontmatter.get("generated_at")),
     }
 
 
