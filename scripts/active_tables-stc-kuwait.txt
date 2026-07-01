@@ -1,0 +1,12 @@
+# stc-kuwait active vault tables (mirrors team_vault_policies.allowed_tables).
+# Feed to vault-extract-remote.py via --tables-file. One per line; '#' comments ignored.
+DIM_PREP_PRODUCTS
+DIM_PREP_STATE_SCD2
+FCT_PREP_MASTER
+FCT_PREP_MASTER_HIST
+FCT_PREP_PROVISION
+FCT_PREP_RECHARGE
+FCT_PREP_REV
+FCT_PREP_ROAMING
+FCT_PREP_USAGE
+FCT_PREP_USAGE_BIG
