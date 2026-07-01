@@ -2,12 +2,10 @@
 table: FCT_PREP_PROVISION
 database: oracle
 workspace: stc-kuwait
-keywords: [activation, membership, opt-in, package pickup, paket alımı, prepaid, provision,
-  subscription, üyelik]
-generated_at: '2026-06-16T03:23:43.169377+00:00'
-enriched_at: '2026-06-16T14:59:52.299288+00:00'
-description: Fact table that records package, tariff or service membership (provisioning),
-  activation and cancellation transactions of prepaid subscribers.
+keywords: [account, acquisition, activation, bandwidth, batch, billing, bundle, channel, contract, country, customer, data, date, demographic, etl, financial, geography, income, internet, lifecycle, mobile, money, msisdn, nationality, offer, package, payment, phone number, prepaid, product, provision, revenue, service, snapshot, state, status, subscriber, subscription, tariff, temporal, time, touchpoint, usage]
+description: "Fact table containing transactional/event data for Prep Provision"
+row_count: 118114417
+generated_at: 2026-07-01T22:24:18.304789+00:00
 ---
 
 # FCT_PREP_PROVISION
@@ -15,166 +13,69 @@ description: Fact table that records package, tariff or service membership (prov
 ## Columns
 
 | Column | Type | Nullable | PK | Description |
-|--------|------|----------|----|-------------|
- | EXEC_DATE | DATE | ✓ |  | The date the record was created / the job was run (ETL/batch execution date). | 
- | CONTRNO | VARCHAR2 | ✓ |  | Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later. | 
- | SUBNO | VARCHAR2 | ✓ |  | MSISDN | 
- | APPDATE | DATE | ✓ |  | Line's activation / contract start date (Application Date). | 
- | SUBSCRIBERID | NUMBER | ✓ |  | It is unimportant and should not be used. | 
- | CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Contract category (e.g. Individual, Corporate, VIP). | 
- | NATIONALITY | VARCHAR2 | ✓ |  | Nationality of the customer (short text). | 
- | PREPOST_PAID | VARCHAR2 | ✓ |  | It is unimportant and should not be used. | 
- | BS_TYPE | VARCHAR2 | ✓ |  | Basic service type — e.g. voice, data, M2M. | 
- | PROD_OFFERING_ID | VARCHAR2 | ✓ |  | If more than one product group corresponds to the product in the same concept, but payment plans, quota variations, or product types change (For example, color / GB combinations of IPHONE 16), a single PROD_OFFERING_ID is assigned to it, and different OFFER_IDs are assigned to different products within this product group. | 
- | PRODUCT_OFFER_NAME | VARCHAR2 | ✓ |  | Free text version of the meaningful description of the product. For example; '1TB 30D 6KD Prepaid Bundle' | 
- | PRODUCT_TYPE | VARCHAR2 | ✓ |  | Stores the categorization of product groups such as AddOn, Bundle, Device. | 
- | OFFER_ID | NUMBER | ✓ |  | The unique identifier that the GIS system gives to a unique subscription package. During each provision, telecom product quotas and product features belonging to the provision can be accessed with this ID. | 
- | PR_ID | NUMBER | ✓ |  | Product identifier assigned to a unique product in TechnoTree. With this product identifier, it is possible to access other information (attributes) of the product. If it is a product with renewal, the date it was first started and the date it ended, if it is a device, details such as color and capacity can be accessed in FCT_SUBS_PROVISION, attribute breakdowns for each PR_ID. For example, if there are 10000 products launched by user initiative in the system, there must be 100000 PR_IDs. The only exception is a BUNDLE product where the same product is combined with more than one product. In case of BUNDLE, a PR_ID can be assigned for a group of products (accessory, phone, case), in this case deduplication is done by combining PR_ID and IMEI. | 
- | SERVICETYPE | VARCHAR2 | ✓ |  | It should not be used unnecessarily. | 
- | EQUIPID | VARCHAR2 | ✓ |  | Similar to PROD_OFFERING_ID but with 6-8 characters, the identifier used to identify pre-TechnoTree product lines takes identifiers such as PREBUN52. | 
- | LOGDATE | DATE | ✓ |  | Date/time stamp when the log record was created | 
- | ORDERSTATUS | VARCHAR2 | ✓ |  | Order/transaction status (successful, failed, pending, cancelled, etc.) | 
- | TRIGGERMODE | VARCHAR2 | ✓ |  | How the action is triggered (manual, automatic, campaign, system triggered, etc.) | 
- | SOURCE_FLAG | VARCHAR2 | ✓ |  | The system where Provision comes from. — flag indicating which system/resource generated the transaction. It should not be used unnecessarily. | 
- | BILLCYCLEID | VARCHAR2 | ✓ |  | The billing cycle ID gives the type of cycle in months, in date format. | 
- | CYCLETYPE | VARCHAR2 | ✓ |  | It should not be used unnecessarily. | 
- | CYCLELENGTH | NUMBER | ✓ |  | Cycle length (e.g. 30 days, 7 days) | 
- | ELAPSECYCLES | NUMBER | ✓ |  | Number of completed/past cycles, past cycles for the same product, if it continues to be renewed with the same package for a long time. | 
- | TOTALCYCLES | NUMBER | ✓ |  | It should not be used unnecessarily. | 
- | CYCLEBEGINTIME | DATE | ✓ |  | Start time of the current cycle | 
- | CYCLEENDTIME | DATE | ✓ |  | End time of the current cycle | 
- | INNERCYCLEBEGINTIME | DATE | ✓ |  | It should not be used unnecessarily. | 
- | INNERCYCLEENDTIME | DATE | ✓ |  | It should not be used unnecessarily. | 
- | BILLAMOUNT | NUMBER | ✓ |  | It indicates the amount of KD withdrawn from the user in return for the provision. | 
- | PAYTYPE | VARCHAR2 | ✓ |  | It should not be used unnecessarily. | 
- | PREPAIDBALANCE | NUMBER | ✓ |  | Prepaid balance amount at the time of transaction | 
- | RELIED_ON_PRID | VARCHAR2 | ✓ |  | PR_ID (reference package) of the connected product (Main plan) | 
- | RELIED_SERVICE_START_DATE | DATE | ✓ |  | Start date of the connected service (Main plan) | 
- | RELIED_SERVICE_END_DATE | DATE | ✓ |  | End date of the connected service (Main plan) | 
- | RELIED_EQUIPID | VARCHAR2 | ✓ |  | EQUIPID of the dependent product (Master plan). | 
- | RELIED_PROD_OFFERING_ID | VARCHAR2 | ✓ |  | Product offering ID of the connected product (Main plan) | 
- | RELIED_OFFER_ID | VARCHAR2 | ✓ |  | Offer ID of the connected product (Main plan) | 
- | RELIED_PRODUCT_OFFER_NAME | VARCHAR2 | ✓ |  | Name of the linked product (Main plan) | 
- | RELIED_RENTAL | NUMBER | ✓ |  | It indicates the amount of KD withdrawn from the user in return for the provision of the connected product. | 
- | CDR_PRODUCTSERIAL | VARCHAR2 | ✓ |  | Product serial number in the CDR record — used to match the transaction to the CDR | 
- | CDR_SERIALNO | VARCHAR2 | ✓ |  | CDR serial number — unique tracking number of the usage record | 
- | CHANNEL_NAME | VARCHAR2 | ✓ |  | Channel name where the transaction was made (USSD, IVR, mobile application, web, dealer, call center, etc.) | 
- | ACCOUNTTYPE_REF_COMBINATION | VARCHAR2 | ✓ |  | Account type reference combination — combination of balance/account type groups affected by the package (e.g. main balance, bonus balance, data account limit combinations) | 
- | TRANSACTION_TYPE | VARCHAR2 | ✓ |  | Smart Payment, Dealer USSD, Auto Payment gibi ACCOUNTYPE kurallarından türeyen provizyon tipini gösterir, SMART_PAYMENT | AUTO_PAYMENT gibi | Smart Payment, Dealer USSD, Auto Payment gibi ACCOUNTYPE kurallarından türeyen provizyon tipini gösterir, SMART_PAYMENT | AUTO_PAYMENT gibi | Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | It takes transaction combination values ​​​​​​​separated by , since there can be more than one provision type at the same time. | 
+|--------|------|----------|----|-----------—|
+| EXEC_DATE | DATE | ✓ |  | Kaydın oluşturulduğu / işin çalıştırıldığı tarih (ETL/batch execution date). |
+| CONTRNO | VARCHAR2 | ✓ |  | Sözleşme numarası. Aboneye ait benzersiz sözleşme kimliği. Kullanıcının hayatı boyunca değişmeyen, tekil tanımlayıcı, kullanıcı seneler sonra tekrar bir numara aktifleştirse dahi aynı kimliği tekrar alır. |
+| SUBNO | VARCHAR2 | ✓ |  | MSISDN |
+| APPDATE | DATE | ✓ |  | Hattın aktivasyon / sözleşme başlangıç tarihi (Application Date). |
+| SUBSCRIBERID | VARCHAR2 | ✓ |  | Önemsiz, kullanılmaması gerekir. |
+| CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Sözleşme kategorisi (örn. Bireysel, Kurumsal, VIP). |
+| NATIONALITY | VARCHAR2 | ✓ |  | Müşterinin uyruğu (kısa metin). |
+| PREPOST_PAID | VARCHAR2 | ✓ |  | Önemsiz, kullanılmaması gerekir. |
+| BS_TYPE | VARCHAR2 | ✓ |  | Temel hizmet tipi (Basic Service Type) — örn. ses, veri, M2M. |
+| PROD_OFFERING_ID | VARCHAR2 | ✓ |  | Birden fazla ürün grubu aynı konseptteki ürüne denk geliyor, fakat ödeme planları, kota varyasyonları, veyahut ürün tipleri değişiyorsa (Örneğin IPHONE 16'ının renk / GB kombinasyonları ), buna tek bir PROD_OFFERING_ID atanır, bu ürün grubunun içerisindeki farklı ürünlere farklı OFFER_ID'ler atanır. |
+| PRODUCT_OFFER_NAME | VARCHAR2 | ✓ |  | Ürünün, anlamlı açıklamasının serbest metin hali. Örneğin; '1TB 30D 6KD Prepaid Bundle' |
+| PRODUCT_TYPE | VARCHAR2 | ✓ |  | AddOn, Bundle, Device gibi ürün gruplarının kategorizasyonunu saklar. |
+| OFFER_ID | VARCHAR2 | ✓ |  | CBS sisteminin, tekil bir subscription paketine verdiği tekil tanımlayıcı. Her provision sırasında, provision'a ait telekom ürün kotaları, ürünün özellikleri bu ID ile erişilebilir. |
+| PR_ID | VARCHAR2 | ✓ |  | TechnoTree'de tekil bir ürüne atanan ürün tanımlayıcısı. Bu ürün tanımlayıcısıyla ürünün diğer bilgilerine (attribute) erişmek mümkün. Yenilemeli ürünse, ilk başlatıldığı tarih, ve sona erdiği tarih, cihaz ise renk, kapasite gibi detaylar FCT_SUBS_PROVISION da her PR_ID için attribute kırılımlarına erişilebilir. Örneğin, sistemde kullanıcı insiyatifiyle başlatılan 10000 ürün varsa, 100000 PR_ID bulunmak zorundadır. Tek istisna, aynı ürünün birden çok ürünle kombine edildiği BUNDLE ürün olması durumudur. BUNDLE durumunda, bir PR_ID bir ürün grubu için (aksesuar, telefon, kılıf) atanabilir, bu durumda tekilleştirme PR_ID ve IMEI birleştirerek yapılır. |
+| SERVICETYPE | VARCHAR2 | ✓ |  | Önemsiz kullanılmaması gerekir. |
+| EQUIPID | VARCHAR2 | ✓ |  | PROD_OFFERING_ID'ye benzer fakat 6-8 karakterli, TechnoTree öncesi ürün gruplarının tanımlanmasında kullanılan tanımlayıcı, PREBUN52 gibi tanımlayıcılar alır. |
+| LOGDATE | DATE | ✓ |  | Log kaydının oluşturulduğu tarih/zaman damgası |
+| ORDERSTATUS | VARCHAR2 | ✓ |  | Sipariş/işlem durumu (başarılı, başarısız, beklemede, iptal vb.) |
+| TRIGGERMODE | VARCHAR2 | ✓ |  | İşlemin tetiklenme şekli (manuel, otomatik, kampanya, sistem tetiklemeli vb.) |
+| SOURCE_FLAG | VARCHAR2 | ✓ |  | Provizyon'ın geldiği sistem. — işlemin hangi sistem/kaynak tarafından üretildiğini gösteren işaret. Önemsiz kullanılmaması gerekir. |
+| BILLCYCLEID | DATE | ✓ |  | Faturalama döngüsü ID'si, tarih formatında, döngünün ay cinsinden tipini verir. |
+| CYCLETYPE | VARCHAR2 | ✓ |  | Önemsiz kullanılmaması gerekir. |
+| CYCLELENGTH | VARCHAR2 | ✓ |  | Döngü uzunluğu (örneğin 30 gün, 7 gün) |
+| ELAPSECYCLES | VARCHAR2 | ✓ |  | Tamamlanmış/geçmiş döngü sayısı, aynı ürün için geçmişteki döngüler, eğer aynı paketle uzun süre yenileyerek devam ediyor ise. |
+| TOTALCYCLES | VARCHAR2 | ✓ |  | Önemsiz kullanılmaması gerekir. |
+| CYCLEBEGINTIME | DATE | ✓ |  | Mevcut döngünün başlangıç zamanı |
+| CYCLEENDTIME | DATE | ✓ |  | Mevcut döngünün bitiş zamanı |
+| INNERCYCLEBEGINTIME | DATE | ✓ |  | Önemsiz kullanılmaması gerekir. |
+| INNERCYCLEENDTIME | DATE | ✓ |  | Önemsiz kullanılmaması gerekir. |
+| BILLAMOUNT | NUMBER | ✓ |  | Provision karşılığında kullanıcıdan çekilen KD miktarını belirtir. |
+| PAYTYPE | VARCHAR2 | ✓ |  | Önemsiz kullanılmaması gerekir. |
+| PREPAIDBALANCE | NUMBER | ✓ |  | İşlem anındaki ön ödemeli bakiye tutarı |
+| RELIED_ON_PRID | VARCHAR2 | ✓ |  | Bağlı olunan ürünün (Ana plan) PR_ID'si (referans paket) |
+| RELIED_SERVICE_START_DATE | DATE | ✓ |  | Bağlı olunan servisin (Ana plan) başlangıç tarihi |
+| RELIED_SERVICE_END_DATE | DATE | ✓ |  | Bağlı olunan servisin (Ana plan) bitiş tarihi |
+| RELIED_EQUIPID | VARCHAR2 | ✓ |  | Bağlı olunan ürünün (Ana plan) EQUIPID'si. |
+| RELIED_PROD_OFFERING_ID | VARCHAR2 | ✓ |  | Bağlı olunan ürünün (Ana plan) teklif (product offering) ID'si |
+| RELIED_OFFER_ID | VARCHAR2 | ✓ |  | Bağlı olunan ürünün (Ana plan) offer ID'si |
+| RELIED_PRODUCT_OFFER_NAME | VARCHAR2 | ✓ |  | Bağlı olunan ürünün (Ana plan) adı |
+| RELIED_RENTAL | NUMBER | ✓ |  | Bağlı olunan ürünün provisionu karşılığında kullanıcıdan çekilen KD miktarını belirtir. |
+| CDR_PRODUCTSERIAL | VARCHAR2 | ✓ |  | CDR kaydındaki ürün seri numarası — işlemi CDR ile eşleştirmek için kullanılır |
+| CDR_SERIALNO | VARCHAR2 | ✓ |  | CDR seri numarası — kullanım kaydının benzersiz takip numarası |
+| CHANNEL_NAME | VARCHAR2 | ✓ |  | İşlemin yapıldığı kanal adı (USSD, IVR, mobil uygulama, web, bayi, çağrı merkezi vb.) |
+| ACCOUNTTYPE_REF_COMBINATION | VARCHAR2 | ✓ |  | Hesap tipi referans kombinasyonu — paketin etkilediği bakiye/hesap tipi gruplarının kombinasyonu (örn. ana bakiye, bonus bakiye, data hesabı sınırı kombinasyonları) |
+| TRANSACTION_TYPE | VARCHAR2 | ✓ |  | Smart Payment, Dealer USSD, Auto Payment gibi ACCOUNTYPE kurallarından türeyen provizyon tipini gösterir, SMART_PAYMENT|AUTO_PAYMENT gibi | ile ayrılmış işlem kombinasyonu değerleri alır, aynı anda birden çok provizyon tipi olabildiği için. |
 
-## Keywords
+<!-- ARIA:ENUM-VALUES-START -->
 
-## Business Metadata
+## Sampled Values
+*Auto-updated by vault sync. Last sampled: 2026-07-01T22:24:18.305088+00:00*
 
-**Description:** Fact table that records package, tariff or service membership (provisioning), activation and cancellation transactions of prepaid subscribers.
+- **BS_TYPE**: `DATA`, `VOICE`
+- **CHANNEL_NAME**: `3PP`, `B2BWEB`, `CBS`, `CHATBOT`, `CMS`, `CNLVAS`, `DCLM`, `DCLMBULK`, `DMPOS`, `ESTORAPP`, `ESTORAPPNEW`, `ESTORWEB`, `ESTORWEBNEW`, `IVR`, `MOBAPP`, `SMS`, `SPPOS`, `TABS`, `WEB`
+- **CYCLELENGTH**: `0`, `1`, `10`, `11`, `12`, `14`, `168`, `180`, `2`, `20`, `28`, `3`, `30`, `336`, `360`, `365`, `420`, `45`, `480`, `5`, `60`, `7`, `8`, `84`, `90`
+- **CYCLETYPE**: `-1`, `1`, `2`, `4`, `6`
+- **ORDERSTATUS**: `0`, `1`, `3`
+- **PAYTYPE**: `0`, `2`
+- **PREPOST_PAID**: `POST`, `PREP`
+- **PRODUCT_TYPE**: `5GEnabler`, `Accesory`, `AddOns`, `Bonus`, `Boosters`, `Bundles`, `CLMDiscountOffer`, `Commitment Benefit`, `Device`, `DeviceCare`, `DiscountOffer`, `Enablers`, `Fee`, `FiberAddOns`, `FiberPlan`, `Freebies`, `Gift`, `LoyaltyCatalog`, `MainPlan`, `NoSubsidy Commitment`, `Offer`, `PARTNER`, `Refinance`, `Renewal`, `Roaming Access`, `RoamingBundle`, `RoamingLandingPage`, `VASService`
+- **SERVICETYPE**: `33`
+- **TOTALCYCLES**: `1`, `1000`, `10000`, `4`
+- **TRANSACTION_TYPE**: `AUTO_RENEWAL`, `AUTO_RENEWAL|DEALER`, `AUTO_RENEWAL|DEALER_USSD`, `AUTO_RENEWAL|DEALER_USSD|SMART_PAYMENT`, `AUTO_RENEWAL|DEALER_USSD|USER_USSD`, `AUTO_RENEWAL|DEALER|SMART_PAYMENT`, `AUTO_RENEWAL|SMART_PAYMENT`, `AUTO_RENEWAL|USER`, `AUTO_RENEWAL|USER_USSD`, `DEALER_USSD`, `DEALER_USSD|SMART_PAYMENT`, `DEALER_USSD|SMART_PAYMENT|USER_USSD`, `DEALER|SMART_PAYMENT`, `SMART_PAYMENT`, `SMART_PAYMENT|USER`, `SMART_PAYMENT|USER_USSD`, `USER`
+- **TRIGGERMODE**: `0`, `1`, `2`, `3`, `4`, `7`, `8`, `A`, `D`, `F`
 
-## Domain Mapping
-
-Subscription / provisioning event log. Each row = one subscribe / unsubscribe / renewal event.
-
-| User phrase | Filter |
-|---|---|
-| "subscribed bundles" | `PRODUCT_TYPE = 'Bundles'` — **plural**, NOT `'Bundle'` (verified from live DB) |
-| "add-ons" | `PRODUCT_TYPE = 'AddOns'` |
-| "devices" | `PRODUCT_TYPE = 'Device'` |
-| "top subscribed X" | use `COUNT(DISTINCT SUBNO)` — counts *subscribers* not events |
-
-For period-over-period comparisons of subscriptions, use conditional aggregation in one query.
-
-## Example Queries
-
-### Q: Top 10 subscribed bundles in the last 30 days vs previous 30 days
-
-Counts **unique subscribers** (`COUNT(DISTINCT SUBNO)`) per bundle (`PRODUCT_OFFER_NAME`) for the
-last 30 days against the prior 30 days, plus the `delta` between them. Always filter
-`PRODUCT_TYPE = 'Bundles'` (the live enum is plural — "Bundles", not "Bundle") and use `LOGDATE`
-as the provisioning event date. Count **distinct `SUBNO`**, not rows, so repeated provisioning
-records for the same line don't inflate the totals. A positive `delta` means the bundle gained
-subscribers month-over-month.
-
-```sql
-SELECT
-    PRODUCT_OFFER_NAME,
-    COUNT(DISTINCT CASE
-        WHEN LOGDATE >= TRUNC(SYSDATE) - 30                          THEN SUBNO END) AS last_30d_subs,
-    COUNT(DISTINCT CASE
-        WHEN LOGDATE >= TRUNC(SYSDATE) - 60
-         AND LOGDATE <  TRUNC(SYSDATE) - 30                          THEN SUBNO END) AS prev_30d_subs,
-    COUNT(DISTINCT CASE
-        WHEN LOGDATE >= TRUNC(SYSDATE) - 30                          THEN SUBNO END)
-  - COUNT(DISTINCT CASE
-        WHEN LOGDATE >= TRUNC(SYSDATE) - 60
-         AND LOGDATE <  TRUNC(SYSDATE) - 30                          THEN SUBNO END) AS delta
-FROM FCT_PREP_PROVISION
-WHERE LOGDATE >= TRUNC(SYSDATE) - 60
-  AND PRODUCT_TYPE = 'Bundles'
-GROUP BY PRODUCT_OFFER_NAME
-ORDER BY last_30d_subs DESC
-FETCH FIRST 10 ROWS ONLY
-```
-
-### Q: Daily bundle subscription trend (last 30 days)
-
-Daily count of **distinct subscribers** who provisioned a bundle over the last 30 days — one row
-per day. Use it to spot day-level spikes/dips in bundle uptake. `TRUNC(LOGDATE)` buckets by day,
-`COUNT(DISTINCT SUBNO)` counts unique lines (not provisioning rows), and `PRODUCT_TYPE = 'Bundles'`
-restricts to bundle products.
-
-```sql
-SELECT
-    TRUNC(LOGDATE) AS day,
-    COUNT(DISTINCT SUBNO) AS new_subscribers
-FROM FCT_PREP_PROVISION
-WHERE PRODUCT_TYPE = 'Bundles'
-  AND LOGDATE >= TRUNC(SYSDATE) - 30
-GROUP BY TRUNC(LOGDATE)
-ORDER BY day
-```
-
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **SUBSCRIBERID**: It is unimportant and should not be used.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **PROD_OFFERING_ID**: If more than one product group corresponds to the product in the same concept, but payment plans, quota variations, or product types change (For example, color / GB combinations of IPHONE 16), a single PROD_OFFERING_ID is assigned to it, and different OFFER_IDs are assigned to different products within this product group.
-- **PRODUCT_OFFER_NAME**: Free text version of the meaningful description of the product. For example; '1TB 30D 6KD Prepaid Bundle'
-- **PRODUCT_TYPE**: Stores the categorization of product groups such as AddOn, Bundle, Device.
-- **OFFER_ID**: The unique identifier that the GIS system gives to a unique subscription package. During each provision, telecom product quotas and product features belonging to the provision can be accessed with this ID.
-- **PR_ID**: Product identifier assigned to a unique product in TechnoTree. With this product identifier, it is possible to access other information (attributes) of the product. If it is a product with renewal, the date it was first started and the date it ended, if it is a device, details such as color and capacity can be accessed in FCT_SUBS_PROVISION, attribute breakdowns for each PR_ID. For example, if there are 10000 products launched by user initiative in the system, there must be 100000 PR_IDs. The only exception is a BUNDLE product where the same product is combined with more than one product. In case of BUNDLE, a PR_ID can be assigned for a group of products (accessory, phone, case), in this case deduplication is done by combining PR_ID and IMEI.
-- **SERVICETYPE**: It should not be used unnecessarily.
-- **EQUIPID**: Similar to PROD_OFFERING_ID but with 6-8 characters, the identifier used to identify pre-TechnoTree product lines takes identifiers such as PREBUN52.
-- **LOGDATE**: Date/time stamp when the log record was created
-- **ORDERSTATUS**: Order/transaction status (successful, failed, pending, cancelled, etc.)
-- **TRIGGERMODE**: How the action is triggered (manual, automatic, campaign, system triggered, etc.)
-- **SOURCE_FLAG**: The system where Provision comes from. — flag indicating which system/resource generated the transaction. It should not be used unnecessarily.
-- **BILLCYCLEID**: The billing cycle ID gives the type of cycle in months, in date format.
-- **CYCLETYPE**: It should not be used unnecessarily.
-- **CYCLELENGTH**: Cycle length (e.g. 30 days, 7 days)
-- **ELAPSECYCLES**: Number of completed/past cycles, past cycles for the same product, if it continues to be renewed with the same package for a long time.
-- **TOTALCYCLES**: It should not be used unnecessarily.
-- **CYCLEBEGINTIME**: Start time of the current cycle
-- **CYCLEENDTIME**: End time of the current cycle
-- **INNERCYCLEBEGINTIME**: It should not be used unnecessarily.
-- **INNERCYCLEENDTIME**: It should not be used unnecessarily.
-- **BILLAMOUNT**: It indicates the amount of KD withdrawn from the user in return for the provision.
-- **PAYTYPE**: It should not be used unnecessarily.
-- **PREPAIDBALANCE**: Prepaid balance amount at the time of transaction
-- **RELIED_ON_PRID**: PR_ID (reference package) of the connected product (Main plan)
-- **RELIED_SERVICE_START_DATE**: Start date of the connected service (Main plan)
-- **RELIED_SERVICE_END_DATE**: End date of the connected service (Main plan)
-- **RELIED_EQUIPID**: EQUIPID of the dependent product (Master plan).
-- **RELIED_PROD_OFFERING_ID**: Product offering ID of the connected product (Main plan)
-- **RELIED_OFFER_ID**: Offer ID of the connected product (Main plan)
-- **RELIED_PRODUCT_OFFER_NAME**: Name of the linked product (Main plan)
-- **RELIED_RENTAL**: It indicates the amount of KD withdrawn from the user in return for the provision of the connected product.
-- **CDR_PRODUCTSERIAL**: Product serial number in the CDR record — used to match the transaction to the CDR
-- **CDR_SERIALNO**: CDR serial number — unique tracking number of the usage record
-- **CHANNEL_NAME**: Channel name where the transaction was made (USSD, IVR, mobile application, web, dealer, call center, etc.)
-- **ACCOUNTTYPE_REF_COMBINATION**: Account type reference combination — combination of balance/account type groups affected by the package (e.g. main balance, bonus balance, data account limit combinations)
-- **TRANSACTION_TYPE**: Shows the provision type derived from ACCOUNTYPE rules such as Smart Payment, Dealer USSD, Auto Payment, etc. | It takes transaction combination values ​​​​​​separated by , since there can be more than one provision type at the same time.
+<!-- ARIA:ENUM-VALUES-END -->

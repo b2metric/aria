@@ -2,11 +2,10 @@
 table: FCT_PREP_USAGE
 database: oracle
 workspace: stc-kuwait
-keywords: [data, kullanım, prepaid, sms, traffic, trafik, usage, use, voice]
-generated_at: '2026-06-16T03:23:43.170686+00:00'
-enriched_at: '2026-06-16T14:59:52.305624+00:00'
-description: Fact table that keeps basic data, voice and SMS usage details of prepaid
-  subscribers on the domestic network.
+keywords: [account, acquisition, batch, bundle, channel, contract, country, customer, date, demographic, etl, geography, mobile, msisdn, nationality, offer, package, phone number, prepaid, product, snapshot, subscriber, tariff, temporal, time, touchpoint]
+description: "Fact table containing transactional/event data for Prep Usage"
+row_count: 1709105189
+generated_at: 2026-07-01T22:24:18.307554+00:00
 ---
 
 # FCT_PREP_USAGE
@@ -14,104 +13,37 @@ description: Fact table that keeps basic data, voice and SMS usage details of pr
 ## Columns
 
 | Column | Type | Nullable | PK | Description |
-|--------|------|----------|----|-------------|
- | EXEC_DATE | DATE | ✓ |  | The date the record was created / the job was run (ETL/batch execution date). | 
- | CONTRNO | VARCHAR2 | ✓ |  | Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later. | 
- | SUBNO | VARCHAR2 | ✓ |  | MSISDN | 
- | APPDATE | DATE | ✓ |  | Line's activation / contract start date (Application Date). | 
- | NEXT_APPDATE | DATE | ✓ |  | It is unimportant and should not be used. | 
- | CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Contract category (e.g. Individual, Corporate, VIP). | 
- | NATIONALITY | VARCHAR2 | ✓ |  | Nationality of the customer (short text). | 
- | PREPOST_PAID | VARCHAR2 | ✓ |  | It is unimportant and should not be used. | 
- | PLAN_ID | NUMBER | ✓ |  | Main tariff/plan ID | 
- | TRANSDATE | DATE | ✓ |  | Transaction/usage date (Transaction Date) — The actual usage date to which the KPI value belongs | 
- | CATEGORY | VARCHAR2 | ✓ |  | Usage category (upper level classification such as voice, SMS, data, MMS, VAS, roaming, etc.) | 
- | NETWORK_DIRECTION | VARCHAR2 | ✓ |  | Network direction — classification such as on-net / off-net / international | 
- | OPERATOR_NAME | VARCHAR2 | ✓ |  | Name of the relevant operator — counterparty operator or guest network operator in case of roaming | 
-| NETWORK_TYPE | VARCHAR2 | ✓ |  |  |
- | BILL_TYPE | VARCHAR2 | ✓ |  | Billing type — free, paid | 
- | KPI_TYPE | VARCHAR2 | ✓ |  | Type/group of KPI (e.g. usage_count, usage_duration, usage_volume, revenue, etc.) | 
- | KPI_NAME | VARCHAR2 | ✓ |  | Name of the KPI (e.g. VOICE_ONNET_MIN, SMS_OFFNET_CNT, DATA_LOCAL_MB, ROAMING_VOICE_MIN, VOICE_INTL_MIN, etc.) | 
- | KPI_VALUE | NUMBER | ✓ |  | The value of the KPI — the numerical equivalent of the relevant metric (minutes, units, MB, TL, etc.) | 
+|--------|------|----------|----|-----------—|
+| EXEC_DATE | DATE | ✓ |  | Kaydın oluşturulduğu / işin çalıştırıldığı tarih (ETL/batch execution date). |
+| CONTRNO | VARCHAR2 | ✓ |  | Sözleşme numarası. Aboneye ait benzersiz sözleşme kimliği. Kullanıcının hayatı boyunca değişmeyen, tekil tanımlayıcı, kullanıcı seneler sonra tekrar bir numara aktifleştirse dahi aynı kimliği tekrar alır. |
+| SUBNO | VARCHAR2 | ✓ |  | MSISDN |
+| APPDATE | DATE | ✓ |  | Hattın aktivasyon / sözleşme başlangıç tarihi (Application Date). |
+| NEXT_APPDATE | DATE | ✓ |  | Önemsiz, kullanılmaması gerekir. |
+| CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Sözleşme kategorisi (örn. Bireysel, Kurumsal, VIP). |
+| NATIONALITY | VARCHAR2 | ✓ |  | Müşterinin uyruğu (kısa metin). |
+| PREPOST_PAID | VARCHAR2 | ✓ |  | Önemsiz, kullanılmaması gerekir. |
+| PLAN_ID | VARCHAR2 | ✓ |  | Ana tarife/plan ID'si |
+| TRANSDATE | DATE | ✓ |  | İşlem/kullanım tarihi (Transaction Date) — KPI değerinin ait olduğu gerçek kullanım tarihi |
+| CATEGORY | VARCHAR2 | ✓ |  | Kullanım kategorisi (ses, SMS, data, MMS, VAS, roaming vb. üst seviye sınıflandırma) |
+| NETWORK_DIRECTION | CHAR | ✓ |  | Şebeke yönü — şebeke içi (on-net) / şebeke dışı (off-net) / uluslararası (international) gibi sınıflandırma |
+| OPERATOR_NAME | VARCHAR2 | ✓ |  | İlgili operatörün adı — karşı taraf operatörü ya da roaming durumunda misafir şebeke operatörü |
+| NETWORK_TYPE | VARCHAR2 | ✓ |  | Network Type |
+| BILL_TYPE | CHAR | ✓ |  | Faturalama tipi — ücretsiz, ücretli |
+| KPI_TYPE | VARCHAR2 | ✓ |  | KPI'nın tipi/grubu (ör. usage_count, usage_duration, usage_volume, revenue vb.) |
+| KPI_NAME | VARCHAR2 | ✓ |  | KPI'nın adı (ör. VOICE_ONNET_MIN, SMS_OFFNET_CNT, DATA_LOCAL_MB, ROAMING_VOICE_MIN, VOICE_INTL_MIN vb.) |
+| KPI_VALUE | NUMBER | ✓ |  | KPI'nın değeri — ilgili metriğin sayısal karşılığı (dakika, adet, MB, TL vb.) |
 
-## Keywords
+<!-- ARIA:ENUM-VALUES-START -->
 
-## Business Metadata
+## Sampled Values
+*Auto-updated by vault sync. Last sampled: 2026-07-01T22:24:18.307644+00:00*
 
-**Description:** Fact table that keeps basic data, voice and SMS usage details of prepaid subscribers on the domestic network.
+- **BILL_TYPE**: `FREE`, `PAID`
+- **CATEGORY**: `DATA`, `SMS`, `VOICE`
+- **KPI_TYPE**: `COUNT`, `MOU`, `REV`, `USAGE_MB`
+- **NETWORK_DIRECTION**: `INCOMING`, `OUTGOING`
+- **NETWORK_TYPE**: `INTERNATIONAL`, `OF-NET`, `ON-NET`
+- **OPERATOR_NAME**: `PSTN`, `WATANIYA`, `ZAIN`
+- **PREPOST_PAID**: `POST`, `PREP`
 
-## Domain Mapping
-
-Generic KPI fact — every measurable usage metric lives here, identified by `KPI_TYPE` + `KPI_NAME`.
-
-| User phrase | Filter |
-|---|---|
-| "volume" (usage) | `KPI_TYPE = 'usage_volume'` |
-| "duration / minutes" | `KPI_TYPE = 'usage_duration'` |
-| "count / transactions" | `KPI_TYPE = 'usage_count'` (NOT `COUNT(*)`) |
-| "revenue" (KPI-recorded) | `KPI_TYPE = 'revenue'` — but for topup revenue prefer `FCT_PREP_RECHARGE` |
-| "data / MB / GB" | `KPI_NAME LIKE '%DATA%'` |
-| "voice minutes" | `KPI_NAME LIKE '%VOICE%MIN%'` |
-| "SMS count" | `KPI_NAME LIKE '%SMS%CNT%'` |
-| "roaming" | check `FCT_PREP_ROAMING` instead for richer breakdown |
-
-`KPI_VALUE` semantics depend on `KPI_NAME` (MB, minutes, count, TL). Don't sum across KPI_NAMEs of different units.
-
-## Example Queries
-
-### Q: Top 10 customers by total usage volume (last 30 days)
-
-Ranks customers by total usage over 30 days. Usage is stored long/EAV-style: each row is one KPI,
-so filter `KPI_TYPE = 'usage_volume'` and sum `KPI_VALUE` (the metric value), grouped by `CONTRNO`.
-`LOGDATE` is the event date. Always pin the KPI filter — without it you sum unrelated metrics.
-
-```sql
-SELECT
-    CONTRNO,
-    SUM(KPI_VALUE) AS total_volume
-FROM FCT_PREP_USAGE
-WHERE KPI_TYPE = 'usage_volume'
-  AND LOGDATE >= TRUNC(SYSDATE) - 30
-GROUP BY CONTRNO
-ORDER BY total_volume DESC
-FETCH FIRST 10 ROWS ONLY
-```
-
-### Q: Data usage by region — monthly trend
-
-Monthly **data** usage by region. Pick data KPIs with `KPI_NAME LIKE '%DATA%'`, sum `KPI_VALUE`,
-bucket by `TRUNC(LOGDATE,'MM')`, and JOIN `FCT_PREP_MASTER` on `CONTRNO` for `REGION`. Use
-`KPI_NAME` (the readable metric name) for the data filter; `KPI_VALUE` carries the MB/volume.
-
-```sql
-SELECT
-    TRUNC(u.LOGDATE, 'MM')   AS month,
-    m.REGION,
-    SUM(u.KPI_VALUE)         AS total_data_mb
-FROM FCT_PREP_USAGE u
-JOIN FCT_PREP_MASTER m ON u.CONTRNO = m.CONTRNO
-WHERE u.KPI_NAME LIKE '%DATA%'
-  AND u.LOGDATE >= ADD_MONTHS(TRUNC(SYSDATE, 'MM'), -6)
-GROUP BY TRUNC(u.LOGDATE, 'MM'), m.REGION
-ORDER BY month, m.REGION
-```
-
-## Column Descriptions
-
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **NEXT_APPDATE**: It is unimportant and should not be used.
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **PLAN_ID**: Main tariff/plan ID
-- **TRANSDATE**: Transaction/usage date (Transaction Date) — The actual usage date to which the KPI value belongs
-- **CATEGORY**: Usage category (upper level classification such as voice, SMS, data, MMS, VAS, roaming, etc.)
-- **NETWORK_DIRECTION**: Network direction — classification such as on-net / off-net / international
-- **OPERATOR_NAME**: Name of the relevant operator — counterparty operator or guest network operator in case of roaming
-- **BILL_TYPE**: Billing type — free, paid
-- **KPI_TYPE**: Type/group of KPI (e.g. usage_count, usage_duration, usage_volume, revenue, etc.)
-- **KPI_NAME**: Name of the KPI (e.g. VOICE_ONNET_MIN, SMS_OFFNET_CNT, DATA_LOCAL_MB, ROAMING_VOICE_MIN, VOICE_INTL_MIN, etc.)
-- **KPI_VALUE**: The value of the KPI — the numerical equivalent of the relevant metric (minutes, units, MB, TL, etc.)
+<!-- ARIA:ENUM-VALUES-END -->

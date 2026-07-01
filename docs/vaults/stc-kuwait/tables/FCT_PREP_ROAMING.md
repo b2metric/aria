@@ -2,12 +2,10 @@
 table: FCT_PREP_ROAMING
 database: oracle
 workspace: stc-kuwait
-keywords: [abroad, circulation, dolaşım, international, prepaid, roaming, travel,
-  yurtdışı]
-generated_at: '2026-06-16T03:23:43.170285+00:00'
-enriched_at: '2026-06-28T03:12:44.797467+00:00'
-description: Fact table that keeps data, voice and SMS usage details of prepaid subscribers
-  in roaming networks.
+keywords: [account, acquisition, activation, bandwidth, batch, billing, bundle, call, channel, contract, country, customer, data, date, demographic, etl, financial, geography, income, international, internet, lifecycle, minutes, mobile, money, msisdn, nationality, offer, package, payment, phone number, prepaid, product, provision, revenue, roaming, service, snapshot, state, status, subscriber, subscription, tariff, temporal, time, touchpoint, travel, usage, voice]
+description: "Fact table containing transactional/event data for Prep Roaming"
+row_count: 41133228
+generated_at: 2026-07-01T22:24:18.306923+00:00
 ---
 
 # FCT_PREP_ROAMING
@@ -15,78 +13,71 @@ description: Fact table that keeps data, voice and SMS usage details of prepaid 
 ## Columns
 
 | Column | Type | Nullable | PK | Description |
-|--------|------|----------|----|-------------|
- | EXEC_DATE | DATE | ✓ |  | The date the record was created / the job was run (ETL/batch execution date). | 
- | CONTRNO | VARCHAR2 | ✓ |  | Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later. | 
- | SUBNO | VARCHAR2 | ✓ |  | MSISDN | 
- | APPDATE | DATE | ✓ |  | Line's activation / contract start date (Application Date). | 
- | CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Contract category (e.g. Individual, Corporate, VIP). | 
- | NATIONALITY | VARCHAR2 | ✓ |  | Nationality of the customer (short text). | 
- | PREPOST_PAID | VARCHAR2 | ✓ |  | It is unimportant and should not be used. | 
- | BS_TYPE | VARCHAR2 | ✓ |  | Basic service type — e.g. voice, data, M2M. | 
- | TRANSDATE | DATE | ✓ |  | Transaction/usage date (Transaction Date) — The actual usage date to which the KPI value belongs | 
- | IMEI | VARCHAR2 | ✓ |  | International Mobile Equipment Identity. | 
- | CALLTYPE | VARCHAR2 | ✓ |  | Type of call (e.g., voice, data). | 
- | CDR_CATEGORY | VARCHAR2 | ✓ |  | CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.) | 
-| CHARGETYPE | VARCHAR2 | ✓ |  |  |
-| INTL_FLAG | VARCHAR2 | ✓ |  |  |
-| USED_NETWORK | VARCHAR2 | ✓ |  |  |
- | OFFER_ID | NUMBER | ✓ |  | Offer/campaign ID under which the transaction is applied | 
- | RENTAL_TYPE | NUMBER | ✓ |  | Type of rental service. | 
-| CALLEDHOMECODE | VARCHAR2 | ✓ |  |  |
-| CALLEDROAMCODE | VARCHAR2 | ✓ |  |  |
-| CALLEDROAMHOMECODE | VARCHAR2 | ✓ |  |  |
-| CALLINGHOMECODE | VARCHAR2 | ✓ |  |  |
-| CALLINGROAMCODE | VARCHAR2 | ✓ |  |  |
-| CALLINGROAMHOMECODE | VARCHAR2 | ✓ |  |  |
-| CALLINGCELLID | VARCHAR2 | ✓ |  |  |
-| CALLEDCELLID | VARCHAR2 | ✓ |  |  |
-| TARIFFCLASS | VARCHAR2 | ✓ |  |  |
-| TARIFF_GROUP | VARCHAR2 | ✓ |  |  |
-| BILLTEXT | VARCHAR2 | ✓ |  |  |
- | BILLAMOUNT | NUMBER | ✓ |  | Net amount invoiced | 
-| GROSS_AMOUNT | NUMBER | ✓ |  |  |
- | CHARGEDURATION | VARCHAR2 | ✓ |  | Time used, quantity or MB | 
-| CALLDURATION | VARCHAR2 | ✓ |  |  |
-| CDR_SERIALNO | VARCHAR2 | ✓ |  |  |
-| CDR_SERIALNO_HASH | VARCHAR2 | ✓ |  |  |
- | OPERATOR | VARCHAR2 | ✓ |  | Name of the guest operator (the network to which the subscriber is connected while roaming) | 
- | COUNTRY | VARCHAR2 | ✓ |  | Name of guest country — roaming country | 
- | OPERATOR_CODE | VARCHAR2 | ✓ |  | Guest operator's code (usually MCC+MNC or internal reference code) | 
-| CALLINGROAMINFO | VARCHAR2 | ✓ |  |  |
-| CALLINGROAMDECIMALINFO | VARCHAR2 | ✓ |  |  |
-| CALLEDROAMINFO | VARCHAR2 | ✓ |  |  |
-| USAGESERVICETYPE | VARCHAR2 | ✓ |  |  |
-| DWH_UPDATE_DATE | DATE | ✓ |  |  |
-| CALLINGROAMCOUNTRYCODE | VARCHAR2 | ✓ |  |  |
-| CALLINGROAMAREANUMBER | VARCHAR2 | ✓ |  |  |
-| CALLINGROAMNETWORKCODE | VARCHAR2 | ✓ |  |  |
-| LAST_ROAM_SIGNAL_COUNTRY | VARCHAR2 | ✓ |  |  |
-| LAST_ROAM_SIGNAL_DT | DATE | ✓ |  |  |
+|--------|------|----------|----|-----------—|
+| EXEC_DATE | DATE | ✓ |  | Kaydın oluşturulduğu / işin çalıştırıldığı tarih (ETL/batch execution date). |
+| CONTRNO | VARCHAR2 | ✓ |  | Sözleşme numarası. Aboneye ait benzersiz sözleşme kimliği. Kullanıcının hayatı boyunca değişmeyen, tekil tanımlayıcı, kullanıcı seneler sonra tekrar bir numara aktifleştirse dahi aynı kimliği tekrar alır. |
+| SUBNO | VARCHAR2 | ✓ |  | MSISDN |
+| APPDATE | DATE | ✓ |  | Hattın aktivasyon / sözleşme başlangıç tarihi (Application Date). |
+| CONTRACT_CATEGORY | VARCHAR2 | ✓ |  | Sözleşme kategorisi (örn. Bireysel, Kurumsal, VIP). |
+| NATIONALITY | VARCHAR2 | ✓ |  | Müşterinin uyruğu (kısa metin). |
+| PREPOST_PAID | VARCHAR2 | ✓ |  | Önemsiz, kullanılmaması gerekir. |
+| BS_TYPE | VARCHAR2 | ✓ |  | Temel hizmet tipi (Basic Service Type) — örn. ses, veri, M2M. |
+| TRANSDATE | DATE | ✗ |  | İşlem/kullanım tarihi (Transaction Date) — KPI değerinin ait olduğu gerçek kullanım tarihi |
+| IMEI | VARCHAR2 | ✓ |  | Imei |
+| CALLTYPE | VARCHAR2 | ✓ |  | Calltype |
+| CDR_CATEGORY | VARCHAR2 | ✓ |  | CDR (Call Detail Record) tipi — kaydın hangi servis tipinden geldiğini gösterir (ses, SMS, data, MMS, VAS, roaming vb.) |
+| CHARGETYPE | VARCHAR2 | ✓ |  | Chargetype |
+| INTL_FLAG | CHAR | ✓ |  | Intl Flag |
+| USED_NETWORK | CHAR | ✓ |  | Used Network |
+| OFFER_ID | VARCHAR2 | ✓ |  | İşlemin altında uygulandığı teklif/kampanya ID'si |
+| RENTAL_TYPE | CHAR | ✓ |  | Rental Type |
+| CALLEDHOMECODE | VARCHAR2 | ✓ |  | Calledhomecode |
+| CALLEDROAMCODE | VARCHAR2 | ✓ |  | Calledroamcode |
+| CALLEDROAMHOMECODE | VARCHAR2 | ✓ |  | Calledroamhomecode |
+| CALLINGHOMECODE | VARCHAR2 | ✓ |  | Callinghomecode |
+| CALLINGROAMCODE | VARCHAR2 | ✓ |  | Callingroamcode |
+| CALLINGROAMHOMECODE | VARCHAR2 | ✓ |  | Callingroamhomecode |
+| CALLINGCELLID | VARCHAR2 | ✓ |  | Callingcellid |
+| CALLEDCELLID | VARCHAR2 | ✓ |  | Calledcellid |
+| TARIFFCLASS | VARCHAR2 | ✓ |  | Tariffclass |
+| TARIFF_GROUP | VARCHAR2 | ✓ |  | Tariff Group |
+| BILLTEXT | VARCHAR2 | ✓ |  | Billtext |
+| BILLAMOUNT | NUMBER | ✓ |  | Faturalanan net tutar |
+| GROSS_AMOUNT | NUMBER | ✓ |  | Gross Amount |
+| CHARGEDURATION | NUMBER | ✓ |  | Kullanılan süre, adet veyahut MB |
+| CALLDURATION | NUMBER | ✓ |  | Callduration |
+| CDR_SERIALNO | VARCHAR2 | ✓ |  | Cdr Serialno |
+| CDR_SERIALNO_HASH | NUMBER | ✓ |  | Cdr Serialno Hash |
+| OPERATOR | VARCHAR2 | ✓ |  | Misafir operatörün adı (abonenin roaming sırasında bağlandığı şebeke) |
+| COUNTRY | VARCHAR2 | ✓ |  | Misafir ülkenin adı — roaming yapılan ülke |
+| OPERATOR_CODE | VARCHAR2 | ✓ |  | Misafir operatörün kodu (genellikle MCC+MNC veya iç referans kodu) |
+| CALLINGROAMINFO | VARCHAR2 | ✓ |  | Callingroaminfo |
+| CALLINGROAMDECIMALINFO | NUMBER | ✓ |  | Callingroamdecimalinfo |
+| CALLEDROAMINFO | VARCHAR2 | ✓ |  | Calledroaminfo |
+| USAGESERVICETYPE | VARCHAR2 | ✓ |  | Usageservicetype |
+| DWH_UPDATE_DATE | DATE | ✓ |  | Dwh Update Date |
+| CALLINGROAMCOUNTRYCODE | VARCHAR2 | ✓ |  | Callingroamcountrycode |
+| CALLINGROAMAREANUMBER | VARCHAR2 | ✓ |  | Callingroamareanumber |
+| CALLINGROAMNETWORKCODE | VARCHAR2 | ✓ |  | Callingroamnetworkcode |
+| LAST_ROAM_SIGNAL_COUNTRY | VARCHAR2 | ✓ |  | Last Roam Signal Country |
+| LAST_ROAM_SIGNAL_DT | DATE | ✓ |  | Date/timestamp field |
 
-## Keywords
+<!-- ARIA:ENUM-VALUES-START -->
 
-## Business Metadata
+## Sampled Values
+*Auto-updated by vault sync. Last sampled: 2026-07-01T22:24:18.307222+00:00*
 
-## Column Descriptions
+- **BS_TYPE**: `DATA`, `VOICE`
+- **CALLINGHOMECODE**: `-1`, `1`, `2`, `3`, `4`, `6`, `871`, `8711`, `8716`, `872`, `873`, `874`, `8819`, `966123`, `973123`
+- **CALLINGROAMAREANUMBER**: `-1`, `0`, `1`, `1003`, `1006`, `1007`, `60`
+- **CALLINGROAMNETWORKCODE**: `-1`, `0`, `1`, `1001`, `1002`, `1003`, `1200`, `2`, `3`, `3901`, `4`, `6`, `871`, `8711`, `8716`, `873`, `874`, `8819`, `96201`, `966123`, `96650`, `96802`, `97101`, `97102`, `973123`, `973338`, `97401`, `97402`, `9999`
+- **CALLTYPE**: `GPRS`, `MOBILE ORIGINATING SMS`, `MOC - Mobile Originating Call`, `MTC - Mobile Terminating Call`
+- **CDR_CATEGORY**: `GPRS`, `IVR`, `SMS`, `VOICE`
+- **CHARGETYPE**: `ROAM CALL`, `ROAM GPRS`, `ROAM SMS`
+- **INTL_FLAG**: `N`
+- **PREPOST_PAID**: `POST`, `PREP`
+- **RENTAL_TYPE**: `PAYG`
+- **USAGESERVICETYPE**: `1120`, `1121`, `1122`, `1123`, `1124`, `1141`, `1142`, `1143`, `1145`, `1321`, `1410`
+- **USED_NETWORK**: `OFN`, `ONN`
 
-- **EXEC_DATE**: The date the record was created / the job was run (ETL/batch execution date).
-- **CONTRNO**: Contract number. Unique contract ID of the subscriber. The unique identifier, which does not change throughout the user's life, receives the same ID again even if the user reactivates a number years later.
-- **SUBNO**: MSISDN
-- **APPDATE**: Line's activation / contract start date (Application Date).
-- **CONTRACT_CATEGORY**: Contract category (e.g. Individual, Corporate, VIP).
-- **NATIONALITY**: Nationality of the customer (short text).
-- **PREPOST_PAID**: It is unimportant and should not be used.
-- **BS_TYPE**: Basic service type — e.g. voice, data, M2M.
-- **TRANSDATE**: Transaction/usage date (Transaction Date) — The actual usage date to which the KPI value belongs
-- **CDR_CATEGORY**: CDR (Call Detail Record) type — indicates which service type the record comes from (voice, SMS, data, MMS, VAS, roaming, etc.)
-- **OFFER_ID**: Offer/campaign ID under which the transaction is applied
-- **BILLAMOUNT**: Net amount invoiced
-- **CHARGEDURATION**: Time used, quantity or MB
-- **OPERATOR**: Name of the guest operator (the network to which the subscriber is connected while roaming)
-- **COUNTRY**: Name of guest country — roaming country
-- **OPERATOR_CODE**: Guest operator's code (usually MCC+MNC or internal reference code)
-
-## Relationships
-
-- `CONTRNO` → `FCT_PREP_MASTER.CONTRNO` (foreign_key)
+<!-- ARIA:ENUM-VALUES-END -->
