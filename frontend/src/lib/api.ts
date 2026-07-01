@@ -489,3 +489,58 @@ export async function deleteSavedQuery(id: string, tokenOverride?: string): Prom
     throw new Error(`Failed to delete saved query: ${res.status}`);
   }
 }
+
+// ── Massive-export (Phase 4: inline chat delivery) ──────────────────────────
+
+export interface ExportStatus {
+  id: string;
+  status: "queued" | "running" | "success" | "error";
+  row_count: number | null;
+  truncated: boolean;
+  total_estimate: number | null;
+  error: string | null;
+  download_ready: boolean;
+}
+
+/**
+ * Poll the status of a background CSV export job created by the backend's
+ * `export` SSE event. Mirrors {@link getRunStatus}'s auth/credentials shape.
+ */
+export async function getExportStatus(
+  jobId: string,
+  tokenOverride?: string,
+): Promise<ExportStatus | null> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/exports/${jobId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/**
+ * Fetch the CSV with auth and trigger a browser download. A plain `<a href>`
+ * can't be used here because the download endpoint requires Bearer auth.
+ */
+export async function downloadExport(
+  jobId: string,
+  filename: string,
+  tokenOverride?: string,
+): Promise<void> {
+  const token = tokenOverride || getAuthToken();
+  const res = await fetch(`${API_BASE}/api/exports/${jobId}/download`, {
+    headers: { Authorization: `Bearer ${token}` },
+    credentials: "omit",
+  });
+  if (!res.ok) throw new Error(`Download failed (${res.status})`);
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}

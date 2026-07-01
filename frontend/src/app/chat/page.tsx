@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions, saveQuery, deleteSavedQuery } from "@/lib/api";
+import { streamQuery, streamResume, getRunStatus, fetchConversations, fetchConversation, deleteConversation, fetchWorkspaceSuggestions, saveQuery, deleteSavedQuery, getExportStatus, downloadExport } from "@/lib/api";
 import type { ChatMessage, ChartSpec, ChartConfig, ChartDataPoint, FilterState } from "@/lib/types";
 import ChartArea from "@/components/ChartArea";
 import { useSession, signIn } from "next-auth/react";
@@ -209,6 +209,39 @@ function ChatPageContent() {
     inputRef.current?.focus();
   }, []);
 
+  // Poll a background CSV export job (created by the `export` SSE event) until
+  // it reaches a terminal state, updating the owning message each tick so the
+  // UI can flip from "preparing" to a Download button (or an error).
+  const pollExportJob = useCallback((jobId: string, msgId: string) => {
+    let attempts = 0;
+    const tick = async () => {
+      attempts += 1;
+      const st = await getExportStatus(jobId);
+      if (!st) {
+        if (attempts < 90) setTimeout(tick, 2000);
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId
+            ? {
+                ...m,
+                exportStatus: st.status,
+                exportRowCount: st.row_count,
+                exportTruncated: st.truncated,
+                exportDownloadReady: st.download_ready,
+                error: st.status === "error" ? (st.error || "Export failed") : m.error,
+              }
+            : m,
+        ),
+      );
+      if (st.status !== "success" && st.status !== "error" && attempts < 90) {
+        setTimeout(tick, 2000);
+      }
+    };
+    setTimeout(tick, 1500);
+  }, []);
+
   // Consume an SSE reader, applying events to the assistant message `targetId`.
   // Shared by the live POST path and the resume-on-load path. Declared before the
   // load effect so that effect can list it as a dependency without a const TDZ.
@@ -310,6 +343,26 @@ function ChatPageContent() {
                 break;
               }
 
+              case "export": {
+                const jobId = payload.export_job_id as string;
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === targetId
+                      ? {
+                          ...m,
+                          content: payload.message || "Preparing a CSV export…",
+                          status: "complete",
+                          exportJobId: jobId,
+                          exportStatus: "queued",
+                        }
+                      : m,
+                  ),
+                );
+                setIsStreaming(false);
+                pollExportJob(jobId, targetId);
+                break;
+              }
+
               case "error": {
                 setError(payload.error);
                 setMessages((prev) =>
@@ -351,7 +404,7 @@ function ChatPageContent() {
         }
       }
     },
-    [router],
+    [router, pollExportJob],
   );
 
   // Load specific conversation if cid changes
@@ -859,6 +912,44 @@ function ChatPageContent() {
                         <span className="leading-snug">{suggestion}</span>
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {/* CSV export (massive-export Phase 4): preparing → download button */}
+                {msg.exportJobId && (
+                  <div className="mt-2 flex flex-col gap-2">
+                    {msg.exportStatus === "success" && msg.exportDownloadReady ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          downloadExport(
+                            msg.exportJobId!,
+                            `export_${msg.exportJobId}.csv`,
+                            token,
+                          ).catch(() => {
+                            setError("Could not download the export. Please try again.");
+                          })
+                        }
+                        className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100 hover:text-blue-700 text-xs font-medium transition-colors"
+                      >
+                        <span>⬇</span>
+                        <span>
+                          Download CSV
+                          {typeof msg.exportRowCount === "number"
+                            ? ` (${msg.exportRowCount.toLocaleString()} rows${msg.exportTruncated ? ", truncated" : ""})`
+                            : ""}
+                        </span>
+                      </button>
+                    ) : msg.exportStatus === "error" ? (
+                      <span className="text-xs text-red-700">
+                        Export failed. Try narrowing the query.
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 inline-flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+                        Preparing CSV export… (this can take a moment for very large results)
+                      </span>
+                    )}
                   </div>
                 )}
 

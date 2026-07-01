@@ -79,6 +79,11 @@ export interface ChatMessage {
   suggestions?: string[];
   status?: "streaming" | "complete" | "error";
   error?: string;
+  exportJobId?: string;
+  exportStatus?: "queued" | "running" | "success" | "error";
+  exportRowCount?: number | null;
+  exportTruncated?: boolean;
+  exportDownloadReady?: boolean;
 }
 
 export interface ChartSpec {
