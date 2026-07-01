@@ -193,11 +193,12 @@ async def test_workspace_stats_include_cost_today(monkeypatch):
 
     customer_id = uuid.uuid4()
     per_user_session = _FakeSession(customer_row=None, scalar_returns=[])
-    # Workspace scalar order: ws_total, ws_today, ws_tokens_today, ws_cost_today,
-    # ws_active_users, then 7 trend-day counts.
+    # Workspace scalar order (Task 18): ws_total, ws_today, ws_tokens_priced,
+    # ws_tokens_unpriced, ws_cost_today, ws_active_users, then 7 trend-day counts.
+    # Tokens Today is now priced+unpriced (all of today's, incl. unpriced).
     workspace_session = _FakeSession(
         customer_row=(customer_id,),
-        scalar_returns=[7, 0, 12884, Decimal("0.0330"), 0, 0, 0, 0, 0, 0, 0, 0],
+        scalar_returns=[7, 0, 12884, 0, Decimal("0.0330"), 0, 0, 0, 0, 0, 0, 0, 0],
     )
     monkeypatch.setattr(
         dashboard,
@@ -217,6 +218,52 @@ async def test_workspace_stats_include_cost_today(monkeypatch):
     ws_stats = {s["label"]: s["value"] for s in body["workspaceStats"]}
     assert ws_stats["Tokens Today"] == "12,884"
     assert ws_stats["Cost Today (USD)"] == "$0.0330"
+
+
+# ── Task 18: priced vs unpriced token split ──────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_workspace_tokens_today_splits_priced_unpriced(monkeypatch):
+    """The workspace "Tokens Today" is the sum of priced + unpriced tokens for
+    today (from ``token_usage_events``), and the response exposes a ``tokenSplit``
+    breakdown so the dashboard can show the priced-vs-unpriced share. Unpriced =
+    self-hosted / $0-cost calls (incl. system ops), which are counted even though
+    they cost nothing."""
+    from decimal import Decimal
+
+    from backend.app.api import dashboard
+
+    customer_id = uuid.uuid4()
+    per_user_session = _FakeSession(customer_row=None, scalar_returns=[])
+    # ws order: ws_total, ws_today, ws_tokens_priced, ws_tokens_unpriced,
+    # ws_cost_today, ws_active_users, then 7 trend-day counts.
+    workspace_session = _FakeSession(
+        customer_row=(customer_id,),
+        scalar_returns=[7, 0, 10000, 2500, Decimal("0.0330"), 0, 0, 0, 0, 0, 0, 0, 0],
+    )
+    monkeypatch.setattr(
+        dashboard,
+        "get_sessionmaker",
+        lambda: _sessionmaker_returning(per_user_session, workspace_session),
+    )
+
+    async def _no_saved(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr("backend.app.query.saved_queries.list_saved_queries", _no_saved)
+
+    body = await dashboard.get_user_dashboard(
+        workspace_id="acme", current_user=_non_uuid_user()
+    )
+
+    ws_stats = {s["label"]: s["value"] for s in body["workspaceStats"]}
+    assert ws_stats["Tokens Today"] == "12,500"  # 10000 priced + 2500 unpriced
+
+    split = body["tokenSplit"]
+    assert split["priced"] == 10000
+    assert split["unpriced"] == 2500
+    assert split["total"] == 12500
 
 
 # ── Task 2: _coerce_user_uuid ────────────────────────────────────────────────

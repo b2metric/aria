@@ -37,17 +37,21 @@ def _get_redis() -> Redis:
 def _with_token_totals(
     summaries: list[dict], totals: dict[str, dict]
 ) -> list[dict]:
-    """Attach cumulative ``total_tokens`` + ``cost_usd`` to each conversation summary.
+    """Attach cumulative ``total_tokens`` + ``cost_usd`` + ``unpriced_tokens`` to each
+    conversation summary.
 
-    ``totals`` maps ``conversation_id`` → ``{"tokens": int, "cost": float}`` (summed from
-    ``token_usage_events``). A conversation with no LLM events yet gets zeros, never a
-    missing key, so the admin table can always render the columns.
+    ``totals`` maps ``conversation_id`` → ``{"tokens": int, "cost": float, "unpriced": int}``
+    (summed from ``token_usage_events``; ``unpriced`` is the self-hosted / $0-cost token
+    share). A conversation with no LLM events yet — or an entry missing the ``unpriced``
+    split — gets zeros, never a missing key, so the admin table can always render the
+    columns.
     """
     return [
         {
             **s,
             "total_tokens": int(totals.get(s["id"], {}).get("tokens", 0) or 0),
             "cost_usd": float(totals.get(s["id"], {}).get("cost", 0) or 0),
+            "unpriced_tokens": int(totals.get(s["id"], {}).get("unpriced", 0) or 0),
         }
         for s in summaries
     ]
@@ -78,6 +82,7 @@ async def _conversation_token_totals(
             result = await session.execute(
                 select(
                     TokenUsageEvent.conversation_id,
+                    TokenUsageEvent.priced,
                     func.sum(TokenUsageEvent.total_tokens),
                     func.sum(TokenUsageEvent.cost_usd),
                 )
@@ -85,12 +90,17 @@ async def _conversation_token_totals(
                     TokenUsageEvent.customer_id == customer_id,
                     TokenUsageEvent.conversation_id.in_(conversation_ids),
                 )
-                .group_by(TokenUsageEvent.conversation_id)
+                .group_by(TokenUsageEvent.conversation_id, TokenUsageEvent.priced)
             )
-            return {
-                cid: {"tokens": int(tokens or 0), "cost": float(cost or 0)}
-                for cid, tokens, cost in result.all()
-            }
+            totals: dict[str, dict] = {}
+            for cid, is_priced, tokens, cost in result.all():
+                tokens = int(tokens or 0)
+                entry = totals.setdefault(cid, {"tokens": 0, "cost": 0.0, "unpriced": 0})
+                entry["tokens"] += tokens
+                entry["cost"] += float(cost or 0)  # priced rows carry the cost
+                if not is_priced:
+                    entry["unpriced"] += tokens
+            return totals
     except Exception as exc:  # noqa: BLE001 — totals are advisory, never break the list
         log.warning("Conversation token-total aggregation failed: %s", exc)
         return {}

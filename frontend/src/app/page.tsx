@@ -210,6 +210,20 @@ export default function DashboardPage() {
               <StatCard key={stat.label} data={stat} />
             ))}
           </div>
+          {data.tokenSplit && data.tokenSplit.total > 0 && (
+            <p className="mt-2 text-xs text-gray-500">
+              Today&apos;s tokens:{" "}
+              <span className="font-medium text-blue-600">
+                {data.tokenSplit.priced.toLocaleString()}
+              </span>{" "}
+              priced
+              <span className="text-gray-300"> · </span>
+              <span className="font-medium text-amber-600">
+                {data.tokenSplit.unpriced.toLocaleString()}
+              </span>{" "}
+              unpriced <span className="text-gray-400">(self-hosted / $0)</span>
+            </p>
+          )}
         </div>
       )}
 

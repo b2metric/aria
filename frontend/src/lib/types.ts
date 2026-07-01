@@ -27,6 +27,13 @@ export interface ChartDataPoint {
   [key: string]: string | number;
 }
 
+/** Today's workspace tokens split by billable (priced) vs self-hosted/$0 (unpriced). */
+export interface TokenSplit {
+  priced: number;
+  unpriced: number;
+  total: number;
+}
+
 export interface DashboardData {
   stats: StatCardData[];
   workspaceStats: StatCardData[];
@@ -35,6 +42,7 @@ export interface DashboardData {
   chartData: ChartDataPoint[];
   chartConfig: ChartConfig;
   filters?: { team_id: string | null; user_id: string | null };
+  tokenSplit?: TokenSplit;
 }
 
 /** A selectable team or user for the dashboard activity filters. */

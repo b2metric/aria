@@ -70,6 +70,49 @@ async def test_get_token_usage_includes_cost_usd(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_token_usage_summary_splits_priced_unpriced(monkeypatch) -> None:
+    """Task 18: GET /admin/tokens/usage/summary returns priced vs unpriced token
+    subtotals (+ priced cost) for the workspace, aggregated from
+    ``token_usage_events`` grouped by ``priced``. Unpriced tokens are counted even
+    though they cost $0."""
+    from backend.app.api.endpoints.admin import tokens as tokens_ep
+
+    # (priced, sum(total_tokens), sum(cost_usd)) rows as returned by the GROUP BY.
+    rows = [(True, 10000, Decimal("0.0500")), (False, 2500, Decimal("0"))]
+    result = MagicMock()
+    result.all.return_value = rows
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result)
+
+    async def _fake_resolve(_user, _db):
+        return uuid.uuid4()
+
+    monkeypatch.setattr(tokens_ep, "resolve_customer_id", _fake_resolve)
+
+    user = MagicMock()
+    user.can_admin = True
+    summary = await tokens_ep.get_token_usage_summary(current_user=user, db=db)
+
+    assert summary["priced_tokens"] == 10000
+    assert summary["unpriced_tokens"] == 2500
+    assert summary["total_tokens"] == 12500
+    assert summary["cost_usd"] == 0.05
+
+
+@pytest.mark.asyncio
+async def test_token_usage_summary_requires_admin() -> None:
+    from fastapi import HTTPException
+
+    from backend.app.api.endpoints.admin import tokens as tokens_ep
+
+    user = MagicMock()
+    user.can_admin = False
+    with pytest.raises(HTTPException) as exc:
+        await tokens_ep.get_token_usage_summary(current_user=user, db=AsyncMock())
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_record_llm_usage_meters_with_operation_and_cost(monkeypatch) -> None:
     # No response_cost on the payload → falls back to compute_cost (LiteLLM's own pricing,
     # stubbed here for determinism after the local PRICING map was removed in Task 15).

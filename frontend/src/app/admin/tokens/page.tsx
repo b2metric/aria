@@ -29,6 +29,13 @@ type TokenUsage = {
   cost_usd?: number;
 };
 
+type UsageSummary = {
+  priced_tokens: number;
+  unpriced_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+};
+
 export default function TokenManagementPage() {
   const { data: session, status } = useSession();
   const token = (session as any)?.accessToken;
@@ -36,6 +43,7 @@ export default function TokenManagementPage() {
 
   const [quotas, setQuotas] = useState<TokenQuota[]>([]);
   const [usage, setUsage] = useState<TokenUsage[]>([]);
+  const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Users and Teams for selection/mapping
@@ -69,6 +77,12 @@ export default function TokenManagementPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (uRes.ok) setUsage(await uRes.json());
+
+      // Fetch priced/unpriced summary
+      const sRes = await fetch(`${API_BASE}/api/admin/tokens/usage/summary`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (sRes.ok) setSummary(await sRes.json());
 
       // Fetch Teams & Users for mapping
       const tRes = await fetch(`${API_BASE}/api/admin/teams`, {
@@ -191,6 +205,44 @@ export default function TokenManagementPage() {
           Manage AI token limits for the workspace, teams, and users.
         </p>
       </div>
+
+      {/* Priced vs unpriced token summary (unpriced = self-hosted / $0 calls,
+          counted but not billed). */}
+      {summary && (
+        <Card className="shadow-sm">
+          <CardContent className="p-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Priced Tokens</p>
+              <p className="text-xl font-semibold text-blue-600">
+                {summary.priced_tokens.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Unpriced Tokens</p>
+              <p className="text-xl font-semibold text-amber-600">
+                {summary.unpriced_tokens.toLocaleString()}
+              </p>
+              <p className="text-[11px] text-gray-400">self-hosted / $0</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Total Tokens</p>
+              <p className="text-xl font-semibold text-gray-900">
+                {summary.total_tokens.toLocaleString()}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-wide">Priced Cost</p>
+              <p className="text-xl font-semibold text-emerald-600">
+                $
+                {summary.cost_usd.toLocaleString(undefined, {
+                  minimumFractionDigits: 4,
+                  maximumFractionDigits: 4,
+                })}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Quotas Section */}

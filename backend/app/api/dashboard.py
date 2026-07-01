@@ -8,7 +8,7 @@ from backend.app.auth.dependencies import UserContext, WorkspaceID, get_current_
 from backend.app.auth.identity import resolve_identity_uuid
 from backend.app.db.session import get_sessionmaker
 from backend.app.models.governance import DataAuditLog
-from backend.app.models.token import TokenUsageDaily
+from backend.app.models.token import TokenUsageDaily, TokenUsageEvent
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -129,6 +129,8 @@ async def get_user_dashboard(
     ws_total = 0
     ws_today = 0
     ws_tokens_today = 0
+    ws_tokens_priced = 0
+    ws_tokens_unpriced = 0
     ws_cost_today = 0
     ws_active_users = 0
     ws_trend: list[dict] = []
@@ -173,22 +175,43 @@ async def get_user_dashboard(
                 # TokenUsageDaily has user_id but no team_id, so only the
                 # user filter applies here; the team filter is skipped for tokens.
                 token_extra = []
+                event_extra = []
                 if user_id_filter:
-                    token_extra.append(
-                        TokenUsageDaily.user_id == resolve_identity_uuid(user_id_filter)
-                    )
+                    _uf = resolve_identity_uuid(user_id_filter)
+                    token_extra.append(TokenUsageDaily.user_id == _uf)
+                    event_extra.append(TokenUsageEvent.user_id == _uf)
 
-                ws_tokens_today = (
+                # Tokens Today, split priced vs unpriced, from the granular event
+                # table (not the daily rollup) so unpriced / self-hosted system
+                # ops — which carry user_id=NULL and never land in TokenUsageDaily
+                # — are still counted. ``created_at`` is a timestamptz; ``today``
+                # is midnight UTC.
+                ws_tokens_priced = (
                     await session.scalar(
-                        select(func.sum(TokenUsageDaily.tokens_used)).where(
-                            TokenUsageDaily.customer_id == customer_id,
-                            TokenUsageDaily.usage_date == today.date(),
-                            *token_extra,
+                        select(func.sum(TokenUsageEvent.total_tokens)).where(
+                            TokenUsageEvent.customer_id == customer_id,
+                            TokenUsageEvent.created_at >= today,
+                            TokenUsageEvent.priced.is_(True),
+                            *event_extra,
                         )
                     )
                     or 0
                 )
+                ws_tokens_unpriced = (
+                    await session.scalar(
+                        select(func.sum(TokenUsageEvent.total_tokens)).where(
+                            TokenUsageEvent.customer_id == customer_id,
+                            TokenUsageEvent.created_at >= today,
+                            TokenUsageEvent.priced.is_(False),
+                            *event_extra,
+                        )
+                    )
+                    or 0
+                )
+                ws_tokens_today = ws_tokens_priced + ws_tokens_unpriced
 
+                # Cost stays priced-only (daily rollup; unpriced/self-hosted rows
+                # contribute $0 anyway).
                 ws_cost_today = (
                     await session.scalar(
                         select(func.sum(TokenUsageDaily.cost_usd)).where(
@@ -293,6 +316,14 @@ async def get_user_dashboard(
     return {
         "stats": stats,
         "workspaceStats": workspace_stats,
+        # Today's workspace tokens split by whether the call was billable (priced)
+        # vs self-hosted/$0 (unpriced). ``total`` == priced + unpriced == the
+        # "Tokens Today" card. Cost figures elsewhere remain priced-only.
+        "tokenSplit": {
+            "priced": int(ws_tokens_priced or 0),
+            "unpriced": int(ws_tokens_unpriced or 0),
+            "total": int(ws_tokens_today or 0),
+        },
         "filters": {"team_id": team_id, "user_id": user_id_filter},
         "chartData": ws_trend or recent_trend,
         "chartConfig": {

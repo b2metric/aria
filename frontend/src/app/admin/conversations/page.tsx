@@ -25,6 +25,7 @@ type ConversationSummary = {
   updated_at: string;
   total_tokens?: number;
   cost_usd?: number;
+  unpriced_tokens?: number;
 };
 
 type QueryTrace = {
@@ -153,6 +154,11 @@ export default function AdminConversationsPage() {
                       <span className="font-medium text-blue-600">{(c.total_tokens ?? 0).toLocaleString()}</span>
                       <span className="text-gray-400"> · </span>
                       <span className="font-medium text-emerald-600">${(c.cost_usd ?? 0).toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
+                      {(c.unpriced_tokens ?? 0) > 0 && (
+                        <span className="ml-2 text-xs text-amber-600" title="Self-hosted / $0-cost tokens (counted, not billed)">
+                          {(c.unpriced_tokens ?? 0).toLocaleString()} unpriced
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-gray-500">{new Date(c.updated_at).toLocaleString()}</td>
                     <td className="px-6 py-4">

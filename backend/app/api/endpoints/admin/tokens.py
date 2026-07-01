@@ -7,12 +7,12 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from backend.app.auth.dependencies import UserContext, get_current_user
 from backend.app.db.session import get_sessionmaker
-from backend.app.models.token import TokenQuota, TokenUsageDaily
+from backend.app.models.token import TokenQuota, TokenUsageDaily, TokenUsageEvent
 from backend.app.schemas.token import TokenQuotaCreate, TokenQuotaResponse, TokenQuotaUpdate
 
 log = logging.getLogger("aria.admin.tokens")
@@ -197,3 +197,48 @@ async def get_token_usage(
         }
         for r in records
     ]
+
+
+@router.get("/usage/summary")
+async def get_token_usage_summary(
+    current_user: UserContext = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Priced vs unpriced token subtotals (+ priced cost) for the workspace.
+
+    Aggregated from the granular ``token_usage_events`` table grouped by ``priced``
+    so unpriced / self-hosted calls (which cost $0, and for system ops carry
+    ``user_id=NULL``) are still counted. ``cost_usd`` sums over priced rows only.
+    """
+    if not current_user.can_admin:
+        raise HTTPException(status_code=403, detail="Admin role required")
+
+    customer_id = await resolve_customer_id(current_user, db)
+
+    result = await db.execute(
+        select(
+            TokenUsageEvent.priced,
+            func.sum(TokenUsageEvent.total_tokens),
+            func.sum(TokenUsageEvent.cost_usd),
+        )
+        .where(TokenUsageEvent.customer_id == customer_id)
+        .group_by(TokenUsageEvent.priced)
+    )
+
+    priced_tokens = 0
+    unpriced_tokens = 0
+    cost = 0.0
+    for is_priced, tokens, row_cost in result.all():
+        tokens = int(tokens or 0)
+        if is_priced:
+            priced_tokens = tokens
+            cost += float(row_cost or 0)  # cost is priced-only
+        else:
+            unpriced_tokens = tokens
+
+    return {
+        "priced_tokens": priced_tokens,
+        "unpriced_tokens": unpriced_tokens,
+        "total_tokens": priced_tokens + unpriced_tokens,
+        "cost_usd": cost,
+    }
