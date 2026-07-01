@@ -71,6 +71,90 @@ async def _run_routed(estimated_rows: int, rows_returned: list | None = None, jo
         )
 
 
+class _AsyncCM:
+    """Minimal async context manager wrapping a plain object (for engine.connect())."""
+
+    def __init__(self, obj):
+        self._obj = obj
+
+    async def __aenter__(self):
+        return self._obj
+
+    async def __aexit__(self, *_args):
+        return False
+
+
+def test_tenant_db_config_columns_are_wired_into_get_db_config():
+    """MECHANICAL GATE (model-independent, CI-blocking): every customer_db_configs
+    column that has a same-named DBConfig field MUST be referenced by _get_db_config.
+
+    Auto-derived — no hardcoded field list — so when a NEW tenant field is added to
+    both the table and DBConfig, this fails until the loader's SELECT + DBConfig(...)
+    actually read it. Guards the "set 100005 but export truncated at 100000" bug
+    class, where a tenant value silently falls back to the DBConfig dataclass default
+    because the loader forgot to map the column."""
+    import dataclasses
+    import inspect
+    import re
+
+    from backend.app.models.database import CustomerDBConfig
+    from backend.app.query import pipeline
+
+    column_names = {c.name for c in CustomerDBConfig.__table__.columns}
+    dbconfig_fields = {f.name for f in dataclasses.fields(DBConfig)}
+    tenant_fields = column_names & dbconfig_fields  # same-named ⇒ sourced from the tenant row
+
+    # sanity: the fields this gate exists to protect must be in the derived set
+    assert {"max_export_row_limit", "export_batch_size", "export_link_ttl_days"} <= tenant_fields
+
+    src = inspect.getsource(pipeline._get_db_config)
+    missing = [f for f in sorted(tenant_fields) if not re.search(rf"\b{re.escape(f)}\b", src)]
+    assert not missing, (
+        f"_get_db_config does not reference tenant DBConfig field(s) {missing}; their "
+        "tenant values will silently fall back to the DBConfig dataclass default. Add "
+        "the column(s) to the SELECT and the DBConfig(...) constructor in _get_db_config."
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_db_config_maps_tenant_export_columns():
+    """REGRESSION: _get_db_config must read max_export_row_limit / export_batch_size /
+    export_link_ttl_days from customer_db_configs — not silently fall back to the
+    DBConfig dataclass defaults. Root cause of "set 100005 but export truncated at
+    100000": the loader SELECT omitted these columns."""
+    from backend.app.query import pipeline
+
+    result = MagicMock()
+    result.fetchone.return_value = (
+        _uuid.uuid4(),  # customer_id
+        "postgresql",   # db_type
+        "db",           # host
+        5432,           # port
+        "warehouse",    # database
+        "u",            # username
+        "enc",          # encrypted_password
+        1000,           # max_row_limit
+        100005,         # max_export_row_limit
+        50000,          # export_batch_size
+        7,              # export_link_ttl_days
+    )
+    conn = MagicMock()
+    conn.execute = AsyncMock(return_value=result)
+    engine = MagicMock()
+    engine.connect.return_value = _AsyncCM(conn)
+
+    with patch(
+        "backend.app.services.crypto.async_decrypt_password",
+        new=AsyncMock(return_value="pw"),
+    ):
+        cfg = await pipeline._get_db_config(engine, "stc-kuwait")
+
+    assert cfg.max_row_limit == 1000
+    assert cfg.max_export_row_limit == 100005
+    assert cfg.export_batch_size == 50000
+    assert cfg.export_link_ttl_days == 7
+
+
 @pytest.mark.asyncio
 async def test_estimate_within_display_limit_returns_rows_inline():
     """R̂ ≤ max_row_limit (1000) -> display path returns rows, no export job."""

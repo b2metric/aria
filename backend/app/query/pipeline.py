@@ -1043,7 +1043,8 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     async with engine.connect() as conn:
         result = await conn.execute(
             sa_text("""
-                SELECT c.id as customer_id, db_type, host, port, database, username, encrypted_password, max_row_limit
+                SELECT c.id as customer_id, db_type, host, port, database, username, encrypted_password,
+                       max_row_limit, max_export_row_limit, export_batch_size, export_link_ttl_days
                 FROM customer_db_configs cdc
                 JOIN customers c ON cdc.customer_id = c.id
                 WHERE c.slug = :workspace_id
@@ -1079,6 +1080,9 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
             username,
             encrypted_password,
             max_row_limit,
+            max_export_row_limit,
+            export_batch_size,
+            export_link_ttl_days,
         ) = row
         decrypted_password = await async_decrypt_password(
             encrypted_password, str(customer_id), conn
@@ -1103,6 +1107,11 @@ async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
         username=username,
         password=decrypted_password,
         max_row_limit=max_row_limit if max_row_limit is not None else 1000,
+        max_export_row_limit=(
+            max_export_row_limit if max_export_row_limit is not None else 100_000
+        ),
+        export_batch_size=export_batch_size if export_batch_size is not None else 50_000,
+        export_link_ttl_days=export_link_ttl_days if export_link_ttl_days is not None else 3,
     )
 
 
