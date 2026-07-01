@@ -212,11 +212,11 @@ function ChatPageContent() {
   // Poll a background CSV export job (created by the `export` SSE event) until
   // it reaches a terminal state, updating the owning message each tick so the
   // UI can flip from "preparing" to a Download button (or an error).
-  const pollExportJob = useCallback((jobId: string, msgId: string) => {
+  const pollExportJob = useCallback((jobId: string, msgId: string, authToken?: string) => {
     let attempts = 0;
     const tick = async () => {
       attempts += 1;
-      const st = await getExportStatus(jobId);
+      const st = await getExportStatus(jobId, authToken);
       if (!st) {
         if (attempts < 90) setTimeout(tick, 2000);
         return;
@@ -359,7 +359,7 @@ function ChatPageContent() {
                   ),
                 );
                 setIsStreaming(false);
-                pollExportJob(jobId, targetId);
+                pollExportJob(jobId, targetId, token);
                 break;
               }
 
@@ -404,7 +404,7 @@ function ChatPageContent() {
         }
       }
     },
-    [router, pollExportJob],
+    [router, pollExportJob, token],
   );
 
   // Load specific conversation if cid changes
