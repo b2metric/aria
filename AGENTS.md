@@ -20,8 +20,9 @@
   the restyle fast-path, the JSON chart payload, Keycloak `/auth`, the dummy-data
   seeder, and how to run the app locally.
 - **Frontend authority: `docs/frontend-architecture.md`** — read before touching
-  `frontend/`. Frontend work MUST be verified visually (render localhost:3000 +
-  `browser_screenshots`); edit with targeted patches, one writer per file. The chart
+  `frontend/`. Frontend work MUST be verified visually (render `http://aria.localhost`
+  via Traefik + `browser_screenshots`; `:3000` is only the internal container port, not
+  the host URL); edit with targeted patches, one writer per file. The chart
   UI is `ChartArea` (recharts), NOT 5 MB Plotly HTML in an iframe.
 - Per-task design reviews: **`docs/reviews/*.md`**.
 - **Code vs business split:** this repo is CODE only. GTM / market research /
