@@ -56,3 +56,36 @@ def test_export_event_shape():
     assert data["export_job_id"] == str(fake_job_id)
     assert data["status"] == "queued"
     assert data["estimated_rows"] == 5_000_000
+
+
+@pytest.mark.asyncio
+async def test_persist_export_turn_saves_assistant_message_with_job_id():
+    """The export turn is persisted as an assistant message carrying export_job_id
+    so a conversation reload keeps it (else the bubble vanishes)."""
+    from backend.app.query import pipeline
+
+    fake_job_id = uuid.uuid4()
+    exp = ExportDispatched(job_id=fake_job_id, estimated_rows=5_000_000)
+    append = AsyncMock()
+    with patch("backend.app.query.conversation.append_message", new=append):
+        await pipeline._persist_export_turn(
+            redis=MagicMock(), workspace_id="ws1", cid="conv1", exp=exp
+        )
+    append.assert_awaited_once()
+    saved_msg = append.await_args.args[3]
+    assert saved_msg.role == "assistant"
+    assert saved_msg.export_job_id == str(fake_job_id)
+    assert "too large to display" in saved_msg.content
+
+
+@pytest.mark.asyncio
+async def test_persist_export_turn_swallows_errors():
+    """Persistence is best-effort — a redis failure must NOT break the turn."""
+    from backend.app.query import pipeline
+
+    exp = ExportDispatched(job_id=uuid.uuid4(), estimated_rows=1_000)
+    with patch("backend.app.query.conversation.append_message", new=AsyncMock(side_effect=RuntimeError("redis down"))):
+        # Must not raise.
+        await pipeline._persist_export_turn(
+            redis=MagicMock(), workspace_id="ws1", cid="conv1", exp=exp
+        )

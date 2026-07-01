@@ -991,6 +991,30 @@ def _export_event(job_id: _uuid.UUID, estimated_rows: int) -> dict:
     }
 
 
+async def _persist_export_turn(redis, workspace_id: str | None, cid: str, exp) -> None:
+    """Persist an assistant message for a dispatched export so the turn SURVIVES a
+    conversation reload. The export path raises ``ExportDispatched`` and returns
+    before the normal end-of-turn assistant-message save, so without this the
+    reload would show only the user's question and the export bubble would vanish.
+    Carries ``export_job_id`` so the reloaded UI can re-poll + re-render download.
+    """
+    from backend.app.query import ConversationMessage
+    from backend.app.query.conversation import append_message
+
+    message = json.loads(_export_event(exp.job_id, exp.estimated_rows)["data"])["message"]
+    try:
+        await append_message(
+            redis,
+            workspace_id,
+            cid,
+            ConversationMessage(
+                role="assistant", content=message, export_job_id=str(exp.job_id)
+            ),
+        )
+    except Exception:  # noqa: BLE001 — persistence best-effort; never break the turn
+        logger.exception("Failed to persist export assistant message for %s", cid)
+
+
 async def _get_db_config(engine: AsyncEngine, workspace_id: str) -> DBConfig:
     """Fetch database config for the workspace from customer_db_configs.
 
@@ -2270,6 +2294,9 @@ async def _process_query_impl(
                 team_id=team_id,
             )
     except ExportDispatched as exp:
+        # Persist the export turn FIRST so a conversation reload keeps it (the
+        # export path returns before the normal end-of-turn assistant save).
+        await _persist_export_turn(redis, workspace_id, cid, exp)
         yield _export_event(exp.job_id, exp.estimated_rows)
         yield {"event": "done", "data": json.dumps({"conversation_id": cid})}
         return
@@ -2330,6 +2357,7 @@ async def _process_query_impl(
                         team_id=team_id,
                     )
             except ExportDispatched as exp:
+                await _persist_export_turn(redis, workspace_id, cid, exp)
                 yield _export_event(exp.job_id, exp.estimated_rows)
                 yield {"event": "done", "data": json.dumps({"conversation_id": cid})}
                 return

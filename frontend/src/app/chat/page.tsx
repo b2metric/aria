@@ -432,10 +432,17 @@ function ChatPageContent() {
                 chartSpec,
                 summary: m.summary || null,
                 suggestions: m.suggestions || null,
+                exportJobId: m.export_job_id || undefined,
+                exportStatus: m.export_job_id ? ("queued" as const) : undefined,
                 id: m.id || `history-${m.role}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i}`,
               };
             });
             setMessages(formattedMessages);
+            // Re-poll any export turns so a reloaded conversation shows current
+            // status + the Download button (the turn was persisted mid-export).
+            formattedMessages.forEach((fm: ChatMessage) => {
+              if (fm.exportJobId) pollExportJob(fm.exportJobId, fm.id, token);
+            });
             // Open the most recent message that has a chart artifact in the right panel.
             const lastChartMsg = [...formattedMessages].reverse().find(
               (m: any) => m.role === "assistant" && m.chartSpec,
@@ -485,7 +492,7 @@ function ChatPageContent() {
           setError("Failed to load conversation history.");
         });
     }
-  }, [conversationId, token, consumeStream]);
+  }, [conversationId, token, consumeStream, pollExportJob]);
 
   // Auto-restore the last conversation when the user returns to /chat without a
   // ?cid= (e.g. via sidebar nav or a plain link). The conversation lives in Redis

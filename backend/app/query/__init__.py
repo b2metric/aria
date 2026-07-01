@@ -63,6 +63,10 @@ class ConversationMessage(BaseModel):
     # Per-turn debug trace (item 23): model, row_count, sql_generated, memory
     # context that influenced generation. Surfaced in /admin/conversations.
     trace: dict[str, Any] | None = None
+    # Async CSV export dispatched for this turn (massive-export): lets the chat
+    # reload re-render the export bubble + download button instead of losing the
+    # turn (the export path returns before the normal assistant-message save).
+    export_job_id: str | None = None
     timestamp: str = Field(default_factory=_utcnow_iso)
 
 
