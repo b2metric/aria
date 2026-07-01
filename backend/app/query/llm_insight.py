@@ -137,7 +137,9 @@ Result Sample:
                 (content or "")[:500],
             )
 
-        return {"summary": summary, "suggestions": suggestions}
+        from backend.app.services.llm_cost import extract_usage
+
+        return {"summary": summary, "suggestions": suggestions, "usage": extract_usage(response)}
     except Exception as e:
         logger.warning(f"Failed to generate insights: {e}")
         return {"summary": "Data retrieved successfully.", "suggestions": []}

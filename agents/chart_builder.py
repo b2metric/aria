@@ -52,6 +52,10 @@ class ChartPipelineResult:
     errors: list[str] = field(default_factory=list)
     """Non-fatal errors encountered during rendering."""
 
+    usage: dict | None = None
+    """Token usage of the chart LLM call (``{prompt_tokens, completion_tokens, model}``),
+    or None when the heuristic was used / the LLM call failed. For metering."""
+
     @property
     def json_content(self) -> str | None:
         """Get JSON content as string, or None."""
@@ -106,9 +110,10 @@ async def run_chart_pipeline(
     source = "heuristic"
 
     # 2: LLM escalation (optional)
+    usage: dict | None = None
     if use_llm:
         try:
-            config = await propose_chart_llm_with_heuristic(
+            config, usage = await propose_chart_llm_with_heuristic(
                 rows,
                 columns=columns,
                 question=question,
@@ -166,6 +171,7 @@ async def run_chart_pipeline(
         png=png_out,
         csv=csv_out,
         errors=errors,
+        usage=usage,
     )
 
 

@@ -1889,6 +1889,8 @@ def _build_chart(
             "truncated": len(rows) > MAX_CHART_POINTS,
         },
         "errors": errors,
+        # Chart LLM token usage (for operation=chart metering); None on heuristic path.
+        "usage": getattr(pipeline_result, "usage", None),
     }
 
 
@@ -2159,11 +2161,13 @@ async def _process_query_impl(
             customer_row = result.scalar_one_or_none()
             customer_uuid: _uuid.UUID | None = customer_row
 
-            # Parse user and team UUIDs from string ids
-            try:
-                user_uuid = _uuid.UUID(user_id) if user_id else None
-            except (ValueError, TypeError):
-                user_uuid = None
+            # Resolve the caller to a stable users.id the SAME way the audit path
+            # does (resolve_identity_uuid): the incoming user_id is the Keycloak
+            # effective identity string (sub / custom claim), NOT a users.id — a
+            # strict uuid.UUID() here dropped non-UUID identities and broke the
+            # token_usage_daily.user_id FK, which is why token metering silently
+            # stopped. See tests/test_token_identity.py.
+            user_uuid = _coerce_user_uuid(user_id)
             try:
                 team_uuid = _uuid.UUID(team_id) if team_id else None
             except (ValueError, TypeError):
@@ -2233,24 +2237,26 @@ async def _process_query_impl(
             # Run security checks *before* exposing the SQL to the user
             await verify_sql_security(sql, engine, workspace_id, sess, team_id)
 
-            # ── Record token usage ─────────────────────────────────────────
-            if token_svc and token_usage and customer_uuid and user_uuid:
-                total = token_usage.get("prompt_tokens", 0) + token_usage.get(
-                    "completion_tokens", 0
+            # ── Record token usage (operation=sql_generation, with USD cost) ──
+            if token_usage:
+                from backend.app.services.token import record_llm_usage
+
+                await record_llm_usage(
+                    db=sess,
+                    redis=redis,
+                    customer_uuid=customer_uuid,
+                    user_uuid=user_uuid,
+                    team_uuid=team_uuid,
+                    conversation_id=cid,
+                    operation="sql_generation",
+                    response={
+                        "model": token_usage.get("model", "unknown"),
+                        "usage": {
+                            "prompt_tokens": token_usage.get("prompt_tokens", 0),
+                            "completion_tokens": token_usage.get("completion_tokens", 0),
+                        },
+                    },
                 )
-                if total > 0:
-                    try:
-                        await token_svc.record_usage(
-                            customer_id=customer_uuid,
-                            user_id=user_uuid,
-                            team_id=team_uuid,
-                            session_id=cid,
-                            model=token_usage.get("model", "unknown"),
-                            prompt_tokens=token_usage.get("prompt_tokens", 0),
-                            completion_tokens=token_usage.get("completion_tokens", 0),
-                        )
-                    except Exception:
-                        logger.exception("Failed to record token usage")
     except Exception as e:
         logger.exception("SQL generation failed")
         yield {
@@ -2343,6 +2349,30 @@ async def _process_query_impl(
                 **gen_kwargs,
             )
 
+            # Meter the self-correction LLM call (operation=self_correction).
+            if token_usage:
+                from sqlalchemy.ext.asyncio import AsyncSession as _MeterSession
+
+                from backend.app.services.token import record_llm_usage
+
+                async with _MeterSession(engine) as _msess:
+                    await record_llm_usage(
+                        db=_msess,
+                        redis=redis,
+                        customer_uuid=customer_uuid,
+                        user_uuid=user_uuid,
+                        team_uuid=team_uuid,
+                        conversation_id=cid,
+                        operation="self_correction",
+                        response={
+                            "model": token_usage.get("model", "unknown"),
+                            "usage": {
+                                "prompt_tokens": token_usage.get("prompt_tokens", 0),
+                                "completion_tokens": token_usage.get("completion_tokens", 0),
+                            },
+                        },
+                    )
+
             # Run security checks *before* exposing the SQL to the user
             await verify_sql_security(sql, engine, workspace_id, sess, team_id)
             yield {
@@ -2401,6 +2431,31 @@ async def _process_query_impl(
         chart_llm=chart_llm,
     )
 
+    # Meter the chart LLM call (operation=chart); None on the heuristic/table path.
+    _chart_usage = chart_result.get("usage")
+    if _chart_usage:
+        from sqlalchemy.ext.asyncio import AsyncSession as _MeterSession
+
+        from backend.app.services.token import record_llm_usage
+
+        async with _MeterSession(engine) as _msess:
+            await record_llm_usage(
+                db=_msess,
+                redis=redis,
+                customer_uuid=customer_uuid,
+                user_uuid=user_uuid,
+                team_uuid=team_uuid,
+                conversation_id=cid,
+                operation="chart",
+                response={
+                    "model": _chart_usage.get("model", "unknown"),
+                    "usage": {
+                        "prompt_tokens": _chart_usage.get("prompt_tokens", 0),
+                        "completion_tokens": _chart_usage.get("completion_tokens", 0),
+                    },
+                },
+            )
+
     yield {
         "event": "chart",
         "data": json.dumps(
@@ -2445,6 +2500,31 @@ async def _process_query_impl(
         )
         summary = insight_res.get("summary", "")
         suggestions = insight_res.get("suggestions", [])
+
+        # Meter the insight LLM call (operation=insight, own model + USD cost).
+        _insight_usage = insight_res.get("usage")
+        if _insight_usage:
+            from sqlalchemy.ext.asyncio import AsyncSession as _MeterSession
+
+            from backend.app.services.token import record_llm_usage
+
+            async with _MeterSession(engine) as _msess:
+                await record_llm_usage(
+                    db=_msess,
+                    redis=redis,
+                    customer_uuid=customer_uuid,
+                    user_uuid=user_uuid,
+                    team_uuid=team_uuid,
+                    conversation_id=cid,
+                    operation="insight",
+                    response={
+                        "model": _insight_usage.get("model", "unknown"),
+                        "usage": {
+                            "prompt_tokens": _insight_usage.get("prompt_tokens", 0),
+                            "completion_tokens": _insight_usage.get("completion_tokens", 0),
+                        },
+                    },
+                )
 
         if summary or suggestions:
             yield {

@@ -10,13 +10,15 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, date, datetime
+from decimal import Decimal
+from typing import Any
 
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.models.token import TokenQuota, TokenUsageDaily
+from backend.app.models.token import TokenQuota, TokenUsageDaily, TokenUsageEvent
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +104,13 @@ class TokenService:
             )
         )
         for q in result.scalars().all():
-            # Only honour DAILY quotas for now (plan focuses on daily limits)
-            if q.period.value != "daily":
+            # Only honour DAILY quotas for now (plan focuses on daily limits).
+            # The native PG ENUM column comes back as a plain str at runtime (not the
+            # QuotaPeriod enum), so read the value defensively — a bare ``.value`` here
+            # raised AttributeError and, now that the token path actually runs (identity
+            # fix), fail-closed every query.
+            period = q.period.value if hasattr(q.period, "value") else q.period
+            if period != "daily":
                 continue
             if q.user_id is not None and q.user_id == user_id:
                 quotas["user"] = q.token_limit
@@ -175,23 +182,31 @@ class TokenService:
         self,
         *,
         customer_id: uuid.UUID,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         team_id: uuid.UUID | None = None,
         session_id: str = "",
         model: str,
         prompt_tokens: int,
         completion_tokens: int,
+        operation: str = "sql_generation",
+        conversation_id: str | None = None,
+        cost_usd: Decimal | float | int = 0,
     ) -> None:
-        """Increment Redis counters and persist a row to PostgreSQL.
+        """Increment Redis counters + persist a granular ``TokenUsageEvent`` and the
+        daily rollup.
 
-        Redis increment is atomic (``INCRBY``).  DB write uses an upsert
-        (``INSERT ... ON CONFLICT DO UPDATE``) so the daily aggregate stays
-        correct even under concurrent requests.
+        Redis increment is atomic (``INCRBY``). The daily rollup upsert
+        (``INSERT ... ON CONFLICT DO UPDATE``) keeps the aggregate correct under
+        concurrency. The event row is the granular source of truth (per operation /
+        model / conversation / cost). ``user_id`` may be ``None`` for system/vault ops
+        that are not attributed to a user — those write the event but skip the
+        user-keyed Redis counter and the (NOT NULL) daily rollup.
         """
         total_tokens = prompt_tokens + completion_tokens
         if total_tokens <= 0:
             return
 
+        cost = Decimal(str(cost_usd or 0))
         date_str = self._today_str()
         date_obj = self._today_date()
 
@@ -199,7 +214,8 @@ class TokenService:
         redis_keys: list[str] = []
         if session_id:
             redis_keys.append(self._redis_key("session", session_id, date_str))
-        redis_keys.append(self._redis_key("user", str(user_id), date_str))
+        if user_id:
+            redis_keys.append(self._redis_key("user", str(user_id), date_str))
         if team_id:
             redis_keys.append(self._redis_key("team", str(team_id), date_str))
         redis_keys.append(self._redis_key("customer", str(customer_id), date_str))
@@ -212,22 +228,149 @@ class TokenService:
 
         # ── 2. PostgreSQL persistence (durable) ──────────────────────
         try:
-            stmt = insert(TokenUsageDaily).values(
-                customer_id=customer_id,
-                user_id=user_id,
-                usage_date=date_obj,
-                tokens_used=total_tokens,
-                model=model,
+            # 2a. Granular event (always) — source of truth for breakdowns.
+            self.db.add(
+                TokenUsageEvent(
+                    id=uuid.uuid4(),
+                    customer_id=customer_id,
+                    user_id=user_id,
+                    team_id=team_id,
+                    conversation_id=conversation_id or None,
+                    operation=operation,
+                    model=model,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    cost_usd=cost,
+                )
             )
-            stmt = stmt.on_conflict_do_update(
-                index_elements=["customer_id", "user_id", "usage_date"],
-                set_={
-                    "tokens_used": TokenUsageDaily.tokens_used + total_tokens,
-                    "model": model,  # keep last-used model
-                },
-            )
-            await self.db.execute(stmt)
+
+            # 2b. Daily rollup (user-attributed ops only; user_id is NOT NULL there).
+            if user_id is not None:
+                stmt = insert(TokenUsageDaily).values(
+                    customer_id=customer_id,
+                    user_id=user_id,
+                    usage_date=date_obj,
+                    tokens_used=total_tokens,
+                    cost_usd=cost,
+                    model=model,
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["customer_id", "user_id", "usage_date"],
+                    set_={
+                        "tokens_used": TokenUsageDaily.tokens_used + total_tokens,
+                        "cost_usd": TokenUsageDaily.cost_usd + cost,
+                        "model": model,  # keep last-used model
+                    },
+                )
+                await self.db.execute(stmt)
+
             await self.db.commit()
         except Exception:
             logger.exception("Failed to persist token usage to DB – counters still in Redis")
             await self.db.rollback()
+
+
+async def record_llm_usage(
+    *,
+    db: AsyncSession,
+    redis: Redis,
+    customer_uuid: uuid.UUID | None,
+    user_uuid: uuid.UUID | None,
+    team_uuid: uuid.UUID | None,
+    conversation_id: str | None,
+    operation: str,
+    response: Any,
+) -> None:
+    """One-liner metering for any LLM call site: extract usage from ``response``,
+    price it, and record a ``TokenUsageEvent`` (+ daily rollup) tagged with
+    ``operation`` and ``conversation_id``. Never raises — metering must not break a
+    turn. No-op when there is no customer to attribute to or no tokens were used.
+    """
+    if customer_uuid is None:
+        return
+    try:
+        from backend.app.services.llm_cost import compute_cost, extract_usage
+
+        usage = extract_usage(response)
+        prompt = usage["prompt_tokens"]
+        completion = usage["completion_tokens"]
+        if prompt + completion <= 0:
+            return
+        cost = compute_cost(usage["model"], prompt, completion)
+        await TokenService(db=db, redis=redis).record_usage(
+            customer_id=customer_uuid,
+            user_id=user_uuid,
+            team_id=team_uuid,
+            session_id=conversation_id or "",
+            model=usage["model"],
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            operation=operation,
+            conversation_id=conversation_id,
+            cost_usd=cost,
+        )
+    except Exception:  # noqa: BLE001 — metering is best-effort, never break the turn
+        logger.exception("record_llm_usage failed for operation=%s", operation)
+
+
+# Lazily-created, app-lifetime engine for background/system metering, so a metering
+# call inside a loop (e.g. per-embedding during vault indexing) does not create and
+# dispose a new engine + connection pool every time.
+_meter_engine = None
+
+
+def _get_meter_engine():
+    global _meter_engine
+    if _meter_engine is None:
+        from backend.app.db.session import get_engine
+
+        _meter_engine = get_engine()
+    return _meter_engine
+
+
+async def record_system_llm_usage(
+    *,
+    workspace_id: str | None,
+    operation: str,
+    response: Any,
+) -> None:
+    """Meter a background/system LLM call that is not tied to a user or conversation
+    (vault enrichment / suggestions / join-keys / embeddings). Resolves the customer
+    from ``workspace_id`` and opens its own short-lived session on a shared engine.
+    Best-effort: never raises, no-op when the workspace can't be resolved.
+    """
+    if not workspace_id:
+        return
+    redis = None
+    try:
+        from sqlalchemy import text as _text
+
+        from backend.app.core.config import get_settings
+
+        eng = _get_meter_engine()
+        async with AsyncSession(eng) as s:
+            customer_uuid = (
+                await s.execute(
+                    _text("SELECT id FROM customers WHERE slug = :w"), {"w": workspace_id}
+                )
+            ).scalar_one_or_none()
+        if customer_uuid is None:
+            return
+        redis = Redis.from_url(get_settings().redis_url, decode_responses=True)
+        async with AsyncSession(eng) as s:
+            await record_llm_usage(
+                db=s,
+                redis=redis,
+                customer_uuid=customer_uuid,
+                user_uuid=None,
+                team_uuid=None,
+                conversation_id=None,
+                operation=operation,
+                response=response,
+            )
+    except Exception:  # noqa: BLE001 — best-effort; never break the vault flow
+        logger.exception("record_system_llm_usage failed for operation=%s", operation)
+    finally:
+        if redis is not None:
+            await redis.aclose()

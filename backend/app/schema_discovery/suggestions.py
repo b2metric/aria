@@ -46,6 +46,13 @@ Tables:
 
         content = response.choices[0].message.content
 
+        # Meter this system LLM call (operation=vault_suggestions).
+        from backend.app.services.token import record_system_llm_usage
+
+        await record_system_llm_usage(
+            workspace_id=workspace_id, operation="vault_suggestions", response=response
+        )
+
         # Try to parse JSON array
         # Clean markdown code blocks if any
         content = re.sub(r"```json\n|\n```", "", content).strip()

@@ -254,6 +254,12 @@ async def generate_table_enrichment(
             api_key=api_key,
             custom_llm_provider="openai",
         )
+        # Meter this system LLM call (operation=vault_enrichment).
+        from backend.app.services.token import record_system_llm_usage
+
+        await record_system_llm_usage(
+            workspace_id=workspace_id, operation="vault_enrichment", response=resp
+        )
         result = json.loads(resp.choices[0].message.content)
     except Exception as e:  # noqa: BLE001 — graceful degrade, never raise
         logger.warning("LLM enrichment failed for %s: %s", table_name, e)

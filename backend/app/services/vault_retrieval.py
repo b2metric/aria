@@ -80,8 +80,9 @@ def _qdrant_client():
     return QdrantClient(url=settings.qdrant_url, timeout=10.0)
 
 
-async def _embed(text: str) -> list[float]:
-    """Embed a single text via LiteLLM proxy."""
+async def _embed(text: str, workspace_id: str | None = None) -> list[float]:
+    """Embed a single text via LiteLLM proxy. When ``workspace_id`` is given, the
+    call is metered (operation=vault_embedding)."""
     import litellm
 
     from backend.app.core.config import get_settings
@@ -94,6 +95,12 @@ async def _embed(text: str) -> list[float]:
         api_key=settings.litellm_api_key or "sk-dummy",
         timeout=20.0,
     )
+    if workspace_id:
+        from backend.app.services.token import record_system_llm_usage
+
+        await record_system_llm_usage(
+            workspace_id=workspace_id, operation="vault_embedding", response=resp
+        )
     return resp.data[0]["embedding"]
 
 
@@ -145,7 +152,7 @@ async def index_workspace_vault(workspace_id: str) -> dict[str, Any]:
 
         try:
             content = md.read_text()[:_EMBED_INPUT_CHARS]
-            vec = await _embed(content)
+            vec = await _embed(content, workspace_id=workspace_id)
             client.upsert(
                 collection_name=collection,
                 points=[
@@ -210,7 +217,7 @@ async def top_n_tables(workspace_id: str, question: str, n: int = 30) -> list[tu
         return []
 
     try:
-        vec = await _embed(question)
+        vec = await _embed(question, workspace_id=workspace_id)
     except Exception as e:
         logger.warning("Embedding the question failed (%s); skipping semantic rerank", e)
         return []

@@ -90,6 +90,12 @@ class LlmChartChoice(BaseModel):
         description="Confidence in this choice (0=guess, 1=certain).",
     )
 
+    usage: dict | None = Field(
+        default=None,
+        exclude=True,
+        description="Token usage for this call (metering metadata, not LLM output).",
+    )
+
 
 # ── Data preview ───────────────────────────────────────────────────────────
 
@@ -259,7 +265,12 @@ async def _run_chart_llm(
             custom_llm_provider="openai",
         )
         content = response.choices[0].message.content
-        return LlmChartChoice.model_validate(json.loads(content))
+        choice = LlmChartChoice.model_validate(json.loads(content))
+        # Attach token usage so the caller can meter this call (operation=chart).
+        from backend.app.services.llm_cost import extract_usage
+
+        choice.usage = extract_usage(response)
+        return choice
     except Exception as exc:  # noqa: BLE001 — degrade to table on any LLM/parse error
         log.warning("chart_llm.failed", error=str(exc))
         return LlmChartChoice(
@@ -282,7 +293,7 @@ async def propose_chart_llm(
     model_name: str | None = None,
     llm_base_url: str = "http://localhost:4000/v1",
     llm_api_key: str = "",
-) -> ChartConfig:
+) -> tuple[ChartConfig, dict | None]:
     """Use an LLM to propose the best chart type and configuration.
 
     Args:
@@ -299,10 +310,13 @@ async def propose_chart_llm(
         ChartConfig with LLM-chosen chart type, axes, labels, title.
     """
     if not rows:
-        return ChartConfig(
-            chart_type=ChartType.TABLE,
-            reasoning="No data rows — table fallback.",
-            confidence=0.0,
+        return (
+            ChartConfig(
+                chart_type=ChartType.TABLE,
+                reasoning="No data rows — table fallback.",
+                confidence=0.0,
+            ),
+            None,
         )
 
     if columns is None:
@@ -357,7 +371,7 @@ async def propose_chart_llm(
         confidence=config.confidence,
     )
 
-    return config
+    return config, choice.usage
 
 
 async def propose_chart_llm_with_heuristic(
@@ -368,7 +382,7 @@ async def propose_chart_llm_with_heuristic(
     model_name: str | None = None,
     llm_base_url: str = "http://localhost:4000/v1",
     llm_api_key: str = "",
-) -> ChartConfig:
+) -> tuple[ChartConfig, dict | None]:
     """Hybrid: run heuristic first, then escalate to LLM with the hint.
 
     The LLM sees the heuristic suggestion as a prior but can override
