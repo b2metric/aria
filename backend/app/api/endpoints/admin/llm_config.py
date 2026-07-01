@@ -40,6 +40,64 @@ class LLMConfigResponse(BaseModel):
     operation_models: dict[str, Any] | None = None
 
 
+class ModelCatalogEntry(BaseModel):
+    id: str
+    provider: str
+
+
+def _infer_provider(model_id: str) -> str:
+    """Best-effort provider label from a model alias, for grouping in the picker."""
+    m = model_id.lower()
+    if "deepseek" in m:
+        return "deepseek"
+    if "claude" in m:
+        return "anthropic"
+    if "gemini" in m:
+        return "gemini"
+    if "glm" in m:
+        return "glm"
+    if "embedding" in m:
+        return "openai"
+    return "other"
+
+
+def _map_catalog(raw: dict) -> list[ModelCatalogEntry]:
+    """Map a LiteLLM ``/models`` payload (``{"data": [{"id": ...}]}``) to a deduped,
+    sorted catalog, dropping the ``custom:litellm:`` alias duplicates."""
+    seen: set[str] = set()
+    out: list[ModelCatalogEntry] = []
+    for m in raw.get("data", []) or []:
+        mid = m.get("id") if isinstance(m, dict) else None
+        if not mid or mid in seen or mid.startswith("custom:litellm:"):
+            continue
+        seen.add(mid)
+        out.append(ModelCatalogEntry(id=mid, provider=_infer_provider(mid)))
+    return sorted(out, key=lambda e: (e.provider, e.id))
+
+
+@router.get("/models", response_model=list[ModelCatalogEntry])
+async def list_available_models(current_user: Any = Depends(get_current_user)):
+    """Live model catalog from the LiteLLM proxy, for the per-operation model picker.
+    Degrades to an empty list if the proxy is unreachable (never 500s the admin UI)."""
+    if not getattr(current_user, "can_admin", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required")
+
+    import httpx
+
+    settings = get_settings()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"{settings.litellm_api_base}/models",
+                headers={"Authorization": f"Bearer {settings.litellm_api_key or ''}"},
+            )
+            resp.raise_for_status()
+            return _map_catalog(resp.json())
+    except Exception:  # noqa: BLE001 — catalog is advisory; UI falls back to free text
+        log.warning("Model catalog fetch from LiteLLM proxy failed", exc_info=True)
+        return []
+
+
 @router.get("", response_model=LLMConfigResponse)
 async def get_llm_config(current_user: Any = Depends(get_current_user)):
     """Get customer LLM config."""
