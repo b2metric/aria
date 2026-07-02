@@ -1389,7 +1389,10 @@ async def _execute_sql(
             _sg.Merge,
             _sg.Command,
         )
-        if len(statements) == 1 and isinstance(statements[0], _sg.Select):
+        # A read-only root is a Select OR a set operation (UNION/INTERSECT/EXCEPT
+        # parse as SetOperation, not Select). Write/DDL nodes anywhere in the tree
+        # are still rejected by the find() scan below.
+        if len(statements) == 1 and isinstance(statements[0], (_sg.Select, _sg.SetOperation)):
             if statements[0].find(*write_nodes) is not None:
                 await _block("Security Exception: Only read-only SELECT queries are permitted.")
             parsed_ok = True

@@ -328,19 +328,32 @@ async def record_llm_usage(
         logger.exception("record_llm_usage failed for operation=%s", operation)
 
 
-# Lazily-created, app-lifetime engine for background/system metering, so a metering
-# call inside a loop (e.g. per-embedding during vault indexing) does not create and
-# dispose a new engine + connection pool every time.
-_meter_engine = None
+# Lazily-created engines for background/system metering, cached PER EVENT LOOP.
+# Metering runs both inline on the main loop (vault retrieval) and on the
+# dedicated `aria-metering-loop` thread (submit_metering); asyncpg connections
+# are bound to the loop that created them, so a single shared engine/pool would
+# hand a foreign-loop connection to the other loop and die with "got Future
+# attached to a different loop". Weak keys let a dead loop's entry be collected.
+_meter_engines: Any = None
 
 
 def _get_meter_engine():
-    global _meter_engine
-    if _meter_engine is None:
-        from backend.app.db.session import get_engine
+    global _meter_engines
+    import asyncio
+    import weakref
 
-        _meter_engine = get_engine()
-    return _meter_engine
+    if _meter_engines is None:
+        _meter_engines = weakref.WeakKeyDictionary()
+    loop = asyncio.get_running_loop()
+    eng = _meter_engines.get(loop)
+    if eng is None:
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        from backend.app.core.config import get_settings
+
+        eng = create_async_engine(get_settings().database_url, echo=False, pool_pre_ping=True)
+        _meter_engines[loop] = eng
+    return eng
 
 
 async def record_system_llm_usage(
